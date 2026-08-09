@@ -1,0 +1,328 @@
+/* ===========================================================
+   Astrid Nails & Beauty Bar — Customer Script
+   Mirrors src/data/salon.ts so it's easy to swap for a
+   PHP/MySQL fetch later.
+   =========================================================== */
+
+/* ---------- Mock data (would come from MySQL later) ---------- */
+const SERVICES = [
+  { id: "nail-care", name: "Nail Care", description: "Basic nail care and grooming", price: 1500, duration: "45 minutes", minutes: 45, rating: 4.5 },
+  { id: "gel-polish", name: "Gel Polish", description: "Long lasting gel polish application", price: 1500, duration: "1 hour", minutes: 60, rating: 4.5 },
+  { id: "nail-extension", name: "Nail Extensions", description: "Beautiful acrylic or gel extensions", price: 1500, duration: "1 hour 30 minutes", minutes: 90, rating: 4 },
+  { id: "lash-extension", name: "Lash Extension", description: "Volume lashes applied by certified artists", price: 1800, duration: "1 hour", minutes: 60, rating: 5 },
+  { id: "wax-hair-removal", name: "Wax Hair Removal", description: "Gentle waxing with premium soft wax", price: 900, duration: "30 minutes", minutes: 30, rating: 4.5 },
+  { id: "spa-treatment", name: "Spa Treatment", description: "Relaxing foot and hand spa ritual", price: 1200, duration: "1 hour", minutes: 60, rating: 5 },
+  { id: "kiddie-package", name: "Kiddie Package", description: "Fun and safe pampering for kids", price: 700, duration: "30 minutes", minutes: 30, rating: 4.5 },
+  { id: "gentleman-package", name: "Gentleman Package", description: "Grooming essentials for gentlemen", price: 1400, duration: "1 hour", minutes: 60, rating: 4.5 },
+  { id: "massage", name: "Massage", description: "Relaxing therapeutic massage", price: 350, duration: "30 minutes", minutes: 30, rating: 4.5 },
+];
+
+const TIME_SLOTS = [
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
+  "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM",
+  "4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM",
+];
+
+const REVIEWS = [
+  { name: "Maria Santos", initials: "MS", rating: 5, date: "June 2, 2026", text: "The gel polish lasted a full month and the salon smells amazing. Best nail spa in the city!" },
+  { name: "Jasmine Reyes", initials: "JR", rating: 4, date: "May 28, 2026", text: "Lovely staff and very hygienic tools. My lash extensions look so natural." },
+  { name: "Andrea Lim", initials: "AL", rating: 5, date: "May 14, 2026", text: "Booked the spa treatment for my mom. She left glowing — we're going monthly now." },
+  { name: "Paolo Cruz", initials: "PC", rating: 5, date: "May 3, 2026", text: "The gentleman package is worth every peso. Clean, relaxing, no rushing." },
+];
+
+const FAQS = [
+  { q: "What are your operating hours?", a: "We are open Monday to Saturday from 10:00 AM to 8:00 PM, and Sundays from 11:00 AM to 6:00 PM." },
+  { q: "What services do you offer?", a: "Nail care, gel polish, nail extensions, lash extensions, waxing, spa treatments, massages, and curated kiddie and gentleman packages." },
+  { q: "Are your products safe and hygienic?", a: "Yes. All tools are sterilized after every client, single-use items are never reused, and we only use certified, cruelty-free products." },
+  { q: "Do I need to book an appointment?", a: "Walk-ins are welcome when slots allow, but booking online guarantees your preferred stylist and time slot." },
+];
+
+const peso = (value) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function formatDuration(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h} hour${h > 1 ? "s" : ""} ${m} minutes`;
+  if (h) return `${h} hour${h > 1 ? "s" : ""}`;
+  return `${m} minutes`;
+}
+
+function starsHtml(rating, size = "1rem") {
+  let html = "";
+  for (let i = 1; i <= 5; i++) {
+    html += `<span style="font-size:${size}" class="${i <= Math.round(rating) ? "" : "stars__off"}">★</span>`;
+  }
+  return html;
+}
+
+/* ---------- Render: Services ---------- */
+function renderServices() {
+  const grid = document.getElementById("servicesGrid");
+  grid.innerHTML = SERVICES.map((s) => `
+    <article class="service-card">
+      <div class="service-card__banner"></div>
+      <div class="service-card__body">
+        <div>
+          <h3 class="service-card__name">${s.name}</h3>
+          <p class="service-card__desc">${s.description}</p>
+        </div>
+        <div class="stars">${starsHtml(s.rating, "0.85rem")}</div>
+        <div class="service-card__footer">
+          <span class="service-card__price">₱${s.price}</span>
+          <span class="service-card__time">🕐 ${s.duration}</span>
+        </div>
+        <button class="btn btn--brand" style="width:100%" data-book="${s.id}">Book This Service</button>
+      </div>
+    </article>
+  `).join("");
+
+  grid.querySelectorAll("[data-book]").forEach((btn) => {
+    btn.addEventListener("click", () => openBooking(btn.dataset.book));
+  });
+}
+
+/* ---------- Render: Reviews ---------- */
+function renderReviews() {
+  document.getElementById("heroStars").innerHTML = starsHtml(5, "1.4rem");
+
+  const grid = document.getElementById("reviewsGrid");
+  grid.innerHTML = REVIEWS.map((r) => `
+    <article class="card review-card">
+      <div class="review-card__head">
+        <span class="review-card__avatar">${r.initials}</span>
+        <div>
+          <p class="review-card__name">${r.name}</p>
+          <p class="review-card__date">${r.date}</p>
+        </div>
+      </div>
+      <div class="review-card__stars">${starsHtml(r.rating, "0.85rem")}</div>
+      <p class="review-card__text">${r.text}</p>
+    </article>
+  `).join("");
+}
+
+/* ---------- Render: FAQs ---------- */
+function renderFaqs() {
+  const list = document.getElementById("faqsList");
+  list.innerHTML = FAQS.map((f, i) => `
+    <div class="faq-item ${i === 0 ? "is-open" : ""}" data-index="${i}">
+      <button class="faq-item__q">
+        <span>${f.q}</span>
+        <span class="faq-item__chevron">▾</span>
+      </button>
+      <div class="faq-item__a">${f.a}</div>
+    </div>
+  `).join("");
+
+  list.querySelectorAll(".faq-item__q").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btn.closest(".faq-item").classList.toggle("is-open");
+    });
+  });
+}
+
+/* ---------- Navbar: mobile toggle ---------- */
+const navToggle = document.getElementById("navToggle");
+const navMobile = document.getElementById("navMobile");
+navToggle.addEventListener("click", () => navMobile.classList.toggle("is-open"));
+navMobile.querySelectorAll("a, button").forEach((el) => {
+  el.addEventListener("click", () => navMobile.classList.remove("is-open"));
+});
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 3200);
+}
+
+/* ---------- Auth modal ---------- */
+const authOverlay = document.getElementById("authOverlay");
+const authViews = {
+  login: document.getElementById("loginView"),
+  register: document.getElementById("registerView"),
+  verify: document.getElementById("verifyView"),
+};
+let verifyTimerInterval;
+
+function openAuth(view = "login") {
+  authOverlay.hidden = false;
+  showAuthView(view);
+}
+function closeAuth() {
+  authOverlay.hidden = true;
+  clearInterval(verifyTimerInterval);
+}
+function showAuthView(view) {
+  Object.entries(authViews).forEach(([key, el]) => { el.hidden = key !== view; });
+  if (view === "verify") startVerifyTimer();
+}
+function startVerifyTimer() {
+  clearInterval(verifyTimerInterval);
+  let seconds = 298;
+  const el = document.getElementById("verifyTimer");
+  const tick = () => {
+    const m = Math.floor(seconds / 60);
+    const s = String(seconds % 60).padStart(2, "0");
+    el.textContent = `${m}:${s}`;
+    if (seconds > 0) seconds--;
+  };
+  tick();
+  verifyTimerInterval = setInterval(tick, 1000);
+}
+
+document.getElementById("loginBtn").addEventListener("click", () => openAuth("login"));
+document.getElementById("loginBtnMobile").addEventListener("click", () => openAuth("login"));
+document.getElementById("authClose").addEventListener("click", closeAuth);
+document.getElementById("authBackHome1").addEventListener("click", closeAuth);
+document.getElementById("authBackHome2").addEventListener("click", closeAuth);
+document.querySelectorAll("[data-view]").forEach((btn) => {
+  btn.addEventListener("click", () => showAuthView(btn.dataset.view));
+});
+document.getElementById("loginSubmit").addEventListener("click", closeAuth);
+document.getElementById("registerSubmit").addEventListener("click", () => showAuthView("verify"));
+document.getElementById("resendBtn").addEventListener("click", startVerifyTimer);
+document.getElementById("verifySubmit").addEventListener("click", () => {
+  closeAuth();
+  showToast("Account verified! You can now log in.");
+});
+
+/* OTP auto-advance */
+const otpInputs = document.querySelectorAll("#otpInputs input");
+otpInputs.forEach((input, i) => {
+  input.addEventListener("input", () => {
+    input.value = input.value.replace(/\D/g, "").slice(-1);
+    if (input.value && otpInputs[i + 1]) otpInputs[i + 1].focus();
+  });
+});
+
+/* ---------- Booking wizard ---------- */
+const bookingOverlay = document.getElementById("bookingOverlay");
+const bookingSteps = {
+  1: document.getElementById("bookingStep1"),
+  2: document.getElementById("bookingStep2"),
+  3: document.getElementById("bookingStep3"),
+};
+let selectedServiceIds = [];
+let selectedDate = "";
+let selectedTime = "";
+
+function openBooking(initialServiceId) {
+  selectedServiceIds = initialServiceId ? [initialServiceId] : [];
+  selectedDate = "";
+  selectedTime = "";
+  document.getElementById("bookingDate").value = "";
+  renderBookingServices();
+  renderTimeGrid();
+  goToStep(1);
+  bookingOverlay.hidden = false;
+}
+function closeBooking() {
+  bookingOverlay.hidden = true;
+}
+
+function renderBookingServices() {
+  const grid = document.getElementById("bookingServiceGrid");
+  grid.innerHTML = SERVICES.map((s) => `
+    <button class="service-pill ${selectedServiceIds.includes(s.id) ? "is-selected" : ""}" data-id="${s.id}">
+      <span>${s.name}</span>
+      <span class="price">₱${s.price}</span>
+    </button>
+  `).join("");
+
+  grid.querySelectorAll(".service-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      selectedServiceIds = selectedServiceIds.includes(id)
+        ? selectedServiceIds.filter((x) => x !== id)
+        : [...selectedServiceIds, id];
+      renderBookingServices();
+      document.getElementById("toStep2").disabled = selectedServiceIds.length === 0;
+    });
+  });
+  document.getElementById("toStep2").disabled = selectedServiceIds.length === 0;
+}
+
+function renderTimeGrid() {
+  const grid = document.getElementById("timeGrid");
+  grid.innerHTML = TIME_SLOTS.map((t) => `
+    <button class="time-slot ${selectedTime === t ? "is-selected" : ""}" data-time="${t}">${t}</button>
+  `).join("");
+
+  grid.querySelectorAll(".time-slot").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedTime = btn.dataset.time;
+      renderTimeGrid();
+      updateStep2NextState();
+    });
+  });
+}
+
+function updateStep2NextState() {
+  document.getElementById("toStep3").disabled = !(selectedDate && selectedTime);
+}
+
+document.getElementById("bookingDate").addEventListener("change", (e) => {
+  selectedDate = e.target.value;
+  updateStep2NextState();
+});
+
+function goToStep(step) {
+  Object.entries(bookingSteps).forEach(([key, el]) => { el.hidden = Number(key) !== step; });
+  document.querySelectorAll(".stepper__step").forEach((el) => {
+    const n = Number(el.dataset.step);
+    el.classList.toggle("is-active", n === step);
+    el.classList.toggle("is-done", n < step);
+    el.querySelector(".stepper__circle").textContent = n < step ? "✓" : n;
+  });
+  if (step === 3) renderSummary();
+}
+
+function renderSummary() {
+  const chosen = SERVICES.filter((s) => selectedServiceIds.includes(s.id));
+  const totalMinutes = chosen.reduce((sum, s) => sum + s.minutes, 0);
+  const totalPrice = chosen.reduce((sum, s) => sum + s.price, 0);
+
+  document.getElementById("summaryServices").innerHTML = chosen.map((s) => `
+    <li>
+      <div>
+        <p class="name">${s.name}</p>
+        <p class="desc">${s.description}</p>
+      </div>
+      <div>
+        <p class="price">${peso(s.price)}</p>
+        <p class="time">${s.duration}</p>
+      </div>
+    </li>
+  `).join("");
+
+  document.getElementById("summaryDetails").innerHTML = `
+    <div><dt>Date</dt><dd>${selectedDate}</dd></div>
+    <div><dt>Time</dt><dd>${selectedTime}</dd></div>
+    <div><dt>Total Duration</dt><dd>${formatDuration(totalMinutes)}</dd></div>
+    <div class="total"><dt>Total</dt><dd>${peso(totalPrice)}</dd></div>
+  `;
+}
+
+document.getElementById("bookHeroBtn").addEventListener("click", () => openBooking());
+document.getElementById("bookNavBtn").addEventListener("click", () => openBooking());
+document.getElementById("bookNavBtnMobile").addEventListener("click", () => openBooking());
+document.getElementById("bookingClose").addEventListener("click", closeBooking);
+document.getElementById("bookingBackClose").addEventListener("click", closeBooking);
+document.getElementById("toStep2").addEventListener("click", () => goToStep(2));
+document.getElementById("toStep1").addEventListener("click", () => goToStep(1));
+document.getElementById("toStep3").addEventListener("click", () => goToStep(3));
+document.getElementById("toStep2b").addEventListener("click", () => goToStep(2));
+document.getElementById("confirmBooking").addEventListener("click", () => {
+  closeBooking();
+  showToast("Booking confirmed! We've emailed your appointment details.");
+});
+
+/* ---------- Init ---------- */
+document.getElementById("footerYear").textContent = new Date().getFullYear();
+renderServices();
+renderReviews();
+renderFaqs();

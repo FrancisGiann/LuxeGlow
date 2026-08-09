@@ -1,0 +1,21 @@
+<?php $currentPage = $currentPage ?? 'home_overview'; ?>
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <div class="sidebar__logo">AN</div>
+    <div>
+      <p class="sidebar__brand-title">Astrid Nails</p>
+      <p class="sidebar__brand-sub">Admin Panel</p>
+    </div>
+  </div>
+
+  <nav class="sidebar__nav">
+    <a href="admin_dashboard.php?page=home_overview" class="sidebar__item<?php echo $currentPage === 'home_overview' ? ' is-active' : ''; ?>">🏠 Home</a>
+    <a href="admin_dashboard.php?page=services_gallery" class="sidebar__item<?php echo $currentPage === 'services_gallery' ? ' is-active' : ''; ?>">🖼️ Services Gallery</a>
+    <a href="admin_dashboard.php?page=appointment_history" class="sidebar__item<?php echo $currentPage === 'appointment_history' ? ' is-active' : ''; ?>">🕓 Appointment History</a>
+    <a href="admin_dashboard.php?page=appointment_list" class="sidebar__item<?php echo $currentPage === 'appointment_list' ? ' is-active' : ''; ?>">✅ Appointment List</a>
+    <a href="admin_dashboard.php?page=faq_management" class="sidebar__item<?php echo $currentPage === 'faq_management' ? ' is-active' : ''; ?>">❓ FAQ</a>
+    <a href="admin_dashboard.php?page=about_editor" class="sidebar__item<?php echo $currentPage === 'about_editor' ? ' is-active' : ''; ?>">ℹ️ About</a>
+    <a href="admin_dashboard.php?page=account_management" class="sidebar__item<?php echo $currentPage === 'account_management' ? ' is-active' : ''; ?>">👥 Account Management</a>
+    <a href="index.php" class="sidebar__item sidebar__item--logout">🚪 Logout</a>
+  </nav>
+</aside>
