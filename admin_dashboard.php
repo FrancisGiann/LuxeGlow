@@ -38,11 +38,20 @@ $pageFile = $adminPages[$currentPage];
     </main>
   </div>
 
+  <dialog id="globalConfirmModal" style="padding: 2rem; border-radius: 8px; border: 1px solid #ddd; max-width: 400px; width: 100%;">
+    <h2 id="confirmModalTitle" style="margin-bottom: 1rem;">Confirm Action</h2>
+    <p id="confirmModalMessage" style="margin-bottom: 1.5rem; font-size: 0.95rem; color: #555;"></p>
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn--soft" id="confirmModalCancel">Cancel</button>
+      <button class="btn btn--brand" id="confirmModalOk" style="background: var(--brand-pink);">Confirm</button>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast"></div>
 
   <script>
     window.ADMIN_CURRENT_PAGE = <?php echo json_encode($currentPage); ?>;
   </script>
-  <script src="assets/js/admin-page/admin.js"></script>
+  <script src="assets/js/admin-page/admin.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>

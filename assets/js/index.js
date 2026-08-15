@@ -5,17 +5,22 @@
    =========================================================== */
 
 /* ---------- Mock data (would come from MySQL later) ---------- */
-const SERVICES = [
-  { id: "nail-care", name: "Nail Care", description: "Basic nail care and grooming", price: 1500, duration: "45 minutes", minutes: 45, rating: 4.5 },
-  { id: "gel-polish", name: "Gel Polish", description: "Long lasting gel polish application", price: 1500, duration: "1 hour", minutes: 60, rating: 4.5 },
-  { id: "nail-extension", name: "Nail Extensions", description: "Beautiful acrylic or gel extensions", price: 1500, duration: "1 hour 30 minutes", minutes: 90, rating: 4 },
-  { id: "lash-extension", name: "Lash Extension", description: "Volume lashes applied by certified artists", price: 1800, duration: "1 hour", minutes: 60, rating: 5 },
-  { id: "wax-hair-removal", name: "Wax Hair Removal", description: "Gentle waxing with premium soft wax", price: 900, duration: "30 minutes", minutes: 30, rating: 4.5 },
-  { id: "spa-treatment", name: "Spa Treatment", description: "Relaxing foot and hand spa ritual", price: 1200, duration: "1 hour", minutes: 60, rating: 5 },
-  { id: "kiddie-package", name: "Kiddie Package", description: "Fun and safe pampering for kids", price: 700, duration: "30 minutes", minutes: 30, rating: 4.5 },
-  { id: "gentleman-package", name: "Gentleman Package", description: "Grooming essentials for gentlemen", price: 1400, duration: "1 hour", minutes: 60, rating: 4.5 },
-  { id: "massage", name: "Massage", description: "Relaxing therapeutic massage", price: 350, duration: "30 minutes", minutes: 30, rating: 4.5 },
-];
+let SERVICES = [];
+let isServicesLoaded = false;
+
+async function fetchServices() {
+  const grid = document.getElementById("servicesGrid");
+  if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--muted-foreground); grid-column: 1 / -1;">Loading services...</p>';
+  try {
+    const res = await fetch('includes/services/list.php');
+    SERVICES = await res.json();
+    isServicesLoaded = true;
+    renderServices();
+  } catch (err) {
+    console.error("Failed to fetch services", err);
+    if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--brand-pink); grid-column: 1 / -1;">Failed to load services. Please try again later.</p>';
+  }
+}
 
 const TIME_SLOTS = [
   "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
@@ -60,7 +65,7 @@ function renderServices() {
   const grid = document.getElementById("servicesGrid");
   grid.innerHTML = SERVICES.map((s) => `
     <article class="service-card">
-      <div class="service-card__banner"></div>
+      <div class="service-card__banner" style="${s.image_path ? `background-image: url('${s.image_path}'); background-size: cover; background-position: center;` : ''}"></div>
       <div class="service-card__body">
         <div>
           <h3 class="service-card__name">${s.name}</h3>
@@ -339,6 +344,10 @@ let selectedDate = "";
 let selectedTime = "";
 
 function openBooking(initialServiceId) {
+  if (!isServicesLoaded) {
+    showToast("Services are still loading, please wait...");
+    return;
+  }
   selectedServiceIds = initialServiceId ? [initialServiceId] : [];
   selectedDate = "";
   selectedTime = "";
@@ -451,6 +460,6 @@ document.getElementById("confirmBooking").addEventListener("click", () => {
 
 /* ---------- Init ---------- */
 document.getElementById("footerYear").textContent = new Date().getFullYear();
-renderServices();
+fetchServices();
 renderReviews();
 renderFaqs();

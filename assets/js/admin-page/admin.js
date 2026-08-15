@@ -5,71 +5,21 @@
    =========================================================== */
 
 /* ---------- Mock data ---------- */
-let services = [
-  {
-    id: "nail-care",
-    name: "Nail Care",
-    category: "Nails",
-    price: 1500,
-    duration: "45 minutes",
-  },
-  {
-    id: "gel-polish",
-    name: "Gel Polish",
-    category: "Nails",
-    price: 1500,
-    duration: "1 hour",
-  },
-  {
-    id: "nail-extension",
-    name: "Nail Extensions",
-    category: "Nails",
-    price: 1500,
-    duration: "1 hour 30 minutes",
-  },
-  {
-    id: "lash-extension",
-    name: "Lash Extension",
-    category: "Lashes",
-    price: 1800,
-    duration: "1 hour",
-  },
-  {
-    id: "wax-hair-removal",
-    name: "Wax Hair Removal",
-    category: "Waxing",
-    price: 900,
-    duration: "30 minutes",
-  },
-  {
-    id: "spa-treatment",
-    name: "Spa Treatment",
-    category: "Spa",
-    price: 1200,
-    duration: "1 hour",
-  },
-  {
-    id: "kiddie-package",
-    name: "Kiddie Package",
-    category: "Packages",
-    price: 700,
-    duration: "30 minutes",
-  },
-  {
-    id: "gentleman-package",
-    name: "Gentleman Package",
-    category: "Packages",
-    price: 1400,
-    duration: "1 hour",
-  },
-  {
-    id: "massage",
-    name: "Massage",
-    category: "Spa",
-    price: 350,
-    duration: "30 minutes",
-  },
-];
+let services = [];
+
+async function fetchServicesAdmin() {
+  const grid = document.getElementById("galleryGrid");
+  if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--muted-foreground); grid-column: 1 / -1;">Loading services...</p>';
+  try {
+    const res = await fetch("includes/services/list.php");
+    services = await res.json();
+    if (document.getElementById("galleryGrid")) renderGallery();
+    if (document.getElementById("dashboardPopularGrid")) renderDashboard();
+  } catch (err) {
+    console.error("Failed to fetch services", err);
+    if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--brand-pink); grid-column: 1 / -1;">Failed to load services.</p>';
+  }
+}
 
 let bookings = [
   {
@@ -234,6 +184,32 @@ const peso = (v) =>
 const statusClass = (s) => `status-pill status-pill--${s.toLowerCase()}`;
 const hasElement = (id) => Boolean(document.getElementById(id));
 
+/* ---------- GLOBAL CONFIRM MODAL ---------- */
+let confirmCallback = null;
+const confirmModal = document.getElementById("globalConfirmModal");
+const confirmOkBtn = document.getElementById("confirmModalOk");
+const confirmCancelBtn = document.getElementById("confirmModalCancel");
+
+if (confirmModal && confirmOkBtn && confirmCancelBtn) {
+  confirmCancelBtn.addEventListener("click", () => {
+    confirmModal.close();
+    confirmCallback = null;
+  });
+  confirmOkBtn.addEventListener("click", () => {
+    confirmModal.close();
+    if (confirmCallback) confirmCallback();
+    confirmCallback = null;
+  });
+}
+
+function openConfirmModal(title, message, onConfirm) {
+  if (!confirmModal) return;
+  document.getElementById("confirmModalTitle").textContent = title;
+  document.getElementById("confirmModalMessage").textContent = message;
+  confirmCallback = onConfirm;
+  confirmModal.showModal();
+}
+
 /* ---------- Toast ---------- */
 let toastTimer;
 function showToast(message) {
@@ -296,14 +272,14 @@ function renderGallery() {
     .map(
       (s) => `
     <article class="gallery-card" data-id="${s.id}">
-      <div class="gallery-card__banner"></div>
+      <div class="gallery-card__banner" style="${s.image_path ? `background-image: url('${s.image_path}'); background-size: cover; background-position: center;` : ''}"></div>
       <div class="gallery-card__body">
         <span class="gallery-card__tag">${s.category}</span>
         <h3 class="gallery-card__name">${s.name}</h3>
         <p class="gallery-card__duration">${s.duration}</p>
         <p class="gallery-card__price">₱${s.price}</p>
         <div class="gallery-card__actions">
-          <button class="btn btn--soft">✏️ Edit</button>
+          <button class="btn btn--soft" data-edit="${s.id}">✏️ Edit</button>
           <button class="btn btn--danger" data-delete="${s.id}">🗑️ Delete</button>
         </div>
       </div>
@@ -312,30 +288,143 @@ function renderGallery() {
     )
     .join("");
 
+  // DELETE
   grid.querySelectorAll("[data-delete]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      services = services.filter((s) => s.id !== btn.dataset.delete);
-      renderGallery();
-      renderDashboard();
-      showToast("Service removed.");
+      openConfirmModal("Delete Service", "Are you sure you want to permanently delete this service?", async () => {
+        const id = btn.dataset.delete;
+        const formData = new FormData();
+        formData.append("service_id", id);
+        try {
+          const res = await fetch("includes/services/delete.php", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.success) {
+            showToast("Service removed.");
+            fetchServicesAdmin();
+          } else {
+            showToast(data.error);
+          }
+        } catch (err) {
+          showToast("Error deleting service.");
+        }
+      });
+    });
+  });
+
+  // EDIT
+  grid.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.edit;
+      const service = services.find((s) => s.id === id);
+      if (service) openServiceModal(service);
     });
   });
 }
 
+// MODAL LOGIC
+const serviceModal = document.getElementById("serviceModal");
 const addServiceBtn = document.getElementById("addServiceBtn");
-if (addServiceBtn) {
-  addServiceBtn.addEventListener("click", () => {
-    const id = `new-${Date.now()}`;
-    services.push({
-      id,
-      name: "New Service",
-      category: "Nails",
-      price: 1000,
-      duration: "45 minutes",
+
+if (addServiceBtn && serviceModal) {
+  addServiceBtn.addEventListener("click", () => openServiceModal());
+
+  const fileInput = document.getElementById("srvImage");
+  const labelText = document.getElementById("srvImageLabelText");
+  if (fileInput && labelText) {
+    fileInput.addEventListener("change", () => {
+      labelText.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : "📸 Select a Photo";
     });
-    renderGallery();
-    showToast("Service added — edit the details.");
+  }
+
+  const removeBtn = document.getElementById("srvRemoveImageBtn");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      openConfirmModal("Remove Image", "Are you sure you want to remove this cover image? The change will take effect when you hit Save.", () => {
+        document.getElementById("srvImagePreview").style.display = "none";
+        removeBtn.style.display = "none";
+        document.getElementById("srvRemoveImageFlag").value = "1";
+      });
+    });
+  }
+
+  document.getElementById("serviceModalCancel").addEventListener("click", () => serviceModal.close());
+  
+  document.getElementById("serviceModalSave").addEventListener("click", async () => {
+    const id = document.getElementById("srvId").value;
+    const name = document.getElementById("srvName").value;
+    const category = document.getElementById("srvCategory").value;
+    const desc = document.getElementById("srvDesc").value;
+    const price = document.getElementById("srvPrice").value;
+    const duration = document.getElementById("srvDuration").value;
+    
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("category", category);
+    formData.append("description", desc);
+    formData.append("price", price);
+    formData.append("duration_minutes", duration);
+    
+    const fileInput = document.getElementById("srvImage");
+    if (fileInput.files.length > 0) {
+      formData.append("image", fileInput.files[0]);
+    }
+    const removeImageFlag = document.getElementById("srvRemoveImageFlag");
+    if (removeImageFlag && removeImageFlag.value === "1") {
+      formData.append("remove_image", "1");
+    }
+    
+    let endpoint = "includes/services/create.php";
+    if (id) {
+      formData.append("service_id", id);
+      endpoint = "includes/services/update.php";
+    }
+    
+    try {
+      const res = await fetch(endpoint, { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        serviceModal.close();
+        showToast(id ? "Service updated." : "Service created.");
+        fetchServicesAdmin();
+      } else {
+        showToast(data.error);
+      }
+    } catch (err) {
+      showToast("Error saving service.");
+    }
   });
+}
+
+function openServiceModal(service = null) {
+  document.getElementById("serviceModalTitle").textContent = service ? "Edit Service" : "Add Service";
+  document.getElementById("srvId").value = service ? service.id : "";
+  document.getElementById("srvName").value = service ? service.name : "";
+  document.getElementById("srvCategory").value = service ? service.category : "";
+  document.getElementById("srvDesc").value = service ? service.description : "";
+  document.getElementById("srvPrice").value = service ? service.price : "";
+  document.getElementById("srvDuration").value = service ? service.minutes : "";
+  document.getElementById("srvImage").value = "";
+  
+  const labelText = document.getElementById("srvImageLabelText");
+  if (labelText) labelText.textContent = "📸 Select a Photo";
+  
+  const preview = document.getElementById("srvImagePreview");
+  const removeBtn = document.getElementById("srvRemoveImageBtn");
+  const removeFlag = document.getElementById("srvRemoveImageFlag");
+  
+  if (removeFlag) removeFlag.value = "0";
+  
+  if (service && service.image_path) {
+    preview.style.backgroundImage = `url('${service.image_path}')`;
+    preview.style.display = "block";
+    if (removeBtn) removeBtn.style.display = "block";
+  } else {
+    preview.style.backgroundImage = "none";
+    preview.style.display = "none";
+    if (removeBtn) removeBtn.style.display = "none";
+  }
+  
+  serviceModal.showModal();
 }
 
 /* ---------- Appointment history ---------- */
@@ -557,7 +646,7 @@ if (addAccountBtn) {
 
 /* ---------- Init ---------- */
 renderDashboard();
-renderGallery();
+fetchServicesAdmin();
 renderHistory();
 renderAppointmentList();
 renderFaqManager();
