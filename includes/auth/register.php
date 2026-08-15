@@ -1,7 +1,7 @@
 <?php
 // includes/auth/register.php
 session_start();
-require_once '../../config/database.php';
+require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
@@ -49,14 +49,13 @@ if ($stmt->fetch()) {
 // Hash password
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-// Insert into database
-// TODO: replace with real email OTP in Step 11 (set email_verified = 0 initially)
-$stmt = $pdo->prepare("
-    INSERT INTO customers (first_name, last_name, email, phone, password_hash, email_verified) 
-    VALUES (?, ?, ?, ?, ?, 1)
-");
-
 try {
+    // Insert into database
+    // TODO: replace with real email OTP in Step 11 (set email_verified = 0 initially)
+    $stmt = $pdo->prepare("
+        INSERT INTO customers (first_name, last_name, email, phone, password_hash, email_verified) 
+        VALUES (?, ?, ?, ?, ?, 1)
+    ");
     $stmt->execute([$firstName, $lastName, $email, $phone, $passwordHash]);
     
     // Auto-login after registration

@@ -28,14 +28,17 @@
           </div>
           <p class="field__error" id="loginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
           <button class="btn btn--brand btn--block" id="loginSubmit">Log in</button>
-          <button class="btn btn--blue btn--block" data-view="register">REGISTER</button>
-          <button class="link-btn" id="authBackHome1">← Back to Home</button>
+          <p class="auth-card__note" style="text-align: center; margin-top: 1.5rem; margin-bottom: 1rem;">
+            Don't have an account? 
+            <button class="link-btn" data-view="register" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">Register</button>
+          </p>
+          <button class="link-btn" id="authBackHome1" style="font-family: inherit; width: 100%; justify-content: center; margin-top: 1rem;">← Back to Home</button>
         </div>
 
         <!-- Register view -->
         <div class="auth-card" id="registerView" hidden>
           <div class="auth-card__logo">AN</div>
-          <h2 class="auth-card__title">Register Login</h2>
+          <h2 class="auth-card__title">Create an Account</h2>
           <div class="auth-card__fields">
             <div class="field-row">
               <label class="field">
@@ -65,12 +68,16 @@
             </label>
           </div>
           <p class="field__error" id="registerError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
-          <p class="auth-card__or">or continue with</p>
-          <button class="btn btn--fb btn--block">📘 Facebook</button>
-          <p class="auth-card__note">Already have an account?</p>
-          <button class="btn btn--brand btn--block" data-view="login">Log in</button>
-          <button class="btn btn--blue btn--block" id="registerSubmit">REGISTER</button>
-          <button class="link-btn" id="authBackHome2">← Back to Home</button>
+          <button class="btn btn--brand btn--block" id="registerSubmit">REGISTER</button>
+          
+          <p class="auth-card__or" style="margin-top: 1.5rem;">or continue with</p>
+          <button class="btn btn--fb btn--block" style="margin-bottom: 1rem;">📘 Facebook</button>
+          
+          <p class="auth-card__note" style="text-align: center; margin-top: 1.5rem; margin-bottom: 1rem;">
+            Already have an account? 
+            <button class="link-btn" data-view="login" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">Log in instead</button>
+          </p>
+          <button class="link-btn" id="authBackHome2" style="font-family: inherit; width: 100%; justify-content: center; margin-top: 1rem;">← Back to Home</button>
         </div>
 
         <!-- Verify view -->
@@ -81,7 +88,7 @@
           </p>
           <div class="verify-email-box">
             <p class="verify-email-label">Verification code sent to</p>
-            <p class="verify-email">maria.santos@example.com</p>
+            <p class="verify-email" id="verifyEmailDisplay">maria.santos@example.com</p>
             <button class="btn btn--soft" data-view="register">Change Email</button>
           </div>
           <div class="otp" id="otpInputs">

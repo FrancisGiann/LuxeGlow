@@ -294,6 +294,8 @@ document.getElementById("registerSubmit").addEventListener("click", async () => 
     });
     const data = await res.json();
     if (data.success) {
+      const emailDisplay = document.getElementById("verifyEmailDisplay");
+      if (emailDisplay) emailDisplay.textContent = email;
       showAuthView("verify");
     } else {
       errEl.textContent = data.error;
