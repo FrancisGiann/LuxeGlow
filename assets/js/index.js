@@ -174,21 +174,147 @@ function startVerifyTimer() {
   verifyTimerInterval = setInterval(tick, 1000);
 }
 
-document.getElementById("loginBtn").addEventListener("click", () => openAuth("login"));
-document.getElementById("loginBtnMobile").addEventListener("click", () => openAuth("login"));
+let currentUser = null;
+
+async function checkSession() {
+  try {
+    const res = await fetch("includes/auth/session_check.php");
+    const data = await res.json();
+    if (data.loggedIn) {
+      currentUser = data.customer;
+      updateNavbarState();
+    }
+  } catch (err) {
+    console.error("Session check failed", err);
+  }
+}
+
+function updateNavbarState() {
+  const loginBtns = [document.getElementById("loginBtn"), document.getElementById("loginBtnMobile")];
+  
+  if (currentUser) {
+    const text = `Hi, ${currentUser.first_name} (Logout)`;
+    loginBtns.forEach(btn => {
+      if (btn) {
+        btn.textContent = text;
+        btn.onclick = logout;
+      }
+    });
+  } else {
+    const text = "Login / Register";
+    loginBtns.forEach(btn => {
+      if (btn) {
+        btn.textContent = text;
+        btn.onclick = () => openAuth("login");
+      }
+    });
+  }
+}
+
+async function logout() {
+  try {
+    await fetch("includes/auth/logout.php");
+    currentUser = null;
+    updateNavbarState();
+    showToast("Logged out successfully.");
+  } catch (err) {
+    console.error("Logout failed", err);
+  }
+}
+
+document.getElementById("loginBtn").addEventListener("click", () => {
+  if (!currentUser) openAuth("login");
+});
+document.getElementById("loginBtnMobile").addEventListener("click", () => {
+  if (!currentUser) openAuth("login");
+});
 document.getElementById("authClose").addEventListener("click", closeAuth);
 document.getElementById("authBackHome1").addEventListener("click", closeAuth);
 document.getElementById("authBackHome2").addEventListener("click", closeAuth);
 document.querySelectorAll("[data-view]").forEach((btn) => {
   btn.addEventListener("click", () => showAuthView(btn.dataset.view));
 });
-document.getElementById("loginSubmit").addEventListener("click", closeAuth);
-document.getElementById("registerSubmit").addEventListener("click", () => showAuthView("verify"));
-document.getElementById("resendBtn").addEventListener("click", startVerifyTimer);
-document.getElementById("verifySubmit").addEventListener("click", () => {
-  closeAuth();
-  showToast("Account verified! You can now log in.");
+
+document.getElementById("loginSubmit").addEventListener("click", async () => {
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
+  const errEl = document.getElementById("loginError");
+  
+  errEl.style.display = "none";
+  errEl.textContent = "";
+
+  const formData = new FormData();
+  formData.append("email", email);
+  formData.append("password", password);
+
+  try {
+    const res = await fetch("includes/auth/login.php", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeAuth();
+      await checkSession();
+      showToast(`Welcome back, ${currentUser.first_name}!`);
+    } else {
+      errEl.textContent = data.error;
+      errEl.style.display = "block";
+    }
+  } catch (err) {
+    errEl.textContent = "An error occurred during login.";
+    errEl.style.display = "block";
+  }
 });
+
+document.getElementById("registerSubmit").addEventListener("click", async () => {
+  const firstName = document.getElementById("regFirstName").value;
+  const lastName = document.getElementById("regLastName").value;
+  const email = document.getElementById("regEmail").value;
+  const phone = document.getElementById("regPhone").value;
+  const password = document.getElementById("regPassword").value;
+  const confirmPassword = document.getElementById("regConfirmPassword").value;
+  const errEl = document.getElementById("registerError");
+
+  errEl.style.display = "none";
+  errEl.textContent = "";
+
+  const formData = new FormData();
+  formData.append("first_name", firstName);
+  formData.append("last_name", lastName);
+  formData.append("email", email);
+  formData.append("phone", phone);
+  formData.append("password", password);
+  formData.append("confirm_password", confirmPassword);
+
+  try {
+    const res = await fetch("includes/auth/register.php", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAuthView("verify");
+    } else {
+      errEl.textContent = data.error;
+      errEl.style.display = "block";
+    }
+  } catch (err) {
+    errEl.textContent = "An error occurred during registration.";
+    errEl.style.display = "block";
+  }
+});
+
+document.getElementById("resendBtn").addEventListener("click", startVerifyTimer);
+document.getElementById("verifySubmit").addEventListener("click", async () => {
+  // TODO: Replace with real email OTP in Step 11
+  closeAuth();
+  await checkSession();
+  showToast(`Account verified! Welcome, ${currentUser.first_name}!`);
+});
+
+// Run on page load
+checkSession();
 
 /* OTP auto-advance */
 const otpInputs = document.querySelectorAll("#otpInputs input");

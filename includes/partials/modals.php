@@ -19,13 +19,14 @@
           <div class="auth-card__fields">
             <label class="field">
               <span class="field__label">Email address</span>
-              <input type="email" placeholder="astrid@astrid.com" />
+              <input type="email" id="loginEmail" placeholder="astrid@astrid.com" />
             </label>
             <label class="field">
               <span class="field__label">Password</span>
-              <input type="password" placeholder="••••••••" />
+              <input type="password" id="loginPassword" placeholder="••••••••" />
             </label>
           </div>
+          <p class="field__error" id="loginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
           <button class="btn btn--brand btn--block" id="loginSubmit">Log in</button>
           <button class="btn btn--blue btn--block" data-view="register">REGISTER</button>
           <button class="link-btn" id="authBackHome1">← Back to Home</button>
@@ -39,30 +40,31 @@
             <div class="field-row">
               <label class="field">
                 <span class="field__label">First Name</span>
-                <input type="text" placeholder="Juan" />
+                <input type="text" id="regFirstName" placeholder="Juan" />
               </label>
               <label class="field">
                 <span class="field__label">Last Name</span>
-                <input type="text" placeholder="Dela Cruz" />
+                <input type="text" id="regLastName" placeholder="Dela Cruz" />
               </label>
             </div>
             <label class="field">
               <span class="field__label">Email address</span>
-              <input type="email" placeholder="astrid@astrid.com" />
+              <input type="email" id="regEmail" placeholder="astrid@astrid.com" />
             </label>
             <label class="field">
               <span class="field__label">Phone Number</span>
-              <input type="tel" placeholder="0917-000-1122" />
+              <input type="tel" id="regPhone" placeholder="0917-000-1122" />
             </label>
             <label class="field">
               <span class="field__label">Password</span>
-              <input type="password" placeholder="••••••••" />
+              <input type="password" id="regPassword" placeholder="••••••••" />
             </label>
             <label class="field">
               <span class="field__label">Confirm Password</span>
-              <input type="password" placeholder="••••••••" />
+              <input type="password" id="regConfirmPassword" placeholder="••••••••" />
             </label>
           </div>
+          <p class="field__error" id="registerError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
           <p class="auth-card__or">or continue with</p>
           <button class="btn btn--fb btn--block">📘 Facebook</button>
           <p class="auth-card__note">Already have an account?</p>
