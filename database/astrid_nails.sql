@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS customers (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    is_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -99,13 +101,13 @@ CREATE TABLE IF NOT EXISTS about_content (
 -- Sample Data Seeding
 -- ==========================================================
 
--- Seed Customers
-INSERT INTO customers (name, email, phone) VALUES
-('Maria Santos', 'maria.santos@email.com', '0917 221 4488'),
-('Jasmine Reyes', 'jasmine.reyes@email.com', '0918 553 1102'),
-('Andrea Lim', 'andrea.lim@email.com', '0921 447 9080'),
-('Paolo Cruz', 'paolo.cruz@email.com', '0906 118 2277'),
-('Kim Dela Cruz', 'kim.dc@email.com', '0995 330 7712')
+-- Seed Customers (Default password for all mock users is 'password123')
+INSERT INTO customers (name, email, phone, password_hash, is_verified) VALUES
+('Maria Santos', 'maria.santos@email.com', '0917 221 4488', '$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO', TRUE),
+('Jasmine Reyes', 'jasmine.reyes@email.com', '0918 553 1102', '$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO', TRUE),
+('Andrea Lim', 'andrea.lim@email.com', '0921 447 9080', '$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO', TRUE),
+('Paolo Cruz', 'paolo.cruz@email.com', '0906 118 2277', '$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO', TRUE),
+('Kim Dela Cruz', 'kim.dc@email.com', '0995 330 7712', '$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO', TRUE)
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 -- Seed Services
