@@ -541,6 +541,15 @@ img { max-width: 100%; display: block; }
   padding: 0.5rem; font-size: 0.75rem; font-weight: 500; cursor: pointer;
 }
 .time-slot.is-selected { background-image: var(--gradient-brand); border-color: transparent; color: #fff; }
+.time-slot--unavailable,
+.time-slot--unavailable:hover {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  pointer-events: none;
+  border-color: transparent;
+}
 
 .booking-step__actions { margin-top: 1.5rem; display: flex; align-items: center; justify-content: space-between; }
 

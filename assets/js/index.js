@@ -391,16 +391,51 @@ function renderBookingServices() {
   document.getElementById("toStep2").disabled = selectedServiceIds.length === 0;
 }
 
-function renderTimeGrid() {
-  const grid = document.getElementById("timeGrid");
-  grid.innerHTML = TIME_SLOTS.map((t) => `
-    <button class="time-slot ${selectedTime === t ? "is-selected" : ""}" data-time="${t}">${t}</button>
-  `).join("");
+async function fetchAvailableSlots() {
+  if (!selectedDate) return;
+  const chosen = SERVICES.filter((s) => selectedServiceIds.includes(s.id));
+  const duration = chosen.reduce((sum, s) => sum + s.minutes, 0);
+  if (duration === 0) return;
 
-  grid.querySelectorAll(".time-slot").forEach((btn) => {
+  try {
+    const res = await fetch(`includes/appointments/available_slots.php?date=${encodeURIComponent(selectedDate)}&duration_minutes=${duration}`);
+    const slots = await res.json();
+    renderTimeGrid(slots);
+  } catch (err) {
+    console.error("Failed to fetch available slots", err);
+    renderTimeGrid();
+  }
+}
+
+function renderTimeGrid(availableSlots = null) {
+  const grid = document.getElementById("timeGrid");
+  const availMap = {};
+  if (Array.isArray(availableSlots)) {
+    availableSlots.forEach((s) => { availMap[s.time] = s.available; });
+  }
+
+  grid.innerHTML = TIME_SLOTS.map((t) => {
+    const isAvail = availMap.hasOwnProperty(t) ? availMap[t] : true;
+    const isSel = selectedTime === t && isAvail;
+
+    if (selectedTime === t && !isAvail) {
+      selectedTime = "";
+      updateStep2NextState();
+    }
+
+    return `
+      <button 
+        class="time-slot ${isSel ? "is-selected" : ""} ${!isAvail ? "time-slot--unavailable" : ""}" 
+        data-time="${t}" 
+        ${!isAvail ? "disabled" : ""}
+      >${t}</button>
+    `;
+  }).join("");
+
+  grid.querySelectorAll(".time-slot:not([disabled])").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedTime = btn.dataset.time;
-      renderTimeGrid();
+      renderTimeGrid(availableSlots);
       updateStep2NextState();
     });
   });
@@ -412,6 +447,8 @@ function updateStep2NextState() {
 
 document.getElementById("bookingDate").addEventListener("change", (e) => {
   selectedDate = e.target.value;
+  selectedTime = "";
+  fetchAvailableSlots();
   updateStep2NextState();
 });
 
@@ -423,7 +460,11 @@ function goToStep(step) {
     el.classList.toggle("is-done", n < step);
     el.querySelector(".stepper__circle").textContent = n < step ? "✓" : n;
   });
-  if (step === 3) renderSummary();
+  if (step === 2) {
+    fetchAvailableSlots();
+  } else if (step === 3) {
+    renderSummary();
+  }
 }
 
 function renderSummary() {
@@ -461,9 +502,50 @@ document.getElementById("toStep2").addEventListener("click", () => goToStep(2));
 document.getElementById("toStep1").addEventListener("click", () => goToStep(1));
 document.getElementById("toStep3").addEventListener("click", () => goToStep(3));
 document.getElementById("toStep2b").addEventListener("click", () => goToStep(2));
-document.getElementById("confirmBooking").addEventListener("click", () => {
-  closeBooking();
-  showToast("Booking confirmed! We've emailed your appointment details.");
+document.getElementById("confirmBooking").addEventListener("click", async () => {
+  if (!currentUser) {
+    closeBooking();
+    openAuth("login");
+    showToast("Please log in to confirm your booking.");
+    return;
+  }
+
+  const confirmBtn = document.getElementById("confirmBooking");
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = "Processing...";
+
+  const formData = new FormData();
+  formData.append("service_ids", JSON.stringify(selectedServiceIds));
+  formData.append("date", selectedDate);
+  formData.append("time", selectedTime);
+
+  try {
+    const res = await fetch("includes/appointments/create.php", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      closeBooking();
+      showToast(`Booking confirmed! Your reference is ${data.appointment_id}.`);
+      selectedServiceIds = [];
+      selectedDate = "";
+      selectedTime = "";
+      document.getElementById("bookingDate").value = "";
+    } else {
+      showToast(data.error || "Booking failed.");
+      if (data.error && data.error.includes("no longer available")) {
+        goToStep(2);
+        fetchAvailableSlots();
+      }
+    }
+  } catch (err) {
+    showToast("Error processing booking request.");
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Confirm Booking";
+  }
 });
 
 /* ---------- Init ---------- */
