@@ -129,10 +129,18 @@ function renderFaqs() {
 /* ---------- Navbar: mobile toggle ---------- */
 const navToggle = document.getElementById("navToggle");
 const navMobile = document.getElementById("navMobile");
-navToggle.addEventListener("click", () => navMobile.classList.toggle("is-open"));
-navMobile.querySelectorAll("a, button").forEach((el) => {
-  el.addEventListener("click", () => navMobile.classList.remove("is-open"));
-});
+if (navToggle && navMobile) {
+  navToggle.addEventListener("click", () => {
+    navToggle.classList.toggle("is-open");
+    navMobile.classList.toggle("is-open");
+  });
+  navMobile.querySelectorAll("a, button").forEach((el) => {
+    el.addEventListener("click", () => {
+      navToggle.classList.remove("is-open");
+      navMobile.classList.remove("is-open");
+    });
+  });
+}
 
 /* ---------- Toast ---------- */
 let toastTimer;

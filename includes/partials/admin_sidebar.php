@@ -1,11 +1,18 @@
 <?php $currentPage = $currentPage ?? 'home_overview'; ?>
 <aside class="sidebar">
   <div class="sidebar__brand">
-    <div class="sidebar__logo">AN</div>
-    <div>
-      <p class="sidebar__brand-title">Astrid Nails</p>
-      <p class="sidebar__brand-sub">Admin Panel</p>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <div class="sidebar__logo">AN</div>
+      <div>
+        <p class="sidebar__brand-title">Astrid Nails</p>
+        <p class="sidebar__brand-sub">Admin Panel</p>
+      </div>
     </div>
+    <button class="sidebar__toggle" id="sidebarToggle" aria-label="Toggle Navigation">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
   </div>
 
   <nav class="sidebar__nav">

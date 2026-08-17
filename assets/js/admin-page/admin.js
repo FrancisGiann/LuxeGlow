@@ -210,6 +210,20 @@ function openConfirmModal(title, message, onConfirm) {
   confirmModal.showModal();
 }
 
+/* ---------- Mobile Sidebar Toggle ---------- */
+const initSidebarToggle = () => {
+  const toggleBtn = document.getElementById("sidebarToggle");
+  const sidebar = document.querySelector(".sidebar");
+  if (toggleBtn && sidebar && !toggleBtn.dataset.bound) {
+    toggleBtn.dataset.bound = "true";
+    toggleBtn.addEventListener("click", () => {
+      sidebar.classList.toggle("is-open");
+    });
+  }
+};
+document.addEventListener("DOMContentLoaded", initSidebarToggle);
+initSidebarToggle();
+
 /* ---------- Toast ---------- */
 let toastTimer;
 function showToast(message) {
