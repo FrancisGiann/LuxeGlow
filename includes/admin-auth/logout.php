@@ -14,5 +14,5 @@ if (isset($_GET['json'])) {
     exit;
 }
 
-header('Location: ../../admin_login.php');
+header('Location: ../../index.php');
 exit;

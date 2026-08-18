@@ -577,3 +577,28 @@ img { max-width: 100%; display: block; }
   z-index: 100;
 }
 .toast.is-visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Flatpickr Custom Theme Overrides ---------- */
+.flatpickr-calendar {
+  border-radius: 16px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid var(--border, #eee) !important;
+  font-family: 'DM Sans', sans-serif !important;
+  padding: 0.5rem !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange,
+.flatpickr-day.selected.inRange,
+.flatpickr-day.selected:focus,
+.flatpickr-day.selected:hover {
+  background: var(--brand-purple, #6b21a8) !important;
+  border-color: var(--brand-purple, #6b21a8) !important;
+}
+.flatpickr-months .flatpickr-month {
+  color: var(--brand-purple, #6b21a8) !important;
+  font-weight: 700 !important;
+}
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  font-weight: 700 !important;
+}

@@ -3,9 +3,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// 1. Auth check: redirect to admin_login.php if not logged in as admin
+// 1. Auth check: redirect to homepage with admin login modal if not logged in
 if (!isset($_SESSION['admin_id'])) {
-    header('Location: admin_login.php');
+    header('Location: index.php?openAuth=admin');
     exit;
 }
 
@@ -46,6 +46,8 @@ $pageFile = $adminPages[$currentPage];
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <link rel="stylesheet" href="assets/css/admin-page/admin-style.css?v=<?php echo time(); ?>" />
 </head>
 <body>

@@ -597,3 +597,61 @@ select {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ---------- Time Slot Buttons ---------- */
+.time-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--card, #ffffff);
+  color: var(--foreground, #1f2937);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.time-slot:hover:not(:disabled) {
+  border-color: var(--brand-purple, #6b21a8);
+  color: var(--brand-purple, #6b21a8);
+  background: rgba(107, 33, 168, 0.04);
+}
+.time-slot.is-selected {
+  background: linear-gradient(135deg, var(--brand-purple, #6b21a8), #8b5cf6) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(107, 33, 168, 0.25);
+  transform: translateY(-1px);
+}
+.time-slot--unavailable,
+.time-slot:disabled {
+  opacity: 0.45;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* ---------- Flatpickr Theme Overrides ---------- */
+.flatpickr-calendar {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid var(--border, #eee) !important;
+  font-family: inherit !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange,
+.flatpickr-day.selected.inRange,
+.flatpickr-day.selected:focus,
+.flatpickr-day.selected:hover {
+  background: var(--brand-purple, #6b21a8) !important;
+  border-color: var(--brand-purple, #6b21a8) !important;
+}
+

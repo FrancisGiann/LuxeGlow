@@ -176,7 +176,13 @@ if (navToggle && navMobile) {
 /* ---------- Toast ---------- */
 let toastTimer;
 function showToast(message) {
-  const toast = document.getElementById("toast");
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
   toast.textContent = message;
   toast.classList.add("is-visible");
   clearTimeout(toastTimer);
@@ -187,6 +193,7 @@ function showToast(message) {
 const authOverlay = document.getElementById("authOverlay");
 const authViews = {
   login: document.getElementById("loginView"),
+  "admin-login": document.getElementById("adminLoginView"),
   register: document.getElementById("registerView"),
   verify: document.getElementById("verifyView"),
 };
@@ -311,6 +318,46 @@ document.getElementById("loginSubmit").addEventListener("click", async () => {
   }
 });
 
+const adminLoginBtn = document.getElementById("adminLoginSubmit");
+if (adminLoginBtn) {
+  adminLoginBtn.addEventListener("click", async () => {
+    const username = document.getElementById("adminLoginUsername").value.trim();
+    const password = document.getElementById("adminLoginPassword").value;
+    const errEl = document.getElementById("adminLoginError");
+
+    errEl.style.display = "none";
+    errEl.textContent = "";
+
+    if (!username || !password) {
+      errEl.textContent = "Username and password are required.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("username", username);
+    formData.append("password", password);
+
+    try {
+      const res = await fetch("includes/admin-auth/login.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Admin login successful. Redirecting...");
+        window.location.href = "admin_dashboard.php?page=home_overview";
+      } else {
+        errEl.textContent = data.error || "Login failed.";
+        errEl.style.display = "block";
+      }
+    } catch (err) {
+      errEl.textContent = "An error occurred during login.";
+      errEl.style.display = "block";
+    }
+  });
+}
+
 document.getElementById("registerSubmit").addEventListener("click", async () => {
   const firstName = document.getElementById("regFirstName").value;
   const lastName = document.getElementById("regLastName").value;
@@ -377,6 +424,7 @@ const bookingSteps = {
   1: document.getElementById("bookingStep1"),
   2: document.getElementById("bookingStep2"),
   3: document.getElementById("bookingStep3"),
+  4: document.getElementById("bookingStep4"),
 };
 let selectedServiceIds = [];
 let selectedDate = "";
@@ -476,15 +524,34 @@ function updateStep2NextState() {
   document.getElementById("toStep3").disabled = !(selectedDate && selectedTime);
 }
 
-document.getElementById("bookingDate").addEventListener("change", (e) => {
-  selectedDate = e.target.value;
-  selectedTime = "";
-  fetchAvailableSlots();
-  updateStep2NextState();
-});
+let bookingDatePicker;
+if (typeof flatpickr !== "undefined" && document.getElementById("bookingDate")) {
+  bookingDatePicker = flatpickr("#bookingDate", {
+    minDate: "today",
+    dateFormat: "Y-m-d",
+    onChange: function (selectedDates, dateStr) {
+      selectedDate = dateStr;
+      selectedTime = "";
+      fetchAvailableSlots();
+      updateStep2NextState();
+    },
+  });
+} else if (document.getElementById("bookingDate")) {
+  document.getElementById("bookingDate").addEventListener("change", (e) => {
+    selectedDate = e.target.value;
+    selectedTime = "";
+    fetchAvailableSlots();
+    updateStep2NextState();
+  });
+}
 
 function goToStep(step) {
-  Object.entries(bookingSteps).forEach(([key, el]) => { el.hidden = Number(key) !== step; });
+  Object.entries(bookingSteps).forEach(([key, el]) => {
+    if (el) el.hidden = Number(key) !== step;
+  });
+  const stepperEl = document.getElementById("stepper");
+  if (stepperEl) stepperEl.style.display = step === 4 ? "none" : "flex";
+
   document.querySelectorAll(".stepper__step").forEach((el) => {
     const n = Number(el.dataset.step);
     el.classList.toggle("is-active", n === step);
@@ -493,8 +560,10 @@ function goToStep(step) {
   });
   if (step === 2) {
     fetchAvailableSlots();
-  } else if (step === 3) {
-    renderSummary();
+    updateStep2NextState();
+  }
+  if (step === 3) {
+    renderStep3Summary();
   }
 }
 
@@ -558,12 +627,21 @@ document.getElementById("confirmBooking").addEventListener("click", async () => 
     const data = await res.json();
 
     if (data.success) {
-      closeBooking();
-      showToast(`Booking confirmed! Your reference is ${data.appointment_id}.`);
+      document.getElementById("successBookingRef").textContent = data.appointment_id;
+      const totalP = selectedServices().reduce((sum, s) => sum + parseFloat(s.price), 0);
+      document.getElementById("successSummaryDetails").innerHTML = `
+        <div><dt>Date</dt><dd>${selectedDate}</dd></div>
+        <div><dt>Time</dt><dd>${selectedTime}</dd></div>
+        <div class="total"><dt>Total Amount</dt><dd>${peso(totalP)}</dd></div>
+      `;
+
+      goToStep(4);
       selectedServiceIds = [];
       selectedDate = "";
       selectedTime = "";
-      document.getElementById("bookingDate").value = "";
+      if (document.getElementById("bookingDate")) {
+        document.getElementById("bookingDate").value = "";
+      }
     } else {
       showToast(data.error || "Booking failed.");
       if (data.error && data.error.includes("no longer available")) {
@@ -579,9 +657,20 @@ document.getElementById("confirmBooking").addEventListener("click", async () => 
   }
 });
 
+const bookingSuccessDone = document.getElementById("bookingSuccessDone");
+if (bookingSuccessDone) {
+  bookingSuccessDone.addEventListener("click", closeBooking);
+}
+
 /* ---------- Init ---------- */
 document.getElementById("footerYear").textContent = new Date().getFullYear();
 fetchServices();
 renderReviews();
 fetchFaqsPublic();
 fetchAboutPublic();
+
+// Auto-open Admin Login modal if openAuth=admin query parameter is present
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get("openAuth") === "admin") {
+  openAuth("admin-login");
+}

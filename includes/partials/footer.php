@@ -17,6 +17,7 @@
     </div>
   </footer>
 
+  <div class="toast" id="toast"></div>
   <script src="assets/js/index.js"></script>
 </body>
 </html>

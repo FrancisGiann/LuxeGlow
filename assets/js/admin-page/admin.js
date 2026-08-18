@@ -29,7 +29,10 @@ async function fetchAppointmentsAdmin() {
   try {
     const res = await fetch(`includes/appointments/list.php?status=${encodeURIComponent(filterVal)}`);
     bookings = await res.json();
-    if (document.getElementById("appointmentList")) renderAppointmentList();
+    if (document.getElementById("appointmentList")) {
+      const searchEl = document.getElementById("appointmentSearch");
+      renderAppointmentList(searchEl ? searchEl.value : "");
+    }
     if (document.getElementById("recentBookings")) renderDashboard();
   } catch (err) {
     console.error("Failed to fetch appointments", err);
@@ -114,7 +117,13 @@ initSidebarToggle();
 /* ---------- Toast ---------- */
 let toastTimer;
 function showToast(message) {
-  const toast = document.getElementById("toast");
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
   toast.textContent = message;
   toast.classList.add("is-visible");
   clearTimeout(toastTimer);
@@ -499,18 +508,29 @@ if (historySearch) {
 let selectedRescheduleApp = null;
 let selectedRescheduleTime = "";
 
-function renderAppointmentList() {
+function renderAppointmentList(filterQuery = "") {
   const list = document.getElementById("appointmentList");
   if (!list) {
     return;
   }
 
-  if (bookings.length === 0) {
-    list.innerHTML = `<div class="card"><p class="muted" style="font-size:0.875rem">No bookings in this status.</p></div>`;
+  const query = filterQuery.toLowerCase().trim();
+  const filtered = query
+    ? bookings.filter((b) =>
+        (b.id || "").toLowerCase().includes(query) ||
+        (b.customer || "").toLowerCase().includes(query) ||
+        (b.email || "").toLowerCase().includes(query) ||
+        (b.phone || "").toLowerCase().includes(query) ||
+        (b.service || "").toLowerCase().includes(query)
+      )
+    : bookings;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="card"><p class="muted" style="font-size:0.875rem">No matching appointments found.</p></div>`;
     return;
   }
 
-  list.innerHTML = bookings
+  list.innerHTML = filtered
     .map((b) => {
       let actionButtons = "";
       if (b.status === "Pending") {
@@ -530,7 +550,7 @@ function renderAppointmentList() {
       return `
         <div class="card booking-row" data-id="${b.id}">
           <div>
-            <p class="booking-row__name">${b.customer}</p>
+            <p class="booking-row__name"><span style="font-weight:700; color:var(--brand-purple, #6b21a8); font-size:0.95rem; margin-right:0.4rem;">[${b.id}]</span> ${b.customer}</p>
             <p class="booking-row__meta">${b.email} · ${b.phone}</p>
             <p style="margin-top:0.25rem;font-size:0.875rem">${b.service} — <span class="muted">${b.time}</span></p>
           </div>
@@ -538,12 +558,16 @@ function renderAppointmentList() {
             <span class="price-text">${peso(b.price)}</span>
             <span class="${statusClass(b.status)}">${b.status}</span>
             ${actionButtons}
+            <button class="btn btn--soft btn--sm" data-view-detail="${b.id}">👁️ Details</button>
           </div>
         </div>
       `;
     })
     .join("");
 
+  list.querySelectorAll("[data-view-detail]").forEach((btn) => {
+    btn.addEventListener("click", () => openAppointmentDetailModal(btn.dataset.viewDetail));
+  });
   list.querySelectorAll("[data-confirm]").forEach((btn) => {
     btn.addEventListener("click", () => setBookingStatus(btn.dataset.confirm, "Confirmed"));
   });
@@ -560,6 +584,56 @@ function renderAppointmentList() {
   });
   list.querySelectorAll("[data-reschedule]").forEach((btn) => {
     btn.addEventListener("click", () => openRescheduleModal(btn.dataset.reschedule));
+  });
+}
+
+/* ---------- Appointment Detail Modal Handler ---------- */
+function openAppointmentDetailModal(id) {
+  const b = bookings.find((item) => item.id === id);
+  if (!b) return;
+
+  const modal = document.getElementById("appointmentDetailModal");
+  if (!modal) return;
+
+  document.getElementById("detailAppId").textContent = b.id;
+  document.getElementById("detailCustomerName").textContent = b.customer;
+  document.getElementById("detailCustomerContact").textContent = b.phone || "-";
+  document.getElementById("detailCustomerEmail").textContent = b.email || "-";
+  document.getElementById("detailDate").textContent = b.date || "-";
+  document.getElementById("detailTimeDuration").textContent = `${b.time} (${b.duration_minutes || 60} mins)`;
+  document.getElementById("detailTotalPrice").textContent = peso(b.price || 0);
+
+  const statusPill = document.getElementById("detailStatusPill");
+  if (statusPill) {
+    statusPill.textContent = b.status;
+    statusPill.className = statusClass(b.status);
+  }
+
+  const servicesList = document.getElementById("detailServicesList");
+  if (servicesList) {
+    if (b.service_items && b.service_items.length > 0) {
+      servicesList.innerHTML = b.service_items
+        .map(
+          (s) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; padding:0.4rem 0.6rem; background:#f9f9f9; border-radius:6px;">
+          <span><strong>${s.name}</strong> <span class="muted" style="font-size:0.75rem">(${s.category})</span></span>
+          <span style="font-weight:600">${peso(parseFloat(s.price))}</span>
+        </div>
+      `,
+        )
+        .join("");
+    } else {
+      servicesList.innerHTML = `<div style="font-size:0.85rem; color:#666;">${b.service}</div>`;
+    }
+  }
+
+  modal.showModal();
+}
+
+const closeDetailModalBtn = document.getElementById("closeDetailModalBtn");
+if (closeDetailModalBtn) {
+  closeDetailModalBtn.addEventListener("click", () => {
+    document.getElementById("appointmentDetailModal")?.close();
   });
 }
 
@@ -597,11 +671,33 @@ function openRescheduleModal(id) {
   document.getElementById("rescheduleSub").textContent = `Rescheduling ${id} for ${selectedRescheduleApp.customer} (${selectedRescheduleApp.service})`;
   
   const dateInput = document.getElementById("rescheduleDate");
-  dateInput.value = selectedRescheduleApp.date || new Date().toISOString().split("T")[0];
+  const targetDate = selectedRescheduleApp.date || new Date().toISOString().split("T")[0];
+  if (rescheduleDatePicker) {
+    rescheduleDatePicker.setDate(targetDate);
+  } else if (dateInput) {
+    dateInput.value = targetDate;
+  }
   selectedRescheduleTime = "";
 
   modal.showModal();
   fetchRescheduleSlots();
+}
+
+let rescheduleDatePicker;
+if (typeof flatpickr !== "undefined" && document.getElementById("rescheduleDate")) {
+  rescheduleDatePicker = flatpickr("#rescheduleDate", {
+    minDate: "today",
+    dateFormat: "Y-m-d",
+    onChange: function () {
+      selectedRescheduleTime = "";
+      fetchRescheduleSlots();
+    },
+  });
+} else if (document.getElementById("rescheduleDate")) {
+  document.getElementById("rescheduleDate").addEventListener("change", () => {
+    selectedRescheduleTime = "";
+    fetchRescheduleSlots();
+  });
 }
 
 async function fetchRescheduleSlots() {
@@ -628,14 +724,14 @@ async function fetchRescheduleSlots() {
         class="time-slot ${selectedRescheduleTime === s.time ? "is-selected" : ""} ${!s.available ? "time-slot--unavailable" : ""}" 
         data-rtime="${s.time}" 
         ${!s.available ? "disabled" : ""}
-        style="padding:0.4rem; font-size:0.75rem;"
       >${s.time}</button>
     `).join("");
 
     grid.querySelectorAll("[data-rtime]:not([disabled])").forEach((btn) => {
       btn.addEventListener("click", () => {
         selectedRescheduleTime = btn.dataset.rtime;
-        fetchRescheduleSlots();
+        grid.querySelectorAll("[data-rtime]").forEach((b) => b.classList.remove("is-selected"));
+        btn.classList.add("is-selected");
       });
     });
   } catch (err) {
@@ -694,6 +790,11 @@ if (rescheduleSaveBtn) {
 const listFilterEl = document.getElementById("listFilter");
 if (listFilterEl) {
   listFilterEl.addEventListener("change", () => fetchAppointmentsAdmin());
+}
+
+const appointmentSearch = document.getElementById("appointmentSearch");
+if (appointmentSearch) {
+  appointmentSearch.addEventListener("input", (e) => renderAppointmentList(e.target.value));
 }
 
 /* ---------- FAQ manager ---------- */
@@ -833,8 +934,8 @@ const addFaqBtn = document.getElementById("addFaqBtn");
 if (addFaqBtn) {
   addFaqBtn.addEventListener("click", async () => {
     const formData = new FormData();
-    formData.append("question", "New question");
-    formData.append("answer", "Add your answer here.");
+    formData.append("question", "");
+    formData.append("answer", "");
 
     try {
       const res = await fetch("includes/faqs/create.php", {

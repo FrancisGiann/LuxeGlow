@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>" />
 </head>
 <body>
@@ -34,7 +36,6 @@
       <div class="navbar__actions">
         <button class="btn btn--soft" id="loginBtn">Login / Register</button>
         <button class="btn btn--brand" id="bookNavBtn">Book Now</button>
-        <a href="admin_dashboard.php?page=home_overview" class="navbar__admin-link">Admin</a>
       </div>
 
       <button class="navbar__toggle" id="navToggle" aria-label="Toggle menu">
@@ -50,6 +51,5 @@
       <a href="index.php#faqs" class="navbar__link">FAQs</a>
       <button class="btn btn--soft" id="loginBtnMobile">Login / Register</button>
       <button class="btn btn--brand" id="bookNavBtnMobile">Book Now</button>
-      <a href="admin_dashboard.php?page=home_overview" class="navbar__admin-link">Admin panel</a>
     </div>
   </header>

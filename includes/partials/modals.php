@@ -28,11 +28,38 @@
           </div>
           <p class="field__error" id="loginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
           <button class="btn btn--brand btn--block" id="loginSubmit">Log in</button>
-          <p class="auth-card__note" style="text-align: center; margin-top: 1.5rem; margin-bottom: 1rem;">
+          <p class="auth-card__note" style="text-align: center; margin-top: 1.25rem; margin-bottom: 0.5rem;">
             Don't have an account? 
             <button class="link-btn" data-view="register" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">Register</button>
           </p>
+          <p class="auth-card__note" style="text-align: center; margin-top: 0.75rem; border-top: 1px dashed var(--border, #eee); padding-top: 0.75rem;">
+            Are you a salon staff member? 
+            <button class="link-btn" data-view="admin-login" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">🔐 Sign in as Staff / Admin</button>
+          </p>
           <button class="link-btn" id="authBackHome1" style="font-family: inherit; width: 100%; justify-content: center; margin-top: 1rem;">← Back to Home</button>
+        </div>
+
+        <!-- Admin Login view -->
+        <div class="auth-card" id="adminLoginView" hidden>
+          <div class="auth-card__logo">AN</div>
+          <h2 class="auth-card__title">Admin / Staff Login</h2>
+          <div class="auth-card__fields">
+            <label class="field">
+              <span class="field__label">Username</span>
+              <input type="text" id="adminLoginUsername" placeholder="e.g. astrid.admin" />
+            </label>
+            <label class="field">
+              <span class="field__label">Password</span>
+              <input type="password" id="adminLoginPassword" placeholder="••••••••" />
+            </label>
+          </div>
+          <p class="field__error" id="adminLoginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
+          <button class="btn btn--brand btn--block" id="adminLoginSubmit">Log in as Staff</button>
+          
+          <p class="auth-card__note" style="text-align: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+            Not a staff member? 
+            <button class="link-btn" data-view="login" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">← Back to Customer Login</button>
+          </p>
         </div>
 
         <!-- Register view -->
@@ -180,6 +207,25 @@
           <button class="link-btn" id="toStep2b">← Back</button>
           <button class="btn btn--brand" id="confirmBooking">Confirm Booking</button>
         </div>
+      </div>
+
+      <!-- Step 4: Success / Confirmation View -->
+      <div class="booking-step" id="bookingStep4" hidden style="text-align: center; padding: 0.5rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem;">🎉</div>
+        <h3 style="font-size: 1.5rem; font-weight: 800; color: var(--foreground, #1a1a1a); margin-bottom: 0.25rem;">Booking Confirmed!</h3>
+        <p style="font-size: 0.875rem; color: var(--muted-foreground, #666); margin-bottom: 1.25rem;">Thank you! Your appointment has been successfully scheduled.</p>
+
+        <div style="background: rgba(107, 33, 168, 0.06); border: 2px dashed var(--brand-purple, #6b21a8); padding: 1.25rem; border-radius: 12px; margin-bottom: 1.25rem;">
+          <p style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 0.35rem;">Your Booking Reference ID</p>
+          <p id="successBookingRef" style="font-size: 1.4rem; font-weight: 800; color: var(--brand-purple, #6b21a8); letter-spacing: 0.5px;"></p>
+        </div>
+
+        <section class="summary-box" style="text-align: left; margin-bottom: 1.5rem;">
+          <h3 class="summary-box__title">Appointment Summary</h3>
+          <dl class="summary-dl" id="successSummaryDetails"><!-- injected --></dl>
+        </section>
+
+        <button class="btn btn--brand btn--block" id="bookingSuccessDone" style="padding: 0.75rem;">Done &amp; Close</button>
       </div>
     </div>
   </div>
