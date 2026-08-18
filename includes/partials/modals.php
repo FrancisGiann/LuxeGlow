@@ -170,7 +170,7 @@
         <p class="booking-step__title">Step 2: Choose Date &amp; Time</p>
         <label class="field">
           <span class="field__label">📅 Preferred Date</span>
-          <input type="date" id="bookingDate" />
+          <input type="text" id="bookingDate" class="flatpickr-input" placeholder="Select your preferred date..." style="padding: 0.65rem 0.85rem; border: 1px solid var(--border, #e2e8f0); border-radius: 10px; width: 100%; font-family: inherit; font-size: 0.9rem; background: #fff; cursor: pointer;" />
         </label>
         <p class="field__label" style="margin-top:1.25rem;">🕐 Preferred Time</p>
         <div class="time-grid" id="timeGrid"><!-- injected --></div>
@@ -196,11 +196,7 @@
 
         <section class="summary-box">
           <h3 class="summary-box__title">Customer Information</h3>
-          <dl class="summary-dl">
-            <div><dt>Name</dt><dd>Maria Santos</dd></div>
-            <div><dt>Email</dt><dd>maria.santos@example.com</dd></div>
-            <div><dt>Phone</dt><dd>0917 221 4488</dd></div>
-          </dl>
+          <dl class="summary-dl" id="summaryCustomerInfo"><!-- injected --></dl>
         </section>
 
         <div class="booking-step__actions">

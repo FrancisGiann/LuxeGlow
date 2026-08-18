@@ -438,7 +438,11 @@ function openBooking(initialServiceId) {
   selectedServiceIds = initialServiceId ? [initialServiceId] : [];
   selectedDate = "";
   selectedTime = "";
-  document.getElementById("bookingDate").value = "";
+  if (bookingDatePicker) {
+    bookingDatePicker.clear();
+  } else if (document.getElementById("bookingDate")) {
+    document.getElementById("bookingDate").value = "";
+  }
   renderBookingServices();
   renderTimeGrid();
   goToStep(1);
@@ -563,34 +567,67 @@ function goToStep(step) {
     updateStep2NextState();
   }
   if (step === 3) {
-    renderStep3Summary();
+    renderSummary();
   }
 }
 
+function selectedServices() {
+  return SERVICES.filter((s) => selectedServiceIds.map(String).includes(String(s.id)));
+}
+
 function renderSummary() {
-  const chosen = SERVICES.filter((s) => selectedServiceIds.includes(s.id));
+  const chosen = selectedServices();
   const totalMinutes = chosen.reduce((sum, s) => sum + s.minutes, 0);
   const totalPrice = chosen.reduce((sum, s) => sum + s.price, 0);
 
-  document.getElementById("summaryServices").innerHTML = chosen.map((s) => `
-    <li>
-      <div>
-        <p class="name">${s.name}</p>
-        <p class="desc">${s.description}</p>
-      </div>
-      <div>
-        <p class="price">${peso(s.price)}</p>
-        <p class="time">${s.duration}</p>
-      </div>
-    </li>
-  `).join("");
+  const servicesEl = document.getElementById("summaryServices");
+  if (servicesEl) {
+    servicesEl.innerHTML = chosen
+      .map(
+        (s) => `
+      <li>
+        <div>
+          <p class="name">${s.name}</p>
+          <p class="desc">${s.description || ""}</p>
+        </div>
+        <div>
+          <p class="price">${peso(s.price)}</p>
+          <p class="time">${s.duration}</p>
+        </div>
+      </li>
+    `,
+      )
+      .join("");
+  }
 
-  document.getElementById("summaryDetails").innerHTML = `
-    <div><dt>Date</dt><dd>${selectedDate}</dd></div>
-    <div><dt>Time</dt><dd>${selectedTime}</dd></div>
-    <div><dt>Total Duration</dt><dd>${formatDuration(totalMinutes)}</dd></div>
-    <div class="total"><dt>Total</dt><dd>${peso(totalPrice)}</dd></div>
-  `;
+  const detailsEl = document.getElementById("summaryDetails");
+  if (detailsEl) {
+    detailsEl.innerHTML = `
+      <div><dt>Date</dt><dd>${selectedDate || "-"}</dd></div>
+      <div><dt>Time</dt><dd>${selectedTime || "-"}</dd></div>
+      <div><dt>Total Duration</dt><dd>${formatDuration(totalMinutes)}</dd></div>
+      <div class="total"><dt>Total</dt><dd>${peso(totalPrice)}</dd></div>
+    `;
+  }
+
+  const custInfoEl = document.getElementById("summaryCustomerInfo");
+  if (custInfoEl) {
+    if (currentUser) {
+      custInfoEl.innerHTML = `
+        <div><dt>Name</dt><dd>${currentUser.first_name} ${currentUser.last_name || ""}</dd></div>
+        <div><dt>Email</dt><dd>${currentUser.email}</dd></div>
+        <div><dt>Phone</dt><dd>${currentUser.phone || "N/A"}</dd></div>
+      `;
+    } else {
+      custInfoEl.innerHTML = `
+        <div><dt>Status</dt><dd><span style="color:var(--brand-pink, #ec4899); font-weight:600;">Not logged in</span> — <button class="link-btn" id="summaryLoginLink" style="display:inline; font-family:inherit; color:var(--brand-purple); font-weight:600;">Log in now</button></dd></div>
+      `;
+      document.getElementById("summaryLoginLink")?.addEventListener("click", () => {
+        closeBooking();
+        openAuth("login");
+      });
+    }
+  }
 }
 
 document.getElementById("bookHeroBtn").addEventListener("click", () => openBooking());
