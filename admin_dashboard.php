@@ -1,5 +1,24 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// 1. Auth check: redirect to admin_login.php if not logged in as admin
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: admin_login.php');
+    exit;
+}
+
+$adminRole = $_SESSION['admin_role'] ?? 'Staff';
+$adminName = $_SESSION['admin_name'] ?? 'Admin';
+
 $currentPage = $_GET['page'] ?? 'home_overview';
+
+// 2. Server-side RBAC restriction: Account Management requires Super Admin
+if ($currentPage === 'account_management' && $adminRole !== 'Super Admin') {
+    header('Location: admin_dashboard.php?page=home_overview');
+    exit;
+}
 
 $adminPages = [
   'home_overview' => __DIR__ . '/includes/admin-page/home_overview.php',
@@ -51,6 +70,7 @@ $pageFile = $adminPages[$currentPage];
 
   <script>
     window.ADMIN_CURRENT_PAGE = <?php echo json_encode($currentPage); ?>;
+    window.ADMIN_ROLE = <?php echo json_encode($adminRole); ?>;
   </script>
   <script src="assets/js/admin-page/admin.js?v=<?php echo time(); ?>"></script>
 </body>

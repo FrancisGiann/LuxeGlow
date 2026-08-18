@@ -1,9 +1,8 @@
 <?php
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../admin-auth/require_admin.php';
 require_once __DIR__ . '/_overlap_helper.php';
 header('Content-Type: application/json');
-
-// TODO: require admin session once Step 9 (Account Management/admin login) is built
 
 $appointmentId = trim($_POST['appointment_id'] ?? '');
 $newDate = trim($_POST['new_date'] ?? '');

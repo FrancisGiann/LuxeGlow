@@ -1,8 +1,7 @@
 <?php
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../admin-auth/require_admin.php';
 header('Content-Type: application/json');
-
-// TODO: require admin session once Step 9 (Account Management/admin login) is built
 
 $customerId = (int)($_POST['customer_id'] ?? 0);
 $firstName = trim($_POST['first_name'] ?? '');

@@ -64,48 +64,7 @@ async function fetchFaqsAdmin() {
   }
 }
 
-let staffAccounts = [
-  {
-    name: "Astrid Villanueva",
-    position: "Super Admin",
-    contact: "0917 000 1122",
-    email: "astrid@astridnails.com",
-    address: "12 Mabini St, Quezon City",
-    username: "astrid.admin",
-    password: "Ast#2026luxe",
-    status: "Active",
-  },
-  {
-    name: "Rina Bautista",
-    position: "Salon Manager",
-    contact: "0918 224 5566",
-    email: "rina@astridnails.com",
-    address: "8 Katipunan Ave, Quezon City",
-    username: "rina.mgr",
-    password: "Rina#2026",
-    status: "Active",
-  },
-  {
-    name: "Joy Mercado",
-    position: "Nail Technician",
-    contact: "0927 883 4410",
-    email: "joy@astridnails.com",
-    address: "45 Aurora Blvd, Manila",
-    username: "joy.tech",
-    password: "Joy#2026",
-    status: "Active",
-  },
-  {
-    name: "Leah Ramos",
-    position: "Front Desk",
-    contact: "0933 771 9021",
-    email: "leah@astridnails.com",
-    address: "3 Rizal St, Pasig",
-    username: "leah.desk",
-    password: "Leah#2026",
-    status: "Inactive",
-  },
-];
+let staffAccounts = [];
 
 const peso = (v) =>
   `₱${v.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -949,28 +908,45 @@ if (saveAboutBtn) {
 }
 
 /* ---------- Account management ---------- */
+async function fetchStaffAccountsAdmin() {
+  const body = document.getElementById("accountsBody");
+  if (!body) return;
+
+  try {
+    const res = await fetch("includes/staff/list.php");
+    if (!res.ok) return;
+    staffAccounts = await res.json();
+    renderAccounts();
+  } catch (err) {
+    console.error("Failed to fetch staff accounts", err);
+  }
+}
+
 function renderAccounts() {
   const body = document.getElementById("accountsBody");
-  if (!body) {
+  if (!body) return;
+
+  if (!Array.isArray(staffAccounts) || staffAccounts.length === 0) {
+    body.innerHTML = `<tr><td colspan="8" class="muted" style="text-align:center; padding:1.5rem;">No staff accounts found.</td></tr>`;
     return;
   }
 
   body.innerHTML = staffAccounts
     .map(
       (a) => `
-    <tr>
+    <tr data-id="${a.account_id}">
       <td style="font-weight:500">${a.name}</td>
       <td class="muted">${a.position}</td>
-      <td class="muted">${a.contact}</td>
+      <td><span class="status-pill status-pill--${a.role === 'Super Admin' ? 'completed' : 'pending'}">${a.role}</span></td>
+      <td class="muted">${a.contact_number || '-'}</td>
       <td class="muted">${a.email}</td>
-      <td class="muted">${a.address}</td>
       <td>${a.username}</td>
-      <td><button class="reveal-btn" data-reveal="${a.username}">••••••••</button></td>
-      <td><span class="${statusClass(a.status)}">${a.status}</span></td>
+      <td><span class="status-pill status-pill--${a.status.toLowerCase()}">${a.status}</span></td>
       <td>
         <div class="row-actions">
-          <button class="btn btn--soft btn--sm">Edit</button>
-          <button class="btn btn--danger btn--sm" data-remove="${a.username}">Remove</button>
+          <button class="btn btn--soft btn--sm" data-edit-staff="${a.account_id}">Edit</button>
+          <button class="btn btn--soft btn--sm" data-reset-pw="${a.account_id}">Reset Password</button>
+          <button class="btn btn--${a.status === 'Active' ? 'danger' : 'brand'} btn--sm" data-toggle-status="${a.account_id}">${a.status === 'Active' ? 'Deactivate' : 'Activate'}</button>
         </div>
       </td>
     </tr>
@@ -978,31 +954,143 @@ function renderAccounts() {
     )
     .join("");
 
-  body.querySelectorAll("[data-reveal]").forEach((btn) => {
+  body.querySelectorAll("[data-edit-staff]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const account = staffAccounts.find(
-        (a) => a.username === btn.dataset.reveal,
-      );
-      btn.textContent =
-        btn.textContent === "••••••••" ? account.password : "••••••••";
+      const id = Number(btn.dataset.editStaff);
+      const acc = staffAccounts.find((a) => Number(a.account_id) === id);
+      if (!acc) return;
+
+      document.getElementById("staffModalTitle").textContent = "Edit Staff Account";
+      document.getElementById("staffAccountId").value = acc.account_id;
+      document.getElementById("staffName").value = acc.name;
+      document.getElementById("staffPosition").value = acc.position;
+      document.getElementById("staffRole").value = acc.role;
+      document.getElementById("staffEmail").value = acc.email;
+      document.getElementById("staffContact").value = acc.contact_number || "";
+      document.getElementById("staffAddress").value = acc.address || "";
+      document.getElementById("staffCreateOnlyFields").style.display = "none";
+
+      document.getElementById("staffModal").showModal();
     });
   });
-  body.querySelectorAll("[data-remove]").forEach((btn) => {
+
+  body.querySelectorAll("[data-reset-pw]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      staffAccounts = staffAccounts.filter(
-        (a) => a.username !== btn.dataset.remove,
+      const id = Number(btn.dataset.resetPw);
+      const acc = staffAccounts.find((a) => Number(a.account_id) === id);
+      if (!acc) return;
+
+      document.getElementById("resetAccountId").value = acc.account_id;
+      document.getElementById("resetStaffNameText").textContent = `Resetting password for ${acc.name} (${acc.username})`;
+      document.getElementById("newPasswordInput").value = "";
+      document.getElementById("resetPasswordModal").showModal();
+    });
+  });
+
+  body.querySelectorAll("[data-toggle-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.toggleStatus);
+      const acc = staffAccounts.find((a) => Number(a.account_id) === id);
+      if (!acc) return;
+
+      const actionText = acc.status === "Active" ? "deactivate" : "activate";
+      openConfirmModal(
+        `${actionText.charAt(0).toUpperCase() + actionText.slice(1)} Account`,
+        `Are you sure you want to ${actionText} ${acc.name}'s account?`,
+        async () => {
+          const formData = new FormData();
+          formData.append("account_id", id);
+          try {
+            const res = await fetch("includes/staff/toggle_status.php", {
+              method: "POST",
+              body: formData,
+            });
+            const data = await res.json();
+            if (data.success) {
+              showToast(`Account status updated to ${data.new_status}.`);
+              fetchStaffAccountsAdmin();
+            } else {
+              showToast(data.error || "Failed to update account status.");
+            }
+          } catch (err) {
+            showToast("Error updating account status.");
+          }
+        }
       );
-      renderAccounts();
-      showToast("Account removed.");
     });
   });
 }
 
 const addAccountBtn = document.getElementById("addAccountBtn");
 if (addAccountBtn) {
-  addAccountBtn.addEventListener("click", () =>
-    showToast("Open the add-account form here."),
-  );
+  addAccountBtn.addEventListener("click", () => {
+    document.getElementById("staffModalTitle").textContent = "Add Staff Account";
+    document.getElementById("staffForm").reset();
+    document.getElementById("staffAccountId").value = "";
+    document.getElementById("staffCreateOnlyFields").style.display = "grid";
+    document.getElementById("staffModal").showModal();
+  });
+}
+
+const cancelStaffModal = document.getElementById("cancelStaffModal");
+if (cancelStaffModal) {
+  cancelStaffModal.addEventListener("click", () => document.getElementById("staffModal").close());
+}
+const cancelResetModal = document.getElementById("cancelResetModal");
+if (cancelResetModal) {
+  cancelResetModal.addEventListener("click", () => document.getElementById("resetPasswordModal").close());
+}
+
+const staffForm = document.getElementById("staffForm");
+if (staffForm) {
+  staffForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("staffAccountId").value;
+    const isEdit = Boolean(id);
+    const endpoint = isEdit ? "includes/staff/update.php" : "includes/staff/create.php";
+    const formData = new FormData(staffForm);
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(isEdit ? "Staff account updated." : "Staff account created.");
+        document.getElementById("staffModal").close();
+        fetchStaffAccountsAdmin();
+      } else {
+        showToast(data.error || "Failed to save staff account.");
+      }
+    } catch (err) {
+      showToast("Error saving staff account.");
+    }
+  });
+}
+
+const resetPasswordForm = document.getElementById("resetPasswordForm");
+if (resetPasswordForm) {
+  resetPasswordForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(resetPasswordForm);
+
+    try {
+      const res = await fetch("includes/staff/reset_password.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Password reset successfully.");
+        document.getElementById("resetPasswordModal").close();
+      } else {
+        showToast(data.error || "Failed to reset password.");
+      }
+    } catch (err) {
+      showToast("Error resetting password.");
+    }
+  });
 }
 
 /* ---------- Init ---------- */
@@ -1011,4 +1099,4 @@ fetchServicesAdmin();
 fetchCustomersAdmin();
 fetchFaqsAdmin();
 fetchAboutAdmin();
-renderAccounts();
+fetchStaffAccountsAdmin();

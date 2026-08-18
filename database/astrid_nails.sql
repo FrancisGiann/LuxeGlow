@@ -1,6 +1,6 @@
 -- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Linux (x86_64)
 --
--- Host: localhost    Database: astrid_nails
+-- Host: 127.0.0.1    Database: astrid_nails
 -- ------------------------------------------------------
 -- Server version	10.4.32-MariaDB
 
@@ -14,14 +14,6 @@
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-
---
--- Current Database: `astrid_nails`
---
-
-CREATE DATABASE /*!32312 IF NOT EXISTS*/ `astrid_nails` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */;
-
-USE `astrid_nails`;
 
 --
 -- Table structure for table `about_content`
@@ -46,7 +38,7 @@ CREATE TABLE `about_content` (
 
 LOCK TABLES `about_content` WRITE;
 /*!40000 ALTER TABLE `about_content` DISABLE KEYS */;
-INSERT INTO `about_content` VALUES (1,'Astrid Nails & Beauty Bar','A premium sanctuary dedicated to providing top-notch nail, lash, and spa services in a relaxing, hygienic environment.','Our mission is to elevate beauty and self-care by offering personalized, high-quality services that make every client feel refreshed, confident, and pampered.','2026-08-15 14:56:56');
+INSERT INTO `about_content` VALUES (1,'Astrid Nails','A luxury sanctuary dedicated to providing top-notch nail, lash, and spa services in a relaxing, hygienic environment.','Our mission is to elevate beauty and self-care by offering personalized, high-quality services that make every client feel refreshed, confident, and pampered.','2026-08-18 13:24:00');
 /*!40000 ALTER TABLE `about_content` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -105,7 +97,7 @@ CREATE TABLE `appointments` (
 
 LOCK TABLES `appointments` WRITE;
 /*!40000 ALTER TABLE `appointments` DISABLE KEYS */;
-INSERT INTO `appointments` VALUES ('BK-1037',5,'2026-06-18','13:00:00',1500.00,'Pending','2026-08-15 14:56:56'),('BK-1038',4,'2026-08-16','16:30:00',1400.00,'Confirmed','2026-08-15 14:56:56'),('BK-1039',3,'2026-08-16','10:00:00',1200.00,'Pending','2026-08-15 14:56:56'),('BK-1040',2,'2026-08-15','11:30:00',1800.00,'Completed','2026-08-15 14:56:56'),('BK-1041',1,'2026-08-15','14:00:00',1500.00,'Confirmed','2026-08-15 14:56:56');
+INSERT INTO `appointments` VALUES ('BK-1037',5,'2026-06-18','13:00:00',1500.00,'Cancelled','2026-08-15 14:56:56'),('BK-1038',4,'2026-08-30','14:00:00',1400.00,'Pending','2026-08-15 14:56:56'),('BK-1039',3,'2026-08-16','10:00:00',1200.00,'Cancelled','2026-08-15 14:56:56'),('BK-1040',2,'2026-08-15','11:30:00',1800.00,'Completed','2026-08-15 14:56:56'),('BK-1041',1,'2026-08-15','14:00:00',1500.00,'Cancelled','2026-08-15 14:56:56');
 /*!40000 ALTER TABLE `appointments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -153,7 +145,7 @@ CREATE TABLE `faqs` (
   `answer` text NOT NULL,
   `display_order` int(11) DEFAULT 0,
   PRIMARY KEY (`faq_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -192,7 +184,7 @@ CREATE TABLE `services` (
 
 LOCK TABLES `services` WRITE;
 /*!40000 ALTER TABLE `services` DISABLE KEYS */;
-INSERT INTO `services` VALUES ('gel-polish','Gel Polish','Nails','Long lasting gel polish application',1500.00,60,4.5,NULL),('gentleman-package','Gentleman Package','Packages','Grooming essentials for gentlemen',1400.00,60,4.5,'uploads/services/gentleman-package-1786808683.jpg'),('kiddie-package','Kiddie Package','Packages','Fun and safe pampering for kids',700.00,30,4.5,NULL),('lash-extension','Lash Extension','Lashes','Volume lashes applied by certified artists',1800.00,60,5.0,NULL),('massage','Massage','Spa','Relaxing therapeutic massage',350.00,30,4.5,NULL),('nail-care','Nail Care','Nails','Basic nail care and grooming',1500.00,45,4.5,NULL),('nail-extension','Nail Extensions','Nails','Beautiful acrylic or gel extensions',1500.00,90,4.0,NULL),('spa-treatment','Spa Treatment','Spa','Relaxing foot and hand spa ritual',1200.00,60,5.0,NULL),('wax-hair-removal','Wax Hair Removal','Waxing','Gentle waxing with premium soft wax',900.00,30,4.5,NULL);
+INSERT INTO `services` VALUES ('gel-polish','Gel Polish','Nails','Long lasting gel polish application',1500.00,60,4.5,NULL),('gentleman-package','Gentleman Package','Packages','Grooming essentials for gentlemen',1400.00,60,4.5,NULL),('kiddie-package','Kiddie Package','Packages','Fun and safe pampering for kids',700.00,30,4.5,NULL),('lash-extension','Lash Extension','Lashes','Volume lashes applied by certified artists',1800.00,60,5.0,NULL),('massage','Massage','Spa','Relaxing therapeutic massage',350.00,30,4.5,NULL),('nail-care','Nail Care','Nails','Basic nail care and grooming',1500.00,45,4.5,NULL),('nail-extension','Nail Extensions','Nails','Beautiful acrylic or gel extensions',1500.00,90,4.0,NULL),('spa-treatment','Spa Treatment','Spa','Relaxing foot and hand spa ritual',1200.00,60,5.0,NULL),('wax-hair-removal','Wax Hair Removal','Waxing','Gentle waxing with premium soft wax',900.00,30,4.5,NULL);
 /*!40000 ALTER TABLE `services` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -227,7 +219,7 @@ CREATE TABLE `staff_accounts` (
 
 LOCK TABLES `staff_accounts` WRITE;
 /*!40000 ALTER TABLE `staff_accounts` DISABLE KEYS */;
-INSERT INTO `staff_accounts` VALUES (1,'Astrid Villanueva','Super Admin','0917 000 1122','astrid@astridnails.com','12 Mabini St, Quezon City','astrid.admin','$2y$12$7d9P5NP4fu64rXMJnFifzO2oCqgqXnJaT4A8YYfZugBe8bwmqeTVe','Active','Super Admin','2026-08-15 14:56:56'),(2,'Rina Bautista','Salon Manager','0918 224 5566','rina@astridnails.com','8 Katipunan Ave, Quezon City','rina.mgr','$2y$12$OitKjoYseS0q5gHkEznTuuyfC6WiNQNlnLBqGdvcG/cts2oF9UuWG','Active','Staff','2026-08-15 14:56:56'),(3,'Joy Mercado','Nail Technician','0927 883 4410','joy@astridnails.com','45 Aurora Blvd, Manila','joy.tech','$2y$12$2fzEmtu3J3Bq4N7JLLLof.TAPGdnSAjwn.FmWCwWyliue8J.7gSN.','Active','Staff','2026-08-15 14:56:56'),(4,'Leah Ramos','Front Desk','0933 771 9021','leah@astridnails.com','3 Rizal St, Pasig','leah.desk','$2y$12$6hTXUBF0uKUxwWvxMqFJRO6iazRZGgT..3JMgGsBNILyuZrQP.0s6','Inactive','Staff','2026-08-15 14:56:56');
+INSERT INTO `staff_accounts` VALUES (1,'Astrid Villanueva','Super Admin','0917 000 1122','astrid@astridnails.com','12 Mabini St, Quezon City','astrid.admin','$2y$12$/pEfryXuM0izRTBXXtMd3.FYlYsfCaXifaLXCkAPlM8Su6S/bac5y','Active','Super Admin','2026-08-15 14:56:56'),(2,'Rina Bautista','Salon Manager','0918 224 5566','rina@astridnails.com','8 Katipunan Ave, Quezon City','rina.mgr','$2y$12$fy3eDM5AkjUrCbNRYgjpxesEQI.3/2pAd0A6pg763FVpvHhDnN8Tu','Active','Staff','2026-08-15 14:56:56'),(3,'Joy Mercado','Nail Technician','0927 883 4410','joy@astridnails.com','45 Aurora Blvd, Manila','joy.tech','$2y$12$8QjwPDbcfO4tqRkxKAAP..9G2Nl8E0tQzZnWz9.DYQ7L2Yt6hnQhy','Active','Staff','2026-08-15 14:56:56'),(4,'Leah Ramos','Front Desk','0933 771 9021','leah@astridnails.com','3 Rizal St, Pasig','leah.desk','$2y$12$vRrOWKf.RhsmOTAiQe4ajOpKHN1BNfsLX0X6ut7DDwdEtUrG.HFEu','Inactive','Staff','2026-08-15 14:56:56');
 /*!40000 ALTER TABLE `staff_accounts` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -240,4 +232,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-17 23:23:13
+-- Dump completed on 2026-08-18 21:26:10
