@@ -897,9 +897,55 @@ if (addFaqBtn) {
 }
 
 /* ---------- About editor ---------- */
+async function fetchAboutAdmin() {
+  const nameInput = document.getElementById("aboutName");
+  const descInput = document.getElementById("aboutDesc");
+  const missionInput = document.getElementById("aboutMission");
+  if (!nameInput || !descInput || !missionInput) return;
+
+  try {
+    const res = await fetch("includes/about/get.php");
+    const data = await res.json();
+    nameInput.value = data.salon_name || "";
+    descInput.value = data.description || "";
+    missionInput.value = data.mission_statement || "";
+  } catch (err) {
+    console.error("Failed to fetch About content", err);
+  }
+}
+
 const saveAboutBtn = document.getElementById("saveAboutBtn");
 if (saveAboutBtn) {
-  saveAboutBtn.addEventListener("click", () => showToast("Changes saved"));
+  saveAboutBtn.addEventListener("click", async () => {
+    const nameVal = document.getElementById("aboutName")?.value.trim();
+    const descVal = document.getElementById("aboutDesc")?.value.trim();
+    const missionVal = document.getElementById("aboutMission")?.value.trim();
+
+    if (!nameVal || !descVal || !missionVal) {
+      showToast("All fields are required.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("salon_name", nameVal);
+    formData.append("description", descVal);
+    formData.append("mission_statement", missionVal);
+
+    try {
+      const res = await fetch("includes/about/update.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Changes saved");
+      } else {
+        showToast(data.error || "Failed to save changes.");
+      }
+    } catch (err) {
+      showToast("Error saving About content.");
+    }
+  });
 }
 
 /* ---------- Account management ---------- */
@@ -964,4 +1010,5 @@ fetchAppointmentsAdmin();
 fetchServicesAdmin();
 fetchCustomersAdmin();
 fetchFaqsAdmin();
+fetchAboutAdmin();
 renderAccounts();

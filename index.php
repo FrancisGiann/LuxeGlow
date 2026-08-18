@@ -76,24 +76,18 @@
             <div class="about__grid">
                 <article class="card about__card">
                     <h3 class="about__card-title about__card-title--purple">Our Story</h3>
-                    <p>
+                    <p id="aboutStoryText">
                         At Astrid Nails &amp; Beauty Bar, we are committed to providing exceptional service and creating
                         a
                         relaxing atmosphere where you can unwind and be pampered. Our team of skilled professionals uses
                         only premium products and the latest techniques to ensure you leave feeling beautiful and
                         rejuvenated.
                     </p>
-                    <p>
-                        We believe beauty care is more than just a service — it's an experience. From the moment you
-                        walk
-                        through our doors, you'll be treated to a luxurious environment designed for your comfort and
-                        relaxation.
-                    </p>
                 </article>
 
                 <article class="card about__card">
                     <h3 class="about__card-title about__card-title--pink">Our Mission</h3>
-                    <p>
+                    <p id="aboutMissionText">
                         To deliver premium beauty and wellness services that enhance our clients' confidence and
                         well-being
                         through expert care, quality products, and personalized attention.

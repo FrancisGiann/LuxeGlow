@@ -138,6 +138,25 @@ function renderFaqs() {
   });
 }
 
+/* ---------- Render: About ---------- */
+async function fetchAboutPublic() {
+  const storyEl = document.getElementById("aboutStoryText");
+  const missionEl = document.getElementById("aboutMissionText");
+  if (!storyEl && !missionEl) return;
+
+  try {
+    const res = await fetch("includes/about/get.php");
+    const data = await res.json();
+    if (storyEl && data.description) {
+      storyEl.textContent = data.description;
+    }
+    if (missionEl && data.mission_statement) {
+      missionEl.textContent = data.mission_statement;
+    }
+  } catch (err) {
+    console.error("Failed to fetch About content", err);
+  }
+}
 /* ---------- Navbar: mobile toggle ---------- */
 const navToggle = document.getElementById("navToggle");
 const navMobile = document.getElementById("navMobile");
@@ -565,3 +584,4 @@ document.getElementById("footerYear").textContent = new Date().getFullYear();
 fetchServices();
 renderReviews();
 fetchFaqsPublic();
+fetchAboutPublic();
