@@ -21,58 +21,20 @@ async function fetchServicesAdmin() {
   }
 }
 
-let bookings = [
-  {
-    id: "BK-1041",
-    customer: "Maria Santos",
-    email: "maria.santos@email.com",
-    phone: "0917 221 4488",
-    service: "Gel Polish",
-    time: "Today, 2:00 PM",
-    price: 1500,
-    status: "Confirmed",
-  },
-  {
-    id: "BK-1040",
-    customer: "Jasmine Reyes",
-    email: "jasmine.reyes@email.com",
-    phone: "0918 553 1102",
-    service: "Lash Extension",
-    time: "Today, 11:30 AM",
-    price: 1800,
-    status: "Completed",
-  },
-  {
-    id: "BK-1039",
-    customer: "Andrea Lim",
-    email: "andrea.lim@email.com",
-    phone: "0921 447 9080",
-    service: "Spa Treatment",
-    time: "Tomorrow, 10:00 AM",
-    price: 1200,
-    status: "Pending",
-  },
-  {
-    id: "BK-1038",
-    customer: "Paolo Cruz",
-    email: "paolo.cruz@email.com",
-    phone: "0906 118 2277",
-    service: "Gentleman Package",
-    time: "Tomorrow, 4:30 PM",
-    price: 1400,
-    status: "Confirmed",
-  },
-  {
-    id: "BK-1037",
-    customer: "Kim Dela Cruz",
-    email: "kim.dc@email.com",
-    phone: "0995 330 7712",
-    service: "Nail Extensions",
-    time: "June 18, 1:00 PM",
-    price: 1500,
-    status: "Pending",
-  },
-];
+let bookings = [];
+
+async function fetchAppointmentsAdmin() {
+  const filterEl = document.getElementById("listFilter");
+  const filterVal = filterEl ? filterEl.value : "All Bookings";
+  try {
+    const res = await fetch(`includes/appointments/list.php?status=${encodeURIComponent(filterVal)}`);
+    bookings = await res.json();
+    if (document.getElementById("appointmentList")) renderAppointmentList();
+    if (document.getElementById("recentBookings")) renderDashboard();
+  } catch (err) {
+    console.error("Failed to fetch appointments", err);
+  }
+}
 
 const customers = [
   {
@@ -242,7 +204,23 @@ function renderDashboard() {
     return;
   }
 
+  // Stat calculations
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todaysBookings = bookings.filter((b) => b.date === todayStr);
+  const pendingApprovals = bookings.filter((b) => b.status === "Pending");
+  const revenueToday = todaysBookings
+    .filter((b) => b.status !== "Cancelled")
+    .reduce((sum, b) => sum + b.price, 0);
+
+  const statValues = document.querySelectorAll(".stat-value");
+  if (statValues.length >= 3) {
+    statValues[0].textContent = todaysBookings.length;
+    statValues[1].textContent = pendingApprovals.length;
+    statValues[2].textContent = peso(revenueToday);
+  }
+
   recent.innerHTML = bookings
+    .slice(0, 5)
     .map(
       (b) => `
     <div class="card booking-row">
@@ -485,66 +463,204 @@ if (historySearch) {
 }
 
 /* ---------- Appointment list ---------- */
-function renderAppointmentList(filter = "All Bookings") {
-  const visible =
-    filter === "All Bookings"
-      ? bookings
-      : bookings.filter((b) => b.status === filter);
+let selectedRescheduleApp = null;
+let selectedRescheduleTime = "";
+
+function renderAppointmentList() {
   const list = document.getElementById("appointmentList");
   if (!list) {
     return;
   }
 
-  if (visible.length === 0) {
+  if (bookings.length === 0) {
     list.innerHTML = `<div class="card"><p class="muted" style="font-size:0.875rem">No bookings in this status.</p></div>`;
     return;
   }
 
-  list.innerHTML = visible
-    .map(
-      (b) => `
-    <div class="card booking-row" data-id="${b.id}">
-      <div>
-        <p class="booking-row__name">${b.customer}</p>
-        <p class="booking-row__meta">${b.email} · ${b.phone}</p>
-        <p style="margin-top:0.25rem;font-size:0.875rem">${b.service} — <span class="muted">${b.time}</span></p>
-      </div>
-      <div class="booking-row__right">
-        <span class="price-text">${peso(b.price)}</span>
-        <span class="${statusClass(b.status)}">${b.status}</span>
-        <button class="btn btn--brand btn--sm" data-confirm="${b.id}">Confirm</button>
-        <button class="btn btn--soft btn--sm">Reschedule</button>
-        <button class="btn btn--danger btn--sm" data-cancel="${b.id}">Cancel</button>
-      </div>
-    </div>
-  `,
-    )
+  list.innerHTML = bookings
+    .map((b) => {
+      let actionButtons = "";
+      if (b.status === "Pending") {
+        actionButtons = `
+          <button class="btn btn--brand btn--sm" data-confirm="${b.id}">Confirm</button>
+          <button class="btn btn--soft btn--sm" data-reschedule="${b.id}">Reschedule</button>
+          <button class="btn btn--danger btn--sm" data-cancel="${b.id}">Cancel</button>
+        `;
+      } else if (b.status === "Confirmed") {
+        actionButtons = `
+          <button class="btn btn--brand btn--sm" data-complete="${b.id}">Complete</button>
+          <button class="btn btn--soft btn--sm" data-reschedule="${b.id}">Reschedule</button>
+          <button class="btn btn--danger btn--sm" data-cancel="${b.id}">Cancel</button>
+        `;
+      }
+
+      return `
+        <div class="card booking-row" data-id="${b.id}">
+          <div>
+            <p class="booking-row__name">${b.customer}</p>
+            <p class="booking-row__meta">${b.email} · ${b.phone}</p>
+            <p style="margin-top:0.25rem;font-size:0.875rem">${b.service} — <span class="muted">${b.time}</span></p>
+          </div>
+          <div class="booking-row__right">
+            <span class="price-text">${peso(b.price)}</span>
+            <span class="${statusClass(b.status)}">${b.status}</span>
+            ${actionButtons}
+          </div>
+        </div>
+      `;
+    })
     .join("");
 
   list.querySelectorAll("[data-confirm]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      setBookingStatus(btn.dataset.confirm, "Confirmed"),
-    );
+    btn.addEventListener("click", () => setBookingStatus(btn.dataset.confirm, "Confirmed"));
+  });
+  list.querySelectorAll("[data-complete]").forEach((btn) => {
+    btn.addEventListener("click", () => setBookingStatus(btn.dataset.complete, "Completed"));
   });
   list.querySelectorAll("[data-cancel]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      setBookingStatus(btn.dataset.cancel, "Cancelled"),
-    );
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.cancel;
+      openConfirmModal("Cancel Appointment", `Are you sure you want to cancel appointment ${id}?`, () => {
+        setBookingStatus(id, "Cancelled");
+      });
+    });
+  });
+  list.querySelectorAll("[data-reschedule]").forEach((btn) => {
+    btn.addEventListener("click", () => openRescheduleModal(btn.dataset.reschedule));
   });
 }
 
-function setBookingStatus(id, status) {
-  bookings = bookings.map((b) => (b.id === id ? { ...b, status } : b));
-  const listFilter = document.getElementById("listFilter");
-  renderAppointmentList(listFilter ? listFilter.value : "All Bookings");
-  renderDashboard();
+async function setBookingStatus(id, status) {
+  const formData = new FormData();
+  formData.append("appointment_id", id);
+  formData.append("status", status);
+
+  try {
+    const res = await fetch("includes/appointments/update_status.php", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Appointment ${id} status set to ${status}.`);
+      fetchAppointmentsAdmin();
+    } else {
+      showToast(data.error || "Failed to update appointment status.");
+    }
+  } catch (err) {
+    showToast("Error updating appointment status.");
+  }
 }
 
-const listFilter = document.getElementById("listFilter");
-if (listFilter) {
-  listFilter.addEventListener("change", (e) =>
-    renderAppointmentList(e.target.value),
-  );
+/* ---------- Reschedule Modal Handler ---------- */
+function openRescheduleModal(id) {
+  selectedRescheduleApp = bookings.find((b) => b.id === id);
+  if (!selectedRescheduleApp) return;
+
+  const modal = document.getElementById("rescheduleModal");
+  if (!modal) return;
+
+  document.getElementById("rescheduleAppId").value = id;
+  document.getElementById("rescheduleSub").textContent = `Rescheduling ${id} for ${selectedRescheduleApp.customer} (${selectedRescheduleApp.service})`;
+  
+  const dateInput = document.getElementById("rescheduleDate");
+  dateInput.value = selectedRescheduleApp.date || new Date().toISOString().split("T")[0];
+  selectedRescheduleTime = "";
+
+  modal.showModal();
+  fetchRescheduleSlots();
+}
+
+async function fetchRescheduleSlots() {
+  if (!selectedRescheduleApp) return;
+  const dateVal = document.getElementById("rescheduleDate").value;
+  const grid = document.getElementById("rescheduleTimeGrid");
+  if (!dateVal || !grid) return;
+
+  grid.innerHTML = `<p style="font-size:0.85rem; color:#888; grid-column: 1 / -1;">Checking slots...</p>`;
+
+  try {
+    const duration = selectedRescheduleApp.duration_minutes || 60;
+    const res = await fetch(`includes/appointments/available_slots.php?date=${encodeURIComponent(dateVal)}&duration_minutes=${duration}&exclude_id=${encodeURIComponent(selectedRescheduleApp.id)}`);
+    const slots = await res.json();
+
+    if (!Array.isArray(slots)) {
+      grid.innerHTML = `<p style="font-size:0.85rem; color:var(--brand-pink); grid-column: 1 / -1;">Failed to load slots.</p>`;
+      return;
+    }
+
+    grid.innerHTML = slots.map((s) => `
+      <button 
+        type="button"
+        class="time-slot ${selectedRescheduleTime === s.time ? "is-selected" : ""} ${!s.available ? "time-slot--unavailable" : ""}" 
+        data-rtime="${s.time}" 
+        ${!s.available ? "disabled" : ""}
+        style="padding:0.4rem; font-size:0.75rem;"
+      >${s.time}</button>
+    `).join("");
+
+    grid.querySelectorAll("[data-rtime]:not([disabled])").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedRescheduleTime = btn.dataset.rtime;
+        fetchRescheduleSlots();
+      });
+    });
+  } catch (err) {
+    grid.innerHTML = `<p style="font-size:0.85rem; color:var(--brand-pink); grid-column: 1 / -1;">Error checking slots.</p>`;
+  }
+}
+
+const rescheduleDateInput = document.getElementById("rescheduleDate");
+if (rescheduleDateInput) {
+  rescheduleDateInput.addEventListener("change", () => {
+    selectedRescheduleTime = "";
+    fetchRescheduleSlots();
+  });
+}
+
+const rescheduleCancelBtn = document.getElementById("rescheduleCancel");
+if (rescheduleCancelBtn) {
+  rescheduleCancelBtn.addEventListener("click", () => {
+    document.getElementById("rescheduleModal")?.close();
+  });
+}
+
+const rescheduleSaveBtn = document.getElementById("rescheduleSave");
+if (rescheduleSaveBtn) {
+  rescheduleSaveBtn.addEventListener("click", async () => {
+    if (!selectedRescheduleApp || !selectedRescheduleTime) {
+      showToast("Please select a date and an available time slot.");
+      return;
+    }
+
+    const dateVal = document.getElementById("rescheduleDate").value;
+    const formData = new FormData();
+    formData.append("appointment_id", selectedRescheduleApp.id);
+    formData.append("new_date", dateVal);
+    formData.append("new_time", selectedRescheduleTime);
+
+    try {
+      const res = await fetch("includes/appointments/reschedule.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Appointment ${selectedRescheduleApp.id} rescheduled successfully!`);
+        document.getElementById("rescheduleModal")?.close();
+        fetchAppointmentsAdmin();
+      } else {
+        showToast(data.error || "Failed to reschedule appointment.");
+      }
+    } catch (err) {
+      showToast("Error processing reschedule request.");
+    }
+  });
+}
+
+const listFilterEl = document.getElementById("listFilter");
+if (listFilterEl) {
+  listFilterEl.addEventListener("change", () => fetchAppointmentsAdmin());
 }
 
 /* ---------- FAQ manager ---------- */
@@ -659,9 +775,8 @@ if (addAccountBtn) {
 }
 
 /* ---------- Init ---------- */
-renderDashboard();
+fetchAppointmentsAdmin();
 fetchServicesAdmin();
 renderHistory();
-renderAppointmentList();
 renderFaqManager();
 renderAccounts();

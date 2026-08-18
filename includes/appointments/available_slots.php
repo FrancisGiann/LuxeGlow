@@ -1,9 +1,11 @@
 <?php
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/_overlap_helper.php';
 header('Content-Type: application/json');
 
 $date = trim($_REQUEST['date'] ?? '');
 $duration_minutes = (int)($_REQUEST['duration_minutes'] ?? 0);
+$exclude_id = trim($_REQUEST['exclude_id'] ?? '');
 
 if (!$date || $duration_minutes <= 0) {
     echo json_encode(['success' => false, 'error' => 'Invalid parameters']);
@@ -17,55 +19,13 @@ $timeSlots = [
 ];
 
 try {
-    // Query existing Pending or Confirmed appointments on that date with total duration
-    $stmt = $pdo->prepare("
-        SELECT 
-            a.appointment_id,
-            a.appointment_time AS start_time,
-            ADDTIME(a.appointment_time, SEC_TO_TIME(SUM(s.duration_minutes) * 60)) AS end_time
-        FROM appointments a
-        JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
-        JOIN services s ON aps.service_id = s.service_id
-        WHERE a.appointment_date = :date
-          AND a.status IN ('Pending', 'Confirmed')
-        GROUP BY a.appointment_id, a.appointment_time
-    ");
-    $stmt->execute([':date' => $date]);
-    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // Business closing time boundary: 8:00 PM (20:00:00)
-    $closingTimeSeconds = 20 * 3600;
     $result = [];
 
     foreach ($timeSlots as $slotStr) {
-        $slotStartTimestamp = strtotime($slotStr);
-        $slotStartSeconds = (date('H', $slotStartTimestamp) * 3600) + (date('i', $slotStartTimestamp) * 60);
-        $slotEndSeconds = $slotStartSeconds + ($duration_minutes * 60);
-
-        $isAvailable = true;
-
-        // 1. Check if appointment duration runs past closing time
-        if ($slotEndSeconds > $closingTimeSeconds) {
-            $isAvailable = false;
-        } else {
-            // 2. Check for overlap with existing bookings: startN < endA AND endN > startA
-            foreach ($existing as $app) {
-                $appStartParts = explode(':', $app['start_time']);
-                $appStartSeconds = ($appStartParts[0] * 3600) + ($appStartParts[1] * 60);
-
-                $appEndParts = explode(':', $app['end_time']);
-                $appEndSeconds = ($appEndParts[0] * 3600) + ($appEndParts[1] * 60);
-
-                if ($slotStartSeconds < $appEndSeconds && $slotEndSeconds > $appStartSeconds) {
-                    $isAvailable = false;
-                    break;
-                }
-            }
-        }
-
+        $overlapCheck = checkAppointmentOverlap($pdo, $date, $slotStr, $duration_minutes, $exclude_id ?: null);
         $result[] = [
             'time' => $slotStr,
-            'available' => $isAvailable
+            'available' => !$overlapCheck['has_conflict']
         ];
     }
 

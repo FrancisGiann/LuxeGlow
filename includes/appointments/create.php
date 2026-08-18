@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/_overlap_helper.php';
 header('Content-Type: application/json');
 
 // 1. Check if user is logged in
@@ -44,42 +45,15 @@ try {
         $totalDuration += (int)$s['duration_minutes'];
     }
 
-    // 4. Double-check for conflicts server-side (prevent race conditions)
-    $slotStartTimestamp = strtotime($timeStr);
-    $slotStartSeconds = (date('H', $slotStartTimestamp) * 3600) + (date('i', $slotStartTimestamp) * 60);
-    $slotEndSeconds = $slotStartSeconds + ($totalDuration * 60);
-    $closingTimeSeconds = 20 * 3600;
-
-    if ($slotEndSeconds > $closingTimeSeconds) {
+    // 4. Double-check for conflicts server-side using shared overlap helper
+    $overlapCheck = checkAppointmentOverlap($pdo, $date, $timeStr, $totalDuration);
+    if ($overlapCheck['has_conflict']) {
         echo json_encode(['success' => false, 'error' => 'That time is no longer available. Please choose another slot.']);
         exit;
     }
 
-    $checkStmt = $pdo->prepare("
-        SELECT 
-            a.appointment_time AS start_time,
-            ADDTIME(a.appointment_time, SEC_TO_TIME(SUM(s.duration_minutes) * 60)) AS end_time
-        FROM appointments a
-        JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
-        JOIN services s ON aps.service_id = s.service_id
-        WHERE a.appointment_date = :date
-          AND a.status IN ('Pending', 'Confirmed')
-        GROUP BY a.appointment_id, a.appointment_time
-    ");
-    $checkStmt->execute([':date' => $date]);
-    $existingApps = $checkStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($existingApps as $app) {
-        $appStartParts = explode(':', $app['start_time']);
-        $appStartSeconds = ($appStartParts[0] * 3600) + ($appStartParts[1] * 60);
-        $appEndParts = explode(':', $app['end_time']);
-        $appEndSeconds = ($appEndParts[0] * 3600) + ($appEndParts[1] * 60);
-
-        if ($slotStartSeconds < $appEndSeconds && $slotEndSeconds > $appStartSeconds) {
-            echo json_encode(['success' => false, 'error' => 'That time is no longer available. Please choose another slot.']);
-            exit;
-        }
-    }
+    $slotStartTimestamp = strtotime($timeStr);
+    $mysqlTime = date('H:i:s', $slotStartTimestamp);
 
     // 5. Generate BK-#### appointment_id (max + 1) inside transaction
     $pdo->beginTransaction();
@@ -88,8 +62,6 @@ try {
     $maxNum = (int)$idStmt->fetchColumn();
     $nextNum = $maxNum > 0 ? $maxNum + 1 : 1000;
     $appointmentId = 'BK-' . $nextNum;
-
-    $mysqlTime = date('H:i:s', $slotStartTimestamp);
 
     // 6. Insert into appointments
     $insApp = $pdo->prepare("
