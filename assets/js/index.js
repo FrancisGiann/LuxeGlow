@@ -35,12 +35,17 @@ const REVIEWS = [
   { name: "Paolo Cruz", initials: "PC", rating: 5, date: "May 3, 2026", text: "The gentleman package is worth every peso. Clean, relaxing, no rushing." },
 ];
 
-const FAQS = [
-  { q: "What are your operating hours?", a: "We are open Monday to Saturday from 10:00 AM to 8:00 PM, and Sundays from 11:00 AM to 6:00 PM." },
-  { q: "What services do you offer?", a: "Nail care, gel polish, nail extensions, lash extensions, waxing, spa treatments, massages, and curated kiddie and gentleman packages." },
-  { q: "Are your products safe and hygienic?", a: "Yes. All tools are sterilized after every client, single-use items are never reused, and we only use certified, cruelty-free products." },
-  { q: "Do I need to book an appointment?", a: "Walk-ins are welcome when slots allow, but booking online guarantees your preferred stylist and time slot." },
-];
+let FAQS = [];
+
+async function fetchFaqsPublic() {
+  try {
+    const res = await fetch("includes/faqs/list.php");
+    FAQS = await res.json();
+    if (document.getElementById("faqsList")) renderFaqs();
+  } catch (err) {
+    console.error("Failed to fetch FAQs", err);
+  }
+}
 
 const peso = (value) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -109,6 +114,13 @@ function renderReviews() {
 /* ---------- Render: FAQs ---------- */
 function renderFaqs() {
   const list = document.getElementById("faqsList");
+  if (!list) return;
+
+  if (FAQS.length === 0) {
+    list.innerHTML = `<p class="muted" style="text-align:center; padding:1.5rem;">No FAQs available.</p>`;
+    return;
+  }
+
   list.innerHTML = FAQS.map((f, i) => `
     <div class="faq-item ${i === 0 ? "is-open" : ""}" data-index="${i}">
       <button class="faq-item__q">
@@ -552,4 +564,4 @@ document.getElementById("confirmBooking").addEventListener("click", async () => 
 document.getElementById("footerYear").textContent = new Date().getFullYear();
 fetchServices();
 renderReviews();
-renderFaqs();
+fetchFaqsPublic();

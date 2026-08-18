@@ -36,67 +36,33 @@ async function fetchAppointmentsAdmin() {
   }
 }
 
-const customers = [
-  {
-    name: "Maria Santos",
-    email: "maria.santos@email.com",
-    phone: "0917 221 4488",
-    visits: 12,
-    spent: 18400,
-    lastVisit: "June 9, 2026",
-  },
-  {
-    name: "Jasmine Reyes",
-    email: "jasmine.reyes@email.com",
-    phone: "0918 553 1102",
-    visits: 7,
-    spent: 11250,
-    lastVisit: "June 2, 2026",
-  },
-  {
-    name: "Andrea Lim",
-    email: "andrea.lim@email.com",
-    phone: "0921 447 9080",
-    visits: 4,
-    spent: 5600,
-    lastVisit: "May 21, 2026",
-  },
-  {
-    name: "Paolo Cruz",
-    email: "paolo.cruz@email.com",
-    phone: "0906 118 2277",
-    visits: 9,
-    spent: 13800,
-    lastVisit: "May 30, 2026",
-  },
-  {
-    name: "Kim Dela Cruz",
-    email: "kim.dc@email.com",
-    phone: "0995 330 7712",
-    visits: 2,
-    spent: 2900,
-    lastVisit: "April 14, 2026",
-  },
-];
+let customers = [];
 
-let faqs = [
-  {
-    q: "What are your operating hours?",
-    a: "We are open Monday to Saturday from 10:00 AM to 8:00 PM, and Sundays from 11:00 AM to 6:00 PM.",
-  },
-  {
-    q: "What services do you offer?",
-    a: "Nail care, gel polish, nail extensions, lash extensions, waxing, spa treatments, massages, and curated kiddie and gentleman packages.",
-  },
-  {
-    q: "Are your products safe and hygienic?",
-    a: "Yes. All tools are sterilized after every client, single-use items are never reused, and we only use certified, cruelty-free products.",
-  },
-  {
-    q: "Do I need to book an appointment?",
-    a: "Walk-ins are welcome when slots allow, but booking online guarantees your preferred stylist and time slot.",
-  },
-];
+async function fetchCustomersAdmin() {
+  try {
+    const res = await fetch("includes/customers/list.php");
+    customers = await res.json();
+    if (document.getElementById("historyBody")) {
+      const historySearch = document.getElementById("historySearch");
+      renderHistory(historySearch ? historySearch.value : "");
+    }
+  } catch (err) {
+    console.error("Failed to fetch customers", err);
+  }
+}
+
+let faqs = [];
+let editingFaqId = null;
+
+async function fetchFaqsAdmin() {
+  try {
+    const res = await fetch("includes/faqs/list.php");
+    faqs = await res.json();
+    if (document.getElementById("faqManagerList")) renderFaqManager();
+  } catch (err) {
+    console.error("Failed to fetch FAQs", err);
+  }
+}
 
 let staffAccounts = [
   {
@@ -423,7 +389,7 @@ function openServiceModal(service = null) {
 function renderHistory(filterText = "") {
   const q = filterText.trim().toLowerCase();
   const rows = customers.filter((c) =>
-    [c.name, c.email, c.phone].some((v) => v.toLowerCase().includes(q)),
+    [c.name, c.email, c.phone].some((v) => (v || "").toLowerCase().includes(q)),
   );
 
   const body = document.getElementById("historyBody");
@@ -447,14 +413,122 @@ function renderHistory(filterText = "") {
       <td class="muted">${c.lastVisit}</td>
       <td>
         <div class="row-actions">
-          <button class="btn btn--brand btn--sm">View</button>
-          <button class="btn btn--soft btn--sm">Edit</button>
+          <button class="btn btn--brand btn--sm" data-custview="${c.id}">View</button>
+          <button class="btn btn--soft btn--sm" data-custedit="${c.id}">Edit</button>
         </div>
       </td>
     </tr>
   `,
     )
     .join("");
+
+  body.querySelectorAll("[data-custview]").forEach((btn) => {
+    btn.addEventListener("click", () => openCustomerDetailModal(btn.dataset.custview));
+  });
+  body.querySelectorAll("[data-custedit]").forEach((btn) => {
+    btn.addEventListener("click", () => openCustomerEditModal(btn.dataset.custedit));
+  });
+}
+
+/* ---------- Customer Detail & Edit Modal Handlers ---------- */
+async function openCustomerDetailModal(id) {
+  const modal = document.getElementById("customerDetailModal");
+  const title = document.getElementById("custDetailTitle");
+  const meta = document.getElementById("custDetailMeta");
+  const body = document.getElementById("custDetailBody");
+  if (!modal || !body) return;
+
+  body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:1rem;color:#888;">Loading appointment history...</td></tr>`;
+  modal.showModal();
+
+  try {
+    const res = await fetch(`includes/customers/detail.php?customer_id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+
+    if (!data.success) {
+      body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--brand-pink);">${data.error || "Failed to load history."}</td></tr>`;
+      return;
+    }
+
+    title.textContent = `History — ${data.customer.name}`;
+    meta.textContent = `${data.customer.email} · ${data.customer.phone}`;
+
+    if (data.appointments.length === 0) {
+      body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:1rem;color:#888;">No appointment history found for this customer.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = data.appointments
+      .map(
+        (a) => `
+      <tr>
+        <td style="font-weight:600">${a.id}</td>
+        <td>${a.date}<br /><span style="font-size:0.75rem" class="muted">${a.time}</span></td>
+        <td>${a.service}</td>
+        <td style="font-weight:600">${peso(a.price)}</td>
+        <td><span class="${statusClass(a.status)}">${a.status}</span></td>
+      </tr>
+    `,
+      )
+      .join("");
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--brand-pink);">Error loading history.</td></tr>`;
+  }
+}
+
+const custDetailClose = document.getElementById("custDetailClose");
+if (custDetailClose) {
+  custDetailClose.addEventListener("click", () => {
+    document.getElementById("customerDetailModal")?.close();
+  });
+}
+
+function openCustomerEditModal(id) {
+  const c = customers.find((x) => x.id == id);
+  if (!c) return;
+
+  const modal = document.getElementById("customerEditModal");
+  if (!modal) return;
+
+  document.getElementById("editCustId").value = c.id;
+  document.getElementById("editCustFirstName").value = c.first_name || "";
+  document.getElementById("editCustLastName").value = c.last_name || "";
+  document.getElementById("editCustEmail").value = c.email || "";
+  document.getElementById("editCustPhone").value = c.phone || "";
+
+  modal.showModal();
+}
+
+const editCustCancel = document.getElementById("editCustCancel");
+if (editCustCancel) {
+  editCustCancel.addEventListener("click", () => {
+    document.getElementById("customerEditModal")?.close();
+  });
+}
+
+const customerEditForm = document.getElementById("customerEditForm");
+if (customerEditForm) {
+  customerEditForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(customerEditForm);
+
+    try {
+      const res = await fetch("includes/customers/update.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Customer contact info updated successfully!");
+        document.getElementById("customerEditModal")?.close();
+        fetchCustomersAdmin();
+      } else {
+        showToast(data.error || "Failed to update customer info.");
+      }
+    } catch (err) {
+      showToast("Error updating customer contact info.");
+    }
+  });
 }
 
 const historySearch = document.getElementById("historySearch");
@@ -670,22 +744,44 @@ function renderFaqManager() {
     return;
   }
 
+  if (faqs.length === 0) {
+    list.innerHTML = `<div class="card"><p class="muted" style="font-size:0.875rem">No FAQs found. Click + Add FAQ to create one.</p></div>`;
+    return;
+  }
+
   list.innerHTML = faqs
-    .map(
-      (f, i) => `
-    <div class="card" data-index="${i}">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
-        <button class="faq-toggle" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;font-size:0.9rem;font-weight:500;color:inherit;padding:0">
-          <span>${f.q}</span>
-          <span>▾</span>
-        </button>
-        <button class="btn btn--soft btn--sm">✏️ Edit</button>
-        <button class="btn btn--danger btn--sm" data-delete-faq="${i}">🗑️ Delete</button>
-      </div>
-      <p class="faq-answer muted" style="display:none;margin-top:0.75rem;font-size:0.875rem;border-top:1px solid var(--border);padding-top:0.75rem">${f.a}</p>
-    </div>
-  `,
-    )
+    .map((f) => {
+      if (editingFaqId === f.id) {
+        return `
+          <div class="card" data-id="${f.id}">
+            <div style="display:flex; flex-direction:column; gap:0.5rem">
+              <label style="font-size:0.85rem; font-weight:600">Question</label>
+              <input type="text" id="editFaqQ_${f.id}" value="${f.q ? f.q.replace(/"/g, '&quot;') : ''}" style="padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-family:inherit;" />
+              <label style="font-size:0.85rem; font-weight:600; margin-top:0.25rem;">Answer</label>
+              <textarea id="editFaqA_${f.id}" style="padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-family:inherit; min-height:70px;">${f.a || ''}</textarea>
+              <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.5rem">
+                <button class="btn btn--soft btn--sm" data-cancel-faq="${f.id}">Cancel</button>
+                <button class="btn btn--brand btn--sm" data-save-faq="${f.id}">Save</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="card" data-id="${f.id}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
+            <button class="faq-toggle" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;font-size:0.9rem;font-weight:500;color:inherit;padding:0">
+              <span>${f.q}</span>
+              <span>▾</span>
+            </button>
+            <button class="btn btn--soft btn--sm" data-edit-faq="${f.id}">✏️ Edit</button>
+            <button class="btn btn--danger btn--sm" data-delete-faq="${f.id}">🗑️ Delete</button>
+          </div>
+          <p class="faq-answer muted" style="display:none;margin-top:0.75rem;font-size:0.875rem;border-top:1px solid var(--border);padding-top:0.75rem">${f.a}</p>
+        </div>
+      `;
+    })
     .join("");
 
   list.querySelectorAll(".faq-toggle").forEach((btn) => {
@@ -694,20 +790,109 @@ function renderFaqManager() {
       answer.style.display = answer.style.display === "none" ? "block" : "none";
     });
   });
+
+  list.querySelectorAll("[data-edit-faq]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      editingFaqId = Number(btn.dataset.editFaq);
+      renderFaqManager();
+    });
+  });
+
+  list.querySelectorAll("[data-cancel-faq]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      editingFaqId = null;
+      renderFaqManager();
+    });
+  });
+
+  list.querySelectorAll("[data-save-faq]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.saveFaq;
+      const qInput = document.getElementById(`editFaqQ_${id}`);
+      const aInput = document.getElementById(`editFaqA_${id}`);
+      if (!qInput || !aInput) return;
+
+      const qVal = qInput.value.trim();
+      const aVal = aInput.value.trim();
+
+      if (!qVal || !aVal) {
+        showToast("Question and answer cannot be empty.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("faq_id", id);
+      formData.append("question", qVal);
+      formData.append("answer", aVal);
+
+      try {
+        const res = await fetch("includes/faqs/update.php", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast("FAQ updated.");
+          editingFaqId = null;
+          fetchFaqsAdmin();
+        } else {
+          showToast(data.error || "Failed to update FAQ.");
+        }
+      } catch (err) {
+        showToast("Error updating FAQ.");
+      }
+    });
+  });
+
   list.querySelectorAll("[data-delete-faq]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      faqs.splice(Number(btn.dataset.deleteFaq), 1);
-      renderFaqManager();
-      showToast("FAQ removed.");
+      const id = btn.dataset.deleteFaq;
+      openConfirmModal("Delete FAQ", "Are you sure you want to delete this FAQ?", async () => {
+        const formData = new FormData();
+        formData.append("faq_id", id);
+        try {
+          const res = await fetch("includes/faqs/delete.php", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast("FAQ removed.");
+            fetchFaqsAdmin();
+          } else {
+            showToast(data.error || "Failed to delete FAQ.");
+          }
+        } catch (err) {
+          showToast("Error deleting FAQ.");
+        }
+      });
     });
   });
 }
 
 const addFaqBtn = document.getElementById("addFaqBtn");
 if (addFaqBtn) {
-  addFaqBtn.addEventListener("click", () => {
-    faqs.push({ q: "New question", a: "Add your answer here." });
-    renderFaqManager();
+  addFaqBtn.addEventListener("click", async () => {
+    const formData = new FormData();
+    formData.append("question", "New question");
+    formData.append("answer", "Add your answer here.");
+
+    try {
+      const res = await fetch("includes/faqs/create.php", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("New FAQ added!");
+        editingFaqId = data.id;
+        fetchFaqsAdmin();
+      } else {
+        showToast(data.error || "Failed to add FAQ.");
+      }
+    } catch (err) {
+      showToast("Error adding FAQ.");
+    }
   });
 }
 
@@ -777,6 +962,6 @@ if (addAccountBtn) {
 /* ---------- Init ---------- */
 fetchAppointmentsAdmin();
 fetchServicesAdmin();
-renderHistory();
-renderFaqManager();
+fetchCustomersAdmin();
+fetchFaqsAdmin();
 renderAccounts();
