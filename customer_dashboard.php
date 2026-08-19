@@ -402,7 +402,7 @@ window.switchDashTab = function(tabName) {
     }
   });
 
-  if (window.history && window.history.replaceState) {
+  if (window.location.pathname.includes('customer_dashboard.php') && window.history && window.history.replaceState) {
     window.history.replaceState(null, '', 'customer_dashboard.php?tab=' + tabName);
   }
 };

@@ -327,7 +327,9 @@ function updateNavbarState() {
 
     if (notifWrap) notifWrap.style.display = "inline-block";
 
-    fetchCustomerDashboardData();
+    if (window.location.pathname.includes("customer_dashboard.php")) {
+      fetchCustomerDashboardData();
+    }
   } else {
     loginBtns.forEach(btn => {
       if (btn) {
@@ -971,7 +973,7 @@ window.switchDashTab = function(tabName) {
     if (el) el.hidden = key !== tabName;
   });
 
-  if (window.history && window.history.replaceState) {
+  if (window.location.pathname.includes("customer_dashboard.php") && window.history && window.history.replaceState) {
     window.history.replaceState(null, "", "customer_dashboard.php?tab=" + tabName);
   }
 };
