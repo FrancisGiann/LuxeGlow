@@ -28,12 +28,22 @@ const TIME_SLOTS = [
   "4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM",
 ];
 
-const REVIEWS = [
-  { name: "Maria Santos", initials: "MS", rating: 5, date: "June 2, 2026", text: "The gel polish lasted a full month and the salon smells amazing. Best nail spa in the city!" },
-  { name: "Jasmine Reyes", initials: "JR", rating: 4, date: "May 28, 2026", text: "Lovely staff and very hygienic tools. My lash extensions look so natural." },
-  { name: "Andrea Lim", initials: "AL", rating: 5, date: "May 14, 2026", text: "Booked the spa treatment for my mom. She left glowing — we're going monthly now." },
-  { name: "Paolo Cruz", initials: "PC", rating: 5, date: "May 3, 2026", text: "The gentleman package is worth every peso. Clean, relaxing, no rushing." },
-];
+let publicReviews = [];
+let publicStats = { total_reviews: 0, average_rating: 0 };
+
+async function fetchReviewsPublic() {
+  try {
+    const res = await fetch("includes/reviews/list.php");
+    const data = await res.json();
+    if (data.success) {
+      publicReviews = data.reviews || [];
+      publicStats = data.stats || { total_reviews: 0, average_rating: 0 };
+      renderReviews();
+    }
+  } catch (err) {
+    console.error("Failed to fetch public reviews", err);
+  }
+}
 
 let FAQS = [];
 
@@ -93,22 +103,56 @@ function renderServices() {
 
 /* ---------- Render: Reviews ---------- */
 function renderReviews() {
-  document.getElementById("heroStars").innerHTML = starsHtml(5, "1.4rem");
+  const avg = publicStats.average_rating || 0;
+  const count = publicStats.total_reviews || 0;
+
+  const roundedRating = Math.round(avg);
+  const heroStarsEl = document.getElementById("heroStars");
+  if (heroStarsEl) {
+    heroStarsEl.innerHTML = starsHtml(roundedRating > 0 ? roundedRating : 5, "1.4rem");
+  }
+
+  const avgNumEl = document.getElementById("avgRatingNum");
+  if (avgNumEl) avgNumEl.textContent = avg > 0 ? avg.toFixed(1) : "0.0";
+
+  const totalNumEl = document.getElementById("totalReviewsNum");
+  if (totalNumEl) totalNumEl.textContent = count;
 
   const grid = document.getElementById("reviewsGrid");
-  grid.innerHTML = REVIEWS.map((r) => `
-    <article class="card review-card">
-      <div class="review-card__head">
-        <span class="review-card__avatar">${r.initials}</span>
-        <div>
-          <p class="review-card__name">${r.name}</p>
-          <p class="review-card__date">${r.date}</p>
-        </div>
+  if (!grid) return;
+
+  if (publicReviews.length === 0) {
+    grid.innerHTML = `
+      <div class="card card--center" style="grid-column: 1 / -1; padding: 2.5rem 1.5rem; text-align: center;">
+        <p style="font-size: 1.15rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.5rem;">No reviews yet</p>
+        <p class="muted" style="font-size: 0.875rem;">Be the first to share your experience with Astrid Nails &amp; Beauty Bar!</p>
       </div>
-      <div class="review-card__stars">${starsHtml(r.rating, "0.85rem")}</div>
-      <p class="review-card__text">${r.text}</p>
-    </article>
-  `).join("");
+    `;
+    return;
+  }
+
+  grid.innerHTML = publicReviews.map((r) => {
+    const initials = r.customer_name ? r.customer_name.substring(0, 2).toUpperCase() : "AN";
+    const dateFormatted = new Date(r.created_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+
+    return `
+      <article class="card review-card">
+        <div class="review-card__head">
+          <span class="review-card__avatar">${initials}</span>
+          <div>
+            <p class="review-card__name">${r.customer_name}</p>
+            <p class="review-card__date">${dateFormatted} · <span class="muted">${r.service_names}</span></p>
+          </div>
+        </div>
+        <div class="review-card__stars">${starsHtml(r.rating, "0.85rem")}</div>
+        <p class="review-card__text">${r.review_text ? r.review_text : "<em>Great experience!</em>"}</p>
+      </article>
+    `;
+  }).join("");
 }
 
 /* ---------- Render: FAQs ---------- */
@@ -199,13 +243,29 @@ const authViews = {
 };
 let verifyTimerInterval;
 
+function lockScroll() {
+  document.body.style.overflow = "hidden";
+}
+
+function unlockScroll() {
+  const isAuthOpen = authOverlay && !authOverlay.hidden;
+  const isBookingOpen = bookingOverlay && !bookingOverlay.hidden;
+  const isRateOpen = typeof rateOverlay !== "undefined" && rateOverlay && !rateOverlay.hidden && rateOverlay.style.display !== "none";
+
+  if (!isAuthOpen && !isBookingOpen && !isRateOpen) {
+    document.body.style.overflow = "";
+  }
+}
+
 function openAuth(view = "login") {
+  lockScroll();
   authOverlay.hidden = false;
   showAuthView(view);
 }
 function closeAuth() {
   authOverlay.hidden = true;
   clearInterval(verifyTimerInterval);
+  unlockScroll();
 }
 function showAuthView(view) {
   Object.entries(authViews).forEach(([key, el]) => { el.hidden = key !== view; });
@@ -242,6 +302,7 @@ async function checkSession() {
 
 function updateNavbarState() {
   const loginBtns = [document.getElementById("loginBtn"), document.getElementById("loginBtnMobile")];
+  const rateBtns = [document.getElementById("rateUsBtn"), document.getElementById("rateUsBtnMobile")];
   
   if (currentUser) {
     const text = `Hi, ${currentUser.first_name} (Logout)`;
@@ -251,12 +312,23 @@ function updateNavbarState() {
         btn.onclick = logout;
       }
     });
+    rateBtns.forEach(btn => {
+      if (btn) {
+        btn.style.display = "inline-flex";
+        btn.onclick = openRateModal;
+      }
+    });
   } else {
     const text = "Login / Register";
     loginBtns.forEach(btn => {
       if (btn) {
         btn.textContent = text;
         btn.onclick = () => openAuth("login");
+      }
+    });
+    rateBtns.forEach(btn => {
+      if (btn) {
+        btn.style.display = "none";
       }
     });
   }
@@ -446,10 +518,12 @@ function openBooking(initialServiceId) {
   renderBookingServices();
   renderTimeGrid();
   goToStep(1);
+  lockScroll();
   bookingOverlay.hidden = false;
 }
 function closeBooking() {
   bookingOverlay.hidden = true;
+  unlockScroll();
 }
 
 function renderBookingServices() {
@@ -699,10 +773,153 @@ if (bookingSuccessDone) {
   bookingSuccessDone.addEventListener("click", closeBooking);
 }
 
+/* ---------- Rate Us Modal ---------- */
+const rateOverlay = document.getElementById("rateOverlay");
+let selectedRating = 5;
+
+async function openRateModal() {
+  if (!currentUser) {
+    openAuth("login");
+    showToast("Please log in to rate your appointment.");
+    return;
+  }
+
+  try {
+    const res = await fetch("includes/reviews/ratable.php");
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast(data.error || "Failed to load completed appointments.");
+      return;
+    }
+
+    if (!data.appointments || data.appointments.length === 0) {
+      showToast("You don't have any completed appointments to rate yet.");
+      return;
+    }
+
+    const select = document.getElementById("rateAppointmentSelect");
+    select.innerHTML = data.appointments.map(a => `
+      <option value="${a.appointment_id}">
+        ${a.appointment_id} — ${a.service_names} (${a.appointment_date} at ${a.appointment_time})
+      </option>
+    `).join("");
+
+    selectedRating = 5;
+    updateStarInputVisual(5);
+    document.getElementById("rateRatingVal").value = "5";
+    document.getElementById("rateReviewText").value = "";
+    document.getElementById("rateError").style.display = "none";
+
+    rateOverlay.style.display = "flex";
+    rateOverlay.hidden = false;
+    lockScroll();
+  } catch (err) {
+    showToast("Error checking ratable appointments.");
+  }
+}
+
+function closeRateModal() {
+  if (rateOverlay) {
+    rateOverlay.style.display = "none";
+    rateOverlay.hidden = true;
+  }
+  unlockScroll();
+}
+
+if (rateOverlay) {
+  rateOverlay.addEventListener("click", (e) => {
+    if (e.target === rateOverlay) {
+      closeRateModal();
+    }
+  });
+}
+
+function updateStarInputVisual(rating) {
+  const stars = document.querySelectorAll("#starRatingInput [data-star]");
+  stars.forEach((star) => {
+    const val = Number(star.dataset.star);
+    star.style.color = val <= rating ? "#fbbf24" : "#e5e7eb";
+  });
+}
+
+document.querySelectorAll("#starRatingInput [data-star]").forEach((star) => {
+  star.addEventListener("click", () => {
+    selectedRating = Number(star.dataset.star);
+    document.getElementById("rateRatingVal").value = selectedRating;
+    updateStarInputVisual(selectedRating);
+  });
+  star.addEventListener("mouseenter", () => {
+    updateStarInputVisual(Number(star.dataset.star));
+  });
+});
+
+const starContainer = document.getElementById("starRatingInput");
+if (starContainer) {
+  starContainer.addEventListener("mouseleave", () => {
+    updateStarInputVisual(selectedRating);
+  });
+}
+
+const rateCloseBtn = document.getElementById("rateClose");
+if (rateCloseBtn) rateCloseBtn.addEventListener("click", closeRateModal);
+
+const rateForm = document.getElementById("rateForm");
+if (rateForm) {
+  rateForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const appSelect = document.getElementById("rateAppointmentSelect");
+    const ratingVal = document.getElementById("rateRatingVal").value;
+    const reviewText = document.getElementById("rateReviewText").value.trim();
+    const errEl = document.getElementById("rateError");
+    const submitBtn = document.getElementById("rateSubmitBtn");
+
+    errEl.style.display = "none";
+    errEl.textContent = "";
+
+    if (!appSelect.value) {
+      errEl.textContent = "Please select an appointment to rate.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting...";
+
+    const formData = new FormData();
+    formData.append("appointment_id", appSelect.value);
+    formData.append("rating", ratingVal);
+    formData.append("review_text", reviewText);
+
+    try {
+      const res = await fetch("includes/reviews/create.php", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        closeRateModal();
+        showToast("Thank you for your review!");
+        fetchReviewsPublic();
+      } else {
+        errEl.textContent = data.error || "Failed to submit review.";
+        errEl.style.display = "block";
+      }
+    } catch (err) {
+      errEl.textContent = "An error occurred while submitting your review.";
+      errEl.style.display = "block";
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Rating";
+    }
+  });
+}
+
 /* ---------- Init ---------- */
 document.getElementById("footerYear").textContent = new Date().getFullYear();
 fetchServices();
-renderReviews();
+fetchReviewsPublic();
 fetchFaqsPublic();
 fetchAboutPublic();
 

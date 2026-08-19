@@ -34,6 +34,7 @@
       </div>
 
       <div class="navbar__actions">
+        <button class="btn btn--soft" id="rateUsBtn" style="display:none;">⭐ Rate Us</button>
         <button class="btn btn--soft" id="loginBtn">Login / Register</button>
         <button class="btn btn--brand" id="bookNavBtn">Book Now</button>
       </div>
@@ -49,6 +50,7 @@
       <a href="index.php#reviews" class="navbar__link">Reviews</a>
       <a href="index.php#about" class="navbar__link">About</a>
       <a href="index.php#faqs" class="navbar__link">FAQs</a>
+      <button class="btn btn--soft" id="rateUsBtnMobile" style="display:none;">⭐ Rate Us</button>
       <button class="btn btn--soft" id="loginBtnMobile">Login / Register</button>
       <button class="btn btn--brand" id="bookNavBtnMobile">Book Now</button>
     </div>

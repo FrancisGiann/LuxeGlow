@@ -46,11 +46,11 @@
 
             <div class="reviews__stats">
                 <div class="card card--center">
-                    <p class="stat-num stat-num--pink">4.9</p>
+                    <p class="stat-num stat-num--pink" id="avgRatingNum">0.0</p>
                     <p class="stat-label">Average rating</p>
                 </div>
                 <div class="card card--center">
-                    <p class="stat-num stat-num--purple">287</p>
+                    <p class="stat-num stat-num--purple" id="totalReviewsNum">0</p>
                     <p class="stat-label">Total reviews</p>
                 </div>
             </div>

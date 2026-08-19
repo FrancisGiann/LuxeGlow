@@ -499,6 +499,9 @@ img { max-width: 100%; display: block; }
   background: rgba(28, 27, 41, 0.4);
   backdrop-filter: blur(4px);
 }
+.booking-overlay[hidden], .overlay[hidden] {
+  display: none !important;
+}
 .booking-modal {
   max-width: 42rem; width: min(92vw, 42rem); margin: 2rem auto;
   background: var(--card); border-radius: var(--radius-card); box-shadow: var(--shadow-float);

@@ -225,3 +225,47 @@
       </div>
     </div>
   </div>
+
+  <!-- ===== Rate Us Modal ===== -->
+  <div class="booking-overlay" id="rateOverlay" hidden style="align-items: center; justify-content: center; background: rgba(28, 27, 41, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+    <div class="auth-card" style="max-width: 460px; width: min(92vw, 460px); margin: 2rem auto; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+      <button class="overlay__close overlay__close--dark" id="rateClose" aria-label="Close modal" style="position: absolute; top: 1rem; right: 1rem;">✕</button>
+      <div class="auth-card__logo" style="display: flex; align-items: center; justify-content: center; font-size: 2rem;">⭐</div>
+      <h2 class="auth-card__title">Rate Your Visit</h2>
+      <p style="font-size: 0.875rem; color: var(--muted-foreground, #666); text-align: center; margin-bottom: 1.25rem;">
+        Share your feedback to help us serve you better!
+      </p>
+
+      <form id="rateForm">
+        <div class="auth-card__fields">
+          <label class="field">
+            <span class="field__label">Select Visit to Rate</span>
+            <select id="rateAppointmentSelect" class="select" style="width: 100%; padding: 0.65rem; border-radius: 8px; border: 1px solid var(--border, #ccc); font-family: inherit; font-size: 0.875rem;" required>
+              <!-- injected via ratable.php -->
+            </select>
+          </label>
+
+          <div class="field" style="text-align: center;">
+            <span class="field__label" style="margin-bottom: 0.5rem; display: block;">Your Rating</span>
+            <div id="starRatingInput" style="display: flex; justify-content: center; gap: 0.5rem; font-size: 1.75rem; cursor: pointer; user-select: none;">
+              <span data-star="1" style="color: #fbbf24; transition: color 0.2s;">★</span>
+              <span data-star="2" style="color: #fbbf24; transition: color 0.2s;">★</span>
+              <span data-star="3" style="color: #fbbf24; transition: color 0.2s;">★</span>
+              <span data-star="4" style="color: #fbbf24; transition: color 0.2s;">★</span>
+              <span data-star="5" style="color: #fbbf24; transition: color 0.2s;">★</span>
+            </div>
+            <input type="hidden" id="rateRatingVal" value="5" />
+          </div>
+
+          <label class="field">
+            <span class="field__label">Your Review (Optional)</span>
+            <textarea id="rateReviewText" rows="3" placeholder="Tell us what you loved or how we can improve..." style="width: 100%; padding: 0.65rem; border-radius: 8px; border: 1px solid var(--border, #ccc); font-family: inherit; font-size: 0.875rem; resize: vertical;"></textarea>
+          </label>
+        </div>
+
+        <p class="field__error" id="rateError" style="color: var(--brand-pink, #ec4899); font-size: 0.8rem; margin-top: 0.5rem; margin-bottom: 1rem; display: none;"></p>
+
+        <button type="submit" class="btn btn--brand btn--block" id="rateSubmitBtn" style="margin-top: 1rem; padding: 0.75rem;">Submit Rating</button>
+      </form>
+    </div>
+  </div>
