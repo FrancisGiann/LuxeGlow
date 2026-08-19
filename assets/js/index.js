@@ -78,6 +78,7 @@ function starsHtml(rating, size = "1rem") {
 /* ---------- Render: Services ---------- */
 function renderServices() {
   const grid = document.getElementById("servicesGrid");
+  if (!grid) return;
   grid.innerHTML = SERVICES.map((s) => `
     <article class="service-card">
       <div class="service-card__banner" style="${s.image_path ? `background-image: url('${s.image_path}'); background-size: cover; background-position: center;` : ''}"></div>
@@ -320,7 +321,7 @@ function updateNavbarState() {
       if (btn) {
         btn.style.display = "inline-flex";
         btn.textContent = `👤 Hi, ${currentUser.first_name}`;
-        btn.onclick = () => openCustomerDashboard("overview");
+        btn.onclick = () => window.location.href = "customer_dashboard.php";
       }
     });
 
@@ -714,16 +715,16 @@ function renderSummary() {
   }
 }
 
-document.getElementById("bookHeroBtn").addEventListener("click", () => openBooking());
-document.getElementById("bookNavBtn").addEventListener("click", () => openBooking());
-document.getElementById("bookNavBtnMobile").addEventListener("click", () => openBooking());
-document.getElementById("bookingClose").addEventListener("click", closeBooking);
-document.getElementById("bookingBackClose").addEventListener("click", closeBooking);
-document.getElementById("toStep2").addEventListener("click", () => goToStep(2));
-document.getElementById("toStep1").addEventListener("click", () => goToStep(1));
-document.getElementById("toStep3").addEventListener("click", () => goToStep(3));
-document.getElementById("toStep2b").addEventListener("click", () => goToStep(2));
-document.getElementById("confirmBooking").addEventListener("click", async () => {
+document.getElementById("bookHeroBtn")?.addEventListener("click", () => openBooking());
+document.getElementById("bookNavBtn")?.addEventListener("click", () => openBooking());
+document.getElementById("bookNavBtnMobile")?.addEventListener("click", () => openBooking());
+document.getElementById("bookingClose")?.addEventListener("click", closeBooking);
+document.getElementById("bookingBackClose")?.addEventListener("click", closeBooking);
+document.getElementById("toStep2")?.addEventListener("click", () => goToStep(2));
+document.getElementById("toStep1")?.addEventListener("click", () => goToStep(1));
+document.getElementById("toStep3")?.addEventListener("click", () => goToStep(3));
+document.getElementById("toStep2b")?.addEventListener("click", () => goToStep(2));
+document.getElementById("confirmBooking")?.addEventListener("click", async () => {
   if (!currentUser) {
     closeBooking();
     openAuth("login");
@@ -927,26 +928,13 @@ if (rateForm) {
   });
 }
 
-/* ---------- Customer Dashboard Modal ---------- */
+/* ---------- Customer Dashboard Modal & Page ---------- */
 const customerDashboardOverlay = document.getElementById("customerDashboardOverlay");
-let customerDashboardData = null;
-let activeDashTab = "overview";
+var customerDashboardData = null;
+var activeDashTab = "overview";
 
 function openCustomerDashboard(defaultTab = "overview") {
-  if (!currentUser) {
-    openAuth("login");
-    showToast("Please log in to view your dashboard.");
-    return;
-  }
-
-  if (customerDashboardOverlay) {
-    customerDashboardOverlay.style.display = "flex";
-    customerDashboardOverlay.hidden = false;
-    lockScroll();
-  }
-
-  switchDashTab(defaultTab);
-  fetchCustomerDashboardData(defaultTab);
+  window.location.href = "customer_dashboard.php?tab=" + defaultTab;
 }
 
 function closeCustomerDashboard() {
@@ -957,47 +945,37 @@ function closeCustomerDashboard() {
   unlockScroll();
 }
 
-if (customerDashboardOverlay) {
-  customerDashboardOverlay.addEventListener("click", (e) => {
-    if (e.target === customerDashboardOverlay) {
-      closeCustomerDashboard();
-    }
-  });
-}
-
-const customerDashCloseBtn = document.getElementById("customerDashClose");
-if (customerDashCloseBtn) {
-  customerDashCloseBtn.addEventListener("click", closeCustomerDashboard);
-}
-
-function switchDashTab(tabName) {
+window.switchDashTab = function(tabName) {
   activeDashTab = tabName;
-  const tabBtns = document.querySelectorAll("#custDashTabs [data-tab]");
+  
+  // Tab buttons (page or modal)
+  const tabBtns = document.querySelectorAll("#custDashNavList [data-tab], #custDashTabs [data-tab]");
   tabBtns.forEach((btn) => {
     if (btn.dataset.tab === tabName) {
       btn.classList.add("is-active");
-      btn.style.background = "var(--gradient-brand)";
-      btn.style.color = "#fff";
     } else {
       btn.classList.remove("is-active");
-      btn.style.background = "";
-      btn.style.color = "";
     }
   });
 
-  const views = {
-    overview: document.getElementById("custDashTabOverview"),
-    bookings: document.getElementById("custDashTabBookings"),
-    reviews: document.getElementById("custDashTabReviews"),
-    profile: document.getElementById("custDashTabProfile"),
+  const pageViews = {
+    overview: document.getElementById("dashPageSecOverview"),
+    bookings: document.getElementById("dashPageSecBookings"),
+    notifications: document.getElementById("dashPageSecNotifications"),
+    reviews: document.getElementById("dashPageSecReviews"),
+    profile: document.getElementById("dashPageSecProfile"),
   };
 
-  Object.entries(views).forEach(([key, el]) => {
+  Object.entries(pageViews).forEach(([key, el]) => {
     if (el) el.hidden = key !== tabName;
   });
-}
 
-document.querySelectorAll("#custDashTabs [data-tab]").forEach((btn) => {
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, "", "customer_dashboard.php?tab=" + tabName);
+  }
+};
+
+document.querySelectorAll("#custDashNavList [data-tab], #custDashTabs [data-tab]").forEach((btn) => {
   btn.addEventListener("click", () => {
     switchDashTab(btn.dataset.tab);
   });
@@ -1018,9 +996,10 @@ async function fetchCustomerDashboardData(targetTab) {
     customerDashboardData = data;
     renderCustomerDashboardUI();
 
-    if (targetTab) {
-      switchDashTab(targetTab);
-    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTab = targetTab || urlParams.get("tab") || "overview";
+    switchDashTab(initialTab);
+
   } catch (err) {
     console.error("Failed to fetch customer dashboard data", err);
   }
@@ -1030,35 +1009,46 @@ function renderCustomerDashboardUI() {
   if (!customerDashboardData) return;
   const { customer, summary, appointments, notifications, reviews } = customerDashboardData;
 
-  const greetingEl = document.getElementById("custDashGreeting");
-  if (greetingEl) greetingEl.textContent = `Welcome back, ${customer.first_name}!`;
+  // Banner Greeting
+  const welcomeBannerFname = document.getElementById("welcomeFnameBanner");
+  if (welcomeBannerFname) welcomeBannerFname.textContent = customer.first_name || "Client";
 
-  const emailEl = document.getElementById("custDashEmail");
-  if (emailEl) emailEl.textContent = `${customer.email} · Member since ${customer.joined_at}`;
+  // Header & Avatar (Page & Modal)
+  const greetingText = `Welcome back, ${customer.first_name}!`;
+  const emailText = `${customer.email} · Member since ${customer.joined_at}`;
+  const initials = customer.first_name ? customer.first_name.substring(0, 1) + (customer.last_name ? customer.last_name.substring(0, 1) : "") : "AN";
 
-  const avatarEl = document.getElementById("custDashAvatar");
-  if (avatarEl) {
-    const initials = customer.first_name ? customer.first_name.substring(0, 1) + (customer.last_name ? customer.last_name.substring(0, 1) : "") : "AN";
-    avatarEl.textContent = initials.toUpperCase();
-  }
+  ["custDashGreeting", "custDashGreetingPage"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = greetingText;
+  });
 
-  const confEl = document.getElementById("sumConfirmedCount");
-  if (confEl) confEl.textContent = summary.confirmed_count || 0;
+  ["custDashEmail", "custDashEmailPage"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = emailText;
+  });
 
-  const pendEl = document.getElementById("sumPendingCount");
-  if (pendEl) pendEl.textContent = summary.pending_count || 0;
+  ["custDashAvatar", "custDashAvatarPage"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = initials.toUpperCase();
+  });
 
-  const compEl = document.getElementById("sumCompletedCount");
-  if (compEl) compEl.textContent = summary.completed_count || 0;
+  // Summary Counters
+  const confVal = summary.confirmed_count || 0;
+  const pendVal = summary.pending_count || 0;
+  const compVal = summary.completed_count || 0;
+  const unreadVal = summary.unread_notifications || 0;
 
-  const unreadEl = document.getElementById("sumUnreadNotifs");
-  if (unreadEl) unreadEl.textContent = summary.unread_notifications || 0;
+  ["sumConfirmedCount", "sumPageConfirmed"].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = confVal; });
+  ["sumPendingCount", "sumPagePending"].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = pendVal; });
+  ["sumCompletedCount", "sumPageCompleted"].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = compVal; });
+  ["sumUnreadNotifs", "sumPageUnread"].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = unreadVal; });
 
-  const notifBadges = [document.getElementById("headerNotifBadge"), document.getElementById("custDashNotifBadge")];
+  const notifBadges = [document.getElementById("headerNotifBadge"), document.getElementById("custDashNotifBadgePage")];
   notifBadges.forEach((b) => {
     if (b) {
-      if (summary.unread_notifications > 0) {
-        b.textContent = summary.unread_notifications;
+      if (unreadVal > 0) {
+        b.textContent = unreadVal;
         b.style.display = "inline-block";
       } else {
         b.style.display = "none";
@@ -1067,25 +1057,144 @@ function renderCustomerDashboardUI() {
   });
 
   renderHeaderNotificationsList(notifications);
+  renderHeroUpcomingAppointmentCard(appointments);
+  renderOverviewNotifSnippet(notifications);
+  renderOverviewVisitsSnippet(appointments);
+
   renderDashRecentActivity(appointments);
   renderDashBookingsList(appointments);
   renderDashNotificationsList(notifications);
   renderDashReviewsList(reviews, appointments);
 
-  const fnameInput = document.getElementById("custProfFirstName");
-  if (fnameInput) fnameInput.value = customer.first_name || "";
+  // Profile Form Fill
+  ["custProfFirstName", "dashProfFname"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = customer.first_name || ""; });
+  ["custProfLastName", "dashProfLname"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = customer.last_name || ""; });
+  ["custProfEmail", "dashProfEmail"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = customer.email || ""; });
+  ["custProfPhone", "dashProfPhone"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = customer.phone || ""; });
+  ["custProfNewPassword", "dashProfPassword"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+}
 
-  const lnameInput = document.getElementById("custProfLastName");
-  if (lnameInput) lnameInput.value = customer.last_name || "";
+// Render Featured Hero Upcoming Appointment Card
+function renderHeroUpcomingAppointmentCard(appointments) {
+  const container = document.getElementById("dashHeroUpcomingCard");
+  if (!container) return;
 
-  const emailInput = document.getElementById("custProfEmail");
-  if (emailInput) emailInput.value = customer.email || "";
+  const upcoming = (appointments || []).find((a) => a.status === "Confirmed" || a.status === "Pending");
 
-  const phoneInput = document.getElementById("custProfPhone");
-  if (phoneInput) phoneInput.value = customer.phone || "";
+  if (!upcoming) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 1.5rem 0.5rem;">
+        <div style="font-size: 2.25rem; margin-bottom: 0.5rem;">✨</div>
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.35rem;">You don't have any upcoming appointments</h3>
+        <p style="font-size: 0.875rem; color: #64748b; margin: 0 0 1.25rem; max-width: 460px; margin-left: auto; margin-right: auto;">
+          Treat yourself to a pampering session at Astrid Nails &amp; Beauty Bar today!
+        </p>
+        <button class="btn btn--brand" onclick="openBooking()" style="padding: 0.75rem 1.5rem; font-size: 0.875rem; font-weight: 700; border-radius: 12px; background: #77334f; color: #fff;">
+          + Book an Appointment Now
+        </button>
+      </div>
+    `;
+    return;
+  }
 
-  const passInput = document.getElementById("custProfNewPassword");
-  if (passInput) passInput.value = "";
+  let statusBadgeClass = upcoming.status === "Confirmed" ? "badge--confirmed" : "badge--pending";
+  const imageHtml = upcoming.service_image 
+    ? `<img src="${upcoming.service_image}" alt="${upcoming.service}" style="width: 90px; height: 90px; border-radius: 16px; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div style="display:none; width: 90px; height: 90px; border-radius: 16px; background: #f3e8ff; color: #6b21a8; align-items: center; justify-content: center; font-size: 2rem;">✨</div>`
+    : `<div style="width: 90px; height: 90px; border-radius: 16px; background: #f3e8ff; color: #6b21a8; display: flex; align-items: center; justify-content: center; font-size: 2rem;">✨</div>`;
+
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid #f1f5f9;">
+      <h3 style="font-size: 1.1rem; font-weight: 800; color: #1e1b4b; margin: 0;">Upcoming Appointment</h3>
+      <button class="link-btn" onclick="window.switchDashTab('bookings')" style="font-size: 0.825rem; font-weight: 700; color: #6b21a8;">View All &rarr;</button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+      ${imageHtml}
+      <div>
+        <h4 style="font-size: 1.2rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.4rem;">${upcoming.service}</h4>
+        <p style="font-size: 0.875rem; color: #475569; margin: 0 0 0.25rem; font-weight: 600;">📅 ${upcoming.date}</p>
+        <p style="font-size: 0.875rem; color: #475569; margin: 0 0 0.25rem; font-weight: 600;">⏰ ${upcoming.time}</p>
+        <p style="font-size: 0.825rem; color: #64748b; margin: 0 0 0.5rem;">Booking Ref: <strong style="color: #6b21a8;">#${upcoming.id}</strong></p>
+        <span class="badge ${statusBadgeClass}">${upcoming.status}</span>
+      </div>
+    </div>
+
+    <button class="btn" onclick="window.switchDashTab('bookings')" style="display: block; width: 100%; padding: 0.8rem; background: #6b21a8; color: #ffffff; font-weight: 700; font-size: 0.875rem; border-radius: 12px; text-align: center; border: none; cursor: pointer;">View Appointment</button>
+  `;
+}
+
+// Render Overview Snippet: Recent Notifications
+function renderOverviewNotifSnippet(notifications) {
+  const container = document.getElementById("dashOverviewNotifSnippet");
+  if (!container) return;
+
+  if (!notifications || notifications.length === 0) {
+    container.innerHTML = `
+      <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin: 1.5rem 0;">You're all caught up! No notifications.</p>
+    `;
+    return;
+  }
+
+  const top3 = notifications.slice(0, 3);
+  container.innerHTML = top3.map((n) => `
+    <div style="padding: 0.75rem; border-radius: 12px; margin-bottom: 0.6rem; font-size: 0.825rem; background: ${!n.is_read ? "#fdf2f8" : "#f8fafc"}; border: 1px solid ${!n.is_read ? "#fbcfe8" : "#f1f5f9"}; display: flex; align-items: flex-start; gap: 0.65rem;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: ${n.type === 'confirmed' ? '#d1fae5' : '#fef3c7'}; color: ${n.type === 'confirmed' ? '#059669' : '#d97706'}; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; flex-shrink: 0;">
+        ${n.type === 'confirmed' ? '✓' : '🔔'}
+      </div>
+      <div style="flex: 1;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: #1e1b4b; font-size: 0.85rem;">${n.title}</strong>
+          <span style="font-size: 0.7rem; color: #94a3b8;">${n.created_at}</span>
+        </div>
+        <p style="margin: 0.15rem 0 0; color: #64748b; font-size: 0.8rem; line-height: 1.3;">${n.message}</p>
+      </div>
+    </div>
+  `).join("") + `
+    <div style="text-align: center; margin-top: 1rem;">
+      <button class="link-btn" onclick="window.switchDashTab('notifications')" style="font-size: 0.8rem; font-weight: 700; color: #6b21a8;">View All Notifications &rarr;</button>
+    </div>
+  `;
+}
+
+// Render Overview Snippet: Recent Completed Visits
+function renderOverviewVisitsSnippet(appointments) {
+  const container = document.getElementById("dashOverviewVisitsSnippet");
+  if (!container) return;
+
+  const completedVisits = (appointments || []).filter((a) => a.status === "Completed").slice(0, 3);
+
+  if (completedVisits.length === 0) {
+    container.innerHTML = `
+      <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin: 1.5rem 0;">No completed appointments yet.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+      ${completedVisits.map((a) => {
+        const thumbHtml = a.service_image 
+          ? `<img src="${a.service_image}" alt="${a.service}" style="width: 52px; height: 52px; border-radius: 12px; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div style="display:none; width: 52px; height: 52px; border-radius: 12px; background: #f3e8ff; color: #6b21a8; align-items: center; justify-content: center; font-size: 1.25rem;">✨</div>`
+          : `<div style="width: 52px; height: 52px; border-radius: 12px; background: #f3e8ff; color: #6b21a8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">✨</div>`;
+
+        return `
+          <div style="padding: 0.85rem; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              ${thumbHtml}
+              <div>
+                <strong style="font-size: 0.875rem; color: #1e1b4b; display: block; margin-bottom: 0.15rem;">${a.service}</strong>
+                <span style="font-size: 0.75rem; color: #64748b; display: block; margin-bottom: 0.25rem;">${a.date}</span>
+                <span class="badge badge--completed" style="font-size: 0.65rem;">Completed</span>
+              </div>
+            </div>
+            <button class="btn btn--soft dash-rate-now-btn" data-appid="${a.id}" style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #6b21a8;" title="Rate Visit">&rsaquo;</button>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  bindDashAppointmentActionEvents(container);
 }
 
 function renderDashRecentActivity(appointments) {
@@ -1375,38 +1484,67 @@ function renderDashReviewsList(reviews, appointments) {
   }
 }
 
-const dashBookShortcutBtn = document.getElementById("dashBookShortcutBtn");
-if (dashBookShortcutBtn) {
-  dashBookShortcutBtn.addEventListener("click", () => {
-    closeCustomerDashboard();
-    openBooking();
+// Page-level Customer Dashboard Actions & Event Handlers
+["dashPageBookBtn", "dashPageBookBtn2", "dashBookShortcutBtn"].forEach((id) => {
+  const btn = document.getElementById(id);
+  if (btn) {
+    btn.addEventListener("click", () => openBooking());
+  }
+});
+
+const viewAllBookingsBtn = document.getElementById("viewAllBookingsBtn");
+if (viewAllBookingsBtn) {
+  viewAllBookingsBtn.addEventListener("click", () => switchDashTab("bookings"));
+}
+
+["dashPageLogoutBtn", "dashLogoutBtn"].forEach((id) => {
+  const btn = document.getElementById(id);
+  if (btn) {
+    btn.addEventListener("click", () => logout());
+  }
+});
+
+const dashPageMarkAllRead = document.getElementById("dashPageMarkAllRead");
+if (dashPageMarkAllRead) {
+  dashPageMarkAllRead.addEventListener("click", async () => {
+    const formData = new FormData();
+    formData.append("mark_all", "1");
+    await fetch("includes/notifications/mark_read.php", { method: "POST", body: formData });
+    fetchCustomerDashboardData("notifications");
+    showToast("All notifications marked as read.");
   });
 }
 
-const dashRateVisitBtn = document.getElementById("dashRateVisitBtn");
-if (dashRateVisitBtn) {
-  dashRateVisitBtn.addEventListener("click", () => {
-    closeCustomerDashboard();
-    openRateModal();
-  });
-}
+["dashPageRateVisitBtn", "dashRateVisitBtn"].forEach((id) => {
+  const btn = document.getElementById(id);
+  if (btn) {
+    btn.addEventListener("click", () => openRateModal());
+  }
+});
 
-const custProfileForm = document.getElementById("custProfileForm");
-if (custProfileForm) {
-  custProfileForm.addEventListener("submit", async (e) => {
+// Profile Form Submit (Page & Modal)
+["custProfileForm", "dashPageProfileForm"].forEach((formId) => {
+  const form = document.getElementById(formId);
+  if (!form) return;
+
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const fname = document.getElementById("custProfFirstName").value.trim();
-    const lname = document.getElementById("custProfLastName").value.trim();
-    const phone = document.getElementById("custProfPhone").value.trim();
-    const newPass = document.getElementById("custProfNewPassword").value;
-    const errEl = document.getElementById("custProfError");
-    const saveBtn = document.getElementById("custProfSaveBtn");
+    const fname = (document.getElementById("dashProfFname") || document.getElementById("custProfFirstName")).value.trim();
+    const lname = (document.getElementById("dashProfLname") || document.getElementById("custProfLastName")).value.trim();
+    const phone = (document.getElementById("dashProfPhone") || document.getElementById("custProfPhone")).value.trim();
+    const newPass = (document.getElementById("dashProfPassword") || document.getElementById("custProfNewPassword")).value;
+    const errEl = document.getElementById("dashProfError") || document.getElementById("custProfError");
+    const saveBtn = document.getElementById("dashProfSaveBtn") || document.getElementById("custProfSaveBtn");
 
-    errEl.style.display = "none";
-    errEl.textContent = "";
+    if (errEl) {
+      errEl.style.display = "none";
+      errEl.textContent = "";
+    }
 
-    saveBtn.disabled = true;
-    saveBtn.textContent = "Saving...";
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+    }
 
     const formData = new FormData();
     formData.append("first_name", fname);
@@ -1427,21 +1565,28 @@ if (custProfileForm) {
           currentUser.first_name = fname;
           updateNavbarState();
         }
-        document.getElementById("custProfNewPassword").value = "";
+        const passInput = document.getElementById("dashProfPassword") || document.getElementById("custProfNewPassword");
+        if (passInput) passInput.value = "";
         fetchCustomerDashboardData("profile");
       } else {
-        errEl.textContent = data.error || "Failed to update profile.";
-        errEl.style.display = "block";
+        if (errEl) {
+          errEl.textContent = data.error || "Failed to update profile.";
+          errEl.style.display = "block";
+        }
       }
     } catch (err) {
-      errEl.textContent = "An error occurred while updating profile.";
-      errEl.style.display = "block";
+      if (errEl) {
+        errEl.textContent = "An error occurred while updating profile.";
+        errEl.style.display = "block";
+      }
     } finally {
-      saveBtn.disabled = false;
-      saveBtn.textContent = "Save Changes";
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Changes";
+      }
     }
   });
-}
+});
 
 /* ---------- Init ---------- */
 document.getElementById("footerYear").textContent = new Date().getFullYear();
@@ -1449,6 +1594,11 @@ fetchServices();
 fetchReviewsPublic();
 fetchFaqsPublic();
 fetchAboutPublic();
+
+// Auto-fetch customer dashboard data if customer_dashboard.php is open
+if (window.location.pathname.includes("customer_dashboard.php")) {
+  fetchCustomerDashboardData();
+}
 
 // Auto-open Admin Login modal if openAuth=admin query parameter is present
 const urlParams = new URLSearchParams(window.location.search);

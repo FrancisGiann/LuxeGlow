@@ -41,6 +41,7 @@ try {
             a.status,
             a.created_at,
             GROUP_CONCAT(s.name ORDER BY s.name SEPARATOR ', ') AS service,
+            MAX(s.image_path) AS service_image,
             r.review_id,
             r.rating AS rating_given,
             r.review_text
@@ -59,11 +60,12 @@ try {
         $ts = strtotime($row['appointment_date'] . ' ' . $row['appointment_time']);
         return [
             'id'           => $row['id'],
-            'date'         => date('M j, Y', $ts),
+            'date'         => date('M j, Y (D)', $ts),
             'time'         => date('g:i A', $ts),
             'raw_date'     => $row['appointment_date'],
             'raw_time'     => $row['appointment_time'],
             'service'      => $row['service'] ?: 'N/A',
+            'service_image'=> !empty($row['service_image']) ? $row['service_image'] : '',
             'price'        => (float)$row['price'],
             'status'       => $row['status'],
             'has_rating'   => !empty($row['review_id']),
