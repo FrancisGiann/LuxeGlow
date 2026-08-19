@@ -37,7 +37,7 @@ require_once __DIR__ . '/includes/partials/header.php';
 <div class="dash-layout-wrapper" style="display: flex; min-height: calc(100vh - 80px); background: #faf8f5;">
 
   <!-- LEFT SIDEBAR (LuxeGlow Brand Purple #6b21a8) -->
-  <aside class="dash-sidebar" style="width: 280px; flex-shrink: 0; background: #6b21a8; color: #ffffff; padding: 2rem 1.25rem; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
+  <aside class="dash-sidebar" style="width: 280px; flex-shrink: 0; background: #6b21a8; color: #ffffff; padding: 2.5rem 1.25rem 3rem; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
     
     <div>
       <!-- Profile Header -->
@@ -48,8 +48,11 @@ require_once __DIR__ . '/includes/partials/header.php';
         <h2 style="font-size: 1.25rem; font-weight: 800; color: #ffffff; margin: 0 0 0.2rem;" id="custDashGreetingPage">
           <?= $custFullName ?>
         </h2>
-        <p style="font-size: 0.825rem; color: #fbcfe8; margin: 0; word-break: break-all; opacity: 0.9;" id="custDashEmailPage">
+        <p style="font-size: 0.825rem; color: #fbcfe8; margin: 0 0 0.35rem; word-break: break-all; opacity: 0.9;" id="custDashEmailPage">
           <?= $custEmail ?>
+        </p>
+        <p style="font-size: 0.75rem; color: #fef08a; font-weight: 700; margin: 0; opacity: 0.95;" id="custDashJoinedPage">
+          Member since <?= date('M Y', strtotime($customerData['created_at'])) ?>
         </p>
       </div>
 

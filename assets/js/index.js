@@ -1015,7 +1015,8 @@ function renderCustomerDashboardUI() {
 
   // Header & Avatar (Page & Modal)
   const greetingText = `Welcome back, ${customer.first_name}!`;
-  const emailText = `${customer.email} · Member since ${customer.joined_at}`;
+  const emailText = customer.email || "";
+  const joinedText = customer.joined_at ? `Member since ${customer.joined_at}` : "";
   const initials = customer.first_name ? customer.first_name.substring(0, 1) + (customer.last_name ? customer.last_name.substring(0, 1) : "") : "AN";
 
   ["custDashGreeting", "custDashGreetingPage"].forEach((id) => {
@@ -1027,6 +1028,9 @@ function renderCustomerDashboardUI() {
     const el = document.getElementById(id);
     if (el) el.textContent = emailText;
   });
+
+  const joinedEl = document.getElementById("custDashJoinedPage");
+  if (joinedEl && joinedText) joinedEl.textContent = joinedText;
 
   ["custDashAvatar", "custDashAvatarPage"].forEach((id) => {
     const el = document.getElementById(id);
@@ -1177,6 +1181,10 @@ function renderOverviewVisitsSnippet(appointments) {
           ? `<img src="${a.service_image}" alt="${a.service}" style="width: 52px; height: 52px; border-radius: 12px; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div style="display:none; width: 52px; height: 52px; border-radius: 12px; background: #f3e8ff; color: #6b21a8; align-items: center; justify-content: center; font-size: 1.25rem;">✨</div>`
           : `<div style="width: 52px; height: 52px; border-radius: 12px; background: #f3e8ff; color: #6b21a8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">✨</div>`;
 
+        const ratingBtnOrBadge = a.has_rating
+          ? `<span class="badge" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.65rem; border-radius: 20px; white-space: nowrap;">✓ Rated (${a.rating_given} ★)</span>`
+          : `<button class="btn btn--brand dash-rate-now-btn" data-appid="${a.id}" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; font-weight: 700; border-radius: 8px; white-space: nowrap; background: #6b21a8; color: #ffffff;">⭐ Rate Now</button>`;
+
         return `
           <div style="padding: 0.85rem; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
             <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -1187,7 +1195,7 @@ function renderOverviewVisitsSnippet(appointments) {
                 <span class="badge badge--completed" style="font-size: 0.65rem;">Completed</span>
               </div>
             </div>
-            <button class="btn btn--soft dash-rate-now-btn" data-appid="${a.id}" style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #6b21a8;" title="Rate Visit">&rsaquo;</button>
+            ${ratingBtnOrBadge}
           </div>
         `;
       }).join("")}
