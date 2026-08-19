@@ -153,6 +153,16 @@ function renderDashboard() {
     statValues[2].textContent = peso(revenueToday);
   }
 
+  // Fetch real average rating from database
+  fetch("includes/reviews/list.php?limit=1")
+    .then((r) => r.json())
+    .then((d) => {
+      if (d.success && d.stats && statValues.length >= 4) {
+        statValues[3].textContent = d.stats.average_rating > 0 ? d.stats.average_rating.toFixed(1) : "0.0";
+      }
+    })
+    .catch(() => {});
+
   recent.innerHTML = bookings
     .slice(0, 5)
     .map(
