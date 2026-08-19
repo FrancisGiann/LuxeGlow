@@ -1,3 +1,6 @@
+<?php
+$isSuperAdmin = ($_SESSION['admin_role'] ?? '') === 'Super Admin';
+?>
 <section class="admin-page admin-page--home">
   <div class="page-header">
     <div>
@@ -7,10 +10,12 @@
   </div>
 
   <div class="stat-grid">
-    <div class="card"><p class="stat-value">12</p><p class="stat-label">Today's bookings</p></div>
-    <div class="card"><p class="stat-value">3</p><p class="stat-label">Pending approvals</p></div>
-    <div class="card"><p class="stat-value">₱18,400.00</p><p class="stat-label">Revenue today</p></div>
-    <div class="card"><p class="stat-value">4.9</p><p class="stat-label">Average rating</p></div>
+    <div class="card"><p class="stat-value" id="statTodaysBookings">0</p><p class="stat-label">Today's bookings</p></div>
+    <div class="card"><p class="stat-value" id="statPendingApprovals">0</p><p class="stat-label">Pending approvals</p></div>
+    <?php if ($isSuperAdmin): ?>
+      <div class="card"><p class="stat-value" id="statRevenueToday">₱0.00</p><p class="stat-label">Revenue today</p></div>
+    <?php endif; ?>
+    <div class="card"><p class="stat-value" id="statAvgRating">0.0</p><p class="stat-label">Average rating</p></div>
   </div>
 
   <div class="dashboard-grid">

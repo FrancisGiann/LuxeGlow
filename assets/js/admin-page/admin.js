@@ -146,19 +146,21 @@ function renderDashboard() {
     .filter((b) => b.status !== "Cancelled")
     .reduce((sum, b) => sum + b.price, 0);
 
-  const statValues = document.querySelectorAll(".stat-value");
-  if (statValues.length >= 3) {
-    statValues[0].textContent = todaysBookings.length;
-    statValues[1].textContent = pendingApprovals.length;
-    statValues[2].textContent = peso(revenueToday);
-  }
+  const todaysBookingsEl = document.getElementById("statTodaysBookings");
+  const pendingApprovalsEl = document.getElementById("statPendingApprovals");
+  const revenueTodayEl = document.getElementById("statRevenueToday");
+  const avgRatingEl = document.getElementById("statAvgRating");
+
+  if (todaysBookingsEl) todaysBookingsEl.textContent = todaysBookings.length;
+  if (pendingApprovalsEl) pendingApprovalsEl.textContent = pendingApprovals.length;
+  if (revenueTodayEl) revenueTodayEl.textContent = peso(revenueToday);
 
   // Fetch real average rating from database
   fetch("includes/reviews/list.php?limit=1")
     .then((r) => r.json())
     .then((d) => {
-      if (d.success && d.stats && statValues.length >= 4) {
-        statValues[3].textContent = d.stats.average_rating > 0 ? d.stats.average_rating.toFixed(1) : "0.0";
+      if (d.success && d.stats && avgRatingEl) {
+        avgRatingEl.textContent = d.stats.average_rating > 0 ? d.stats.average_rating.toFixed(1) : "0.0";
       }
     })
     .catch(() => {});
