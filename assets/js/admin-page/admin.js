@@ -14,7 +14,7 @@ async function fetchServicesAdmin() {
     const res = await fetch("includes/services/list.php");
     services = await res.json();
     if (document.getElementById("galleryGrid")) renderGallery();
-    if (document.getElementById("dashboardPopularGrid")) renderDashboard();
+    if (document.getElementById("popularServices") || document.getElementById("recentBookings")) renderDashboard();
   } catch (err) {
     console.error("Failed to fetch services", err);
     if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--brand-pink); grid-column: 1 / -1;">Failed to load services.</p>';
@@ -171,20 +171,37 @@ function renderDashboard() {
     )
     .join("");
 
-  const popular = services.slice(0, 4);
-  popularEl.innerHTML = popular
-    .map(
-      (s, i) => `
-    <div class="card booking-row">
-      <div>
-        <p class="booking-row__name">${s.name}</p>
-        <p class="booking-row__meta">${58 - i * 9} bookings this month</p>
-      </div>
-      <span class="price-text" style="color:var(--brand-purple)">₱${s.price}</span>
-    </div>
-  `,
-    )
-    .join("");
+  // Compute booking frequency per service
+  const counts = {};
+  bookings.forEach((b) => {
+    if (b.service) {
+      b.service.split(",").forEach((sName) => {
+        const clean = sName.trim();
+        counts[clean] = (counts[clean] || 0) + 1;
+      });
+    }
+  });
+
+  const popular = services.slice().sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0)).slice(0, 5);
+
+  if (popular.length === 0) {
+    popularEl.innerHTML = '<p class="muted" style="padding:1rem; text-align:center;">No services loaded yet.</p>';
+  } else {
+    popularEl.innerHTML = popular
+      .map((s) => {
+        const bookingCnt = counts[s.name] || 0;
+        return `
+          <div class="card booking-row">
+            <div>
+              <p class="booking-row__name">${s.name}</p>
+              <p class="booking-row__meta">${bookingCnt} booking${bookingCnt === 1 ? "" : "s"} recorded</p>
+            </div>
+            <span class="price-text" style="color:var(--brand-purple)">₱${parseFloat(s.price).toFixed(2)}</span>
+          </div>
+        `;
+      })
+      .join("");
+  }
 }
 
 /* ---------- Services gallery ---------- */
