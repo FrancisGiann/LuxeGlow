@@ -77,6 +77,22 @@ try {
     }
 
     $pdo->commit();
+
+    // 8. Trigger website notification and email after transaction commits
+    require_once __DIR__ . '/../notifications/create.php';
+    require_once __DIR__ . '/../email/send_notification.php';
+
+    createCustomerNotification(
+        $pdo,
+        $customerId,
+        $appointmentId,
+        'pending',
+        'Booking Received',
+        "Your booking request (#{$appointmentId}) has been received and is currently Pending approval."
+    );
+
+    sendAppointmentEmail($pdo, $appointmentId, 'pending');
+
     echo json_encode(['success' => true, 'appointment_id' => $appointmentId]);
 
 } catch (Exception $e) {

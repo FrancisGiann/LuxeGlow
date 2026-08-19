@@ -27,6 +27,38 @@ try {
         }
     }
 
+    // Fetch customer_id for this appointment to send website notification
+    $custStmt = $pdo->prepare("SELECT customer_id FROM appointments WHERE appointment_id = ?");
+    $custStmt->execute([$appointmentId]);
+    $customerId = (int)$custStmt->fetchColumn();
+
+    if ($customerId > 0) {
+        require_once __DIR__ . '/../notifications/create.php';
+        require_once __DIR__ . '/../email/send_notification.php';
+
+        if ($status === 'Confirmed') {
+            createCustomerNotification(
+                $pdo,
+                $customerId,
+                $appointmentId,
+                'confirmed',
+                'Booking Confirmed',
+                "Your appointment (#{$appointmentId}) has been confirmed by our salon team."
+            );
+            sendAppointmentEmail($pdo, $appointmentId, 'confirmed');
+        } elseif ($status === 'Cancelled') {
+            createCustomerNotification(
+                $pdo,
+                $customerId,
+                $appointmentId,
+                'cancelled',
+                'Appointment Cancelled',
+                "Your appointment (#{$appointmentId}) has been cancelled."
+            );
+            sendAppointmentEmail($pdo, $appointmentId, 'cancelled');
+        }
+    }
+
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {
     http_response_code(500);

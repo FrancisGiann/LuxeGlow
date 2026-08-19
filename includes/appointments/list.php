@@ -1,18 +1,11 @@
 <?php
-require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/_autocancel_helper.php';
+require_once __DIR__ . '/../admin-auth/require_admin.php';
 header('Content-Type: application/json');
 
-// TODO: require admin session once Step 9 (Account Management/admin login) is built
-
 try {
-    // 1. Auto-cancel 15-minute late sweep query (single UPDATE)
-    $sweepStmt = $pdo->prepare("
-        UPDATE appointments
-        SET status = 'Cancelled'
-        WHERE status IN ('Pending', 'Confirmed')
-          AND TIMESTAMP(appointment_date, appointment_time) + INTERVAL 15 MINUTE < NOW()
-    ");
-    $sweepStmt->execute();
+    // 1. Run shared 15-minute auto-cancel sweep
+    autoCancelLateAppointments($pdo);
 
     // 2. Status filter handling
     $statusFilter = trim($_GET['status'] ?? 'All Bookings');

@@ -1,0 +1,14 @@
+<?php
+// config/mail.local.php
+// Copy this file to config/mail.local.php and fill in your real Gmail credentials.
+// config/mail.local.php is listed in .gitignore and will never be committed to Git.
+
+return [
+    'host'         => 'smtp.gmail.com',
+    'port'         => 587,
+    'encryption'   => 'tls',
+    'username'     => 'your_email@gmail.com',       // Place your Gmail address here
+    'password'     => 'xxxx xxxx xxxx xxxx',          // Place your 16-character Gmail App Password here
+    'from_address' => 'your_email@gmail.com',       // Place your Gmail address here
+    'from_name'    => 'Astrid Nails & Beauty Bar',
+];
