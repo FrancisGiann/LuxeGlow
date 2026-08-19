@@ -16,18 +16,20 @@
         <div class="auth-card" id="loginView">
           <div class="auth-card__logo">AN</div>
           <h2 class="auth-card__title">Customer Login</h2>
-          <div class="auth-card__fields">
-            <label class="field">
-              <span class="field__label">Email address</span>
-              <input type="email" id="loginEmail" placeholder="astrid@astrid.com" />
-            </label>
-            <label class="field">
-              <span class="field__label">Password</span>
-              <input type="password" id="loginPassword" placeholder="••••••••" />
-            </label>
-          </div>
-          <p class="field__error" id="loginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
-          <button class="btn btn--brand btn--block" id="loginSubmit">Log in</button>
+          <form id="loginForm" onsubmit="return false;">
+            <div class="auth-card__fields">
+              <label class="field">
+                <span class="field__label">Email address</span>
+                <input type="email" id="loginEmail" name="email" autocomplete="username" placeholder="astrid@astrid.com" required />
+              </label>
+              <label class="field">
+                <span class="field__label">Password</span>
+                <input type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="••••••••" required />
+              </label>
+            </div>
+            <p class="field__error" id="loginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
+            <button type="submit" class="btn btn--brand btn--block" id="loginSubmit">Log in</button>
+          </form>
           <p class="auth-card__note" style="text-align: center; margin-top: 1.25rem; margin-bottom: 0.5rem;">
             Don't have an account? 
             <button class="link-btn" data-view="register" style="display: inline; font-family: inherit; color: var(--brand-purple); font-weight: 600;">Register</button>
@@ -43,18 +45,20 @@
         <div class="auth-card" id="adminLoginView" hidden>
           <div class="auth-card__logo">AN</div>
           <h2 class="auth-card__title">Admin / Staff Login</h2>
-          <div class="auth-card__fields">
-            <label class="field">
-              <span class="field__label">Username</span>
-              <input type="text" id="adminLoginUsername" placeholder="e.g. astrid.admin" />
-            </label>
-            <label class="field">
-              <span class="field__label">Password</span>
-              <input type="password" id="adminLoginPassword" placeholder="••••••••" />
-            </label>
-          </div>
-          <p class="field__error" id="adminLoginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
-          <button class="btn btn--brand btn--block" id="adminLoginSubmit">Log in as Staff</button>
+          <form id="adminLoginForm" onsubmit="return false;">
+            <div class="auth-card__fields">
+              <label class="field">
+                <span class="field__label">Username</span>
+                <input type="text" id="adminLoginUsername" name="username" autocomplete="username" placeholder="e.g. astrid.admin" required />
+              </label>
+              <label class="field">
+                <span class="field__label">Password</span>
+                <input type="password" id="adminLoginPassword" name="password" autocomplete="current-password" placeholder="••••••••" required />
+              </label>
+            </div>
+            <p class="field__error" id="adminLoginError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
+            <button type="submit" class="btn btn--brand btn--block" id="adminLoginSubmit">Log in as Staff</button>
+          </form>
           
           <p class="auth-card__note" style="text-align: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
             Not a staff member? 
@@ -66,36 +70,38 @@
         <div class="auth-card" id="registerView" hidden>
           <div class="auth-card__logo">AN</div>
           <h2 class="auth-card__title">Create an Account</h2>
-          <div class="auth-card__fields">
-            <div class="field-row">
+          <form id="registerForm" onsubmit="return false;">
+            <div class="auth-card__fields">
+              <div class="field-row">
+                <label class="field">
+                  <span class="field__label">First Name</span>
+                  <input type="text" id="regFirstName" name="first_name" autocomplete="given-name" placeholder="Juan" required />
+                </label>
+                <label class="field">
+                  <span class="field__label">Last Name</span>
+                  <input type="text" id="regLastName" name="last_name" autocomplete="family-name" placeholder="Dela Cruz" required />
+                </label>
+              </div>
               <label class="field">
-                <span class="field__label">First Name</span>
-                <input type="text" id="regFirstName" placeholder="Juan" />
+                <span class="field__label">Email address</span>
+                <input type="email" id="regEmail" name="email" autocomplete="username" placeholder="astrid@astrid.com" required />
               </label>
               <label class="field">
-                <span class="field__label">Last Name</span>
-                <input type="text" id="regLastName" placeholder="Dela Cruz" />
+                <span class="field__label">Phone Number</span>
+                <input type="tel" id="regPhone" name="phone" autocomplete="tel" placeholder="0917-000-1122" required />
+              </label>
+              <label class="field">
+                <span class="field__label">Password</span>
+                <input type="password" id="regPassword" name="password" autocomplete="new-password" placeholder="••••••••" required />
+              </label>
+              <label class="field">
+                <span class="field__label">Confirm Password</span>
+                <input type="password" id="regConfirmPassword" name="confirm_password" autocomplete="new-password" placeholder="••••••••" required />
               </label>
             </div>
-            <label class="field">
-              <span class="field__label">Email address</span>
-              <input type="email" id="regEmail" placeholder="astrid@astrid.com" />
-            </label>
-            <label class="field">
-              <span class="field__label">Phone Number</span>
-              <input type="tel" id="regPhone" placeholder="0917-000-1122" />
-            </label>
-            <label class="field">
-              <span class="field__label">Password</span>
-              <input type="password" id="regPassword" placeholder="••••••••" />
-            </label>
-            <label class="field">
-              <span class="field__label">Confirm Password</span>
-              <input type="password" id="regConfirmPassword" placeholder="••••••••" />
-            </label>
-          </div>
-          <p class="field__error" id="registerError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
-          <button class="btn btn--brand btn--block" id="registerSubmit">REGISTER</button>
+            <p class="field__error" id="registerError" style="color:var(--brand-pink);font-size:0.8rem;margin-top:0.25rem;margin-bottom:1rem;display:none;"></p>
+            <button type="submit" class="btn btn--brand btn--block" id="registerSubmit">REGISTER</button>
+          </form>
           
           <p class="auth-card__or" style="margin-top: 1.5rem;">or continue with</p>
           <button class="btn btn--fb btn--block" style="margin-bottom: 1rem;">📘 Facebook</button>
