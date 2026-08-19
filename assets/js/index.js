@@ -351,6 +351,7 @@ async function logout() {
     currentUser = null;
     updateNavbarState();
     showToast("Logged out successfully.");
+    window.location.href = "index.php";
   } catch (err) {
     console.error("Logout failed", err);
   }

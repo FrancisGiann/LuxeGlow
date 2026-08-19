@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/_autocancel_helper.php';
 require_once __DIR__ . '/../admin-auth/require_admin.php';
 header('Content-Type: application/json');
