@@ -251,8 +251,9 @@ function unlockScroll() {
   const isAuthOpen = authOverlay && !authOverlay.hidden;
   const isBookingOpen = bookingOverlay && !bookingOverlay.hidden;
   const isRateOpen = typeof rateOverlay !== "undefined" && rateOverlay && !rateOverlay.hidden && rateOverlay.style.display !== "none";
+  const isDashOpen = typeof customerDashboardOverlay !== "undefined" && customerDashboardOverlay && !customerDashboardOverlay.hidden && customerDashboardOverlay.style.display !== "none";
 
-  if (!isAuthOpen && !isBookingOpen && !isRateOpen) {
+  if (!isAuthOpen && !isBookingOpen && !isRateOpen && !isDashOpen) {
     document.body.style.overflow = "";
   }
 }
@@ -302,35 +303,44 @@ async function checkSession() {
 
 function updateNavbarState() {
   const loginBtns = [document.getElementById("loginBtn"), document.getElementById("loginBtnMobile")];
-  const rateBtns = [document.getElementById("rateUsBtn"), document.getElementById("rateUsBtnMobile")];
+  const dashBtns = [document.getElementById("userDashboardBtn"), document.getElementById("userDashboardBtnMobile")];
+  const notifWrap = document.getElementById("notifWrap");
   
   if (currentUser) {
-    const text = `Hi, ${currentUser.first_name} (Logout)`;
-    loginBtns.forEach(btn => {
-      if (btn) {
-        btn.textContent = text;
-        btn.onclick = logout;
-      }
-    });
-    rateBtns.forEach(btn => {
+    const loginDesktop = document.getElementById("loginBtn");
+    if (loginDesktop) loginDesktop.style.display = "none";
+
+    const loginMobile = document.getElementById("loginBtnMobile");
+    if (loginMobile) {
+      loginMobile.textContent = "Logout";
+      loginMobile.onclick = logout;
+    }
+
+    dashBtns.forEach(btn => {
       if (btn) {
         btn.style.display = "inline-flex";
-        btn.onclick = openRateModal;
+        btn.textContent = `👤 Hi, ${currentUser.first_name}`;
+        btn.onclick = () => openCustomerDashboard("overview");
       }
     });
+
+    if (notifWrap) notifWrap.style.display = "inline-block";
+
+    fetchCustomerDashboardData();
   } else {
-    const text = "Login / Register";
     loginBtns.forEach(btn => {
       if (btn) {
-        btn.textContent = text;
+        btn.style.display = "inline-flex";
+        btn.textContent = "Login / Register";
         btn.onclick = () => openAuth("login");
       }
     });
-    rateBtns.forEach(btn => {
+    dashBtns.forEach(btn => {
       if (btn) {
         btn.style.display = "none";
       }
     });
+    if (notifWrap) notifWrap.style.display = "none";
   }
 }
 
@@ -912,6 +922,523 @@ if (rateForm) {
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Submit Rating";
+    }
+  });
+}
+
+/* ---------- Customer Dashboard Modal ---------- */
+const customerDashboardOverlay = document.getElementById("customerDashboardOverlay");
+let customerDashboardData = null;
+let activeDashTab = "overview";
+
+function openCustomerDashboard(defaultTab = "overview") {
+  if (!currentUser) {
+    openAuth("login");
+    showToast("Please log in to view your dashboard.");
+    return;
+  }
+
+  if (customerDashboardOverlay) {
+    customerDashboardOverlay.style.display = "flex";
+    customerDashboardOverlay.hidden = false;
+    lockScroll();
+  }
+
+  switchDashTab(defaultTab);
+  fetchCustomerDashboardData(defaultTab);
+}
+
+function closeCustomerDashboard() {
+  if (customerDashboardOverlay) {
+    customerDashboardOverlay.style.display = "none";
+    customerDashboardOverlay.hidden = true;
+  }
+  unlockScroll();
+}
+
+if (customerDashboardOverlay) {
+  customerDashboardOverlay.addEventListener("click", (e) => {
+    if (e.target === customerDashboardOverlay) {
+      closeCustomerDashboard();
+    }
+  });
+}
+
+const customerDashCloseBtn = document.getElementById("customerDashClose");
+if (customerDashCloseBtn) {
+  customerDashCloseBtn.addEventListener("click", closeCustomerDashboard);
+}
+
+function switchDashTab(tabName) {
+  activeDashTab = tabName;
+  const tabBtns = document.querySelectorAll("#custDashTabs [data-tab]");
+  tabBtns.forEach((btn) => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add("is-active");
+      btn.style.background = "var(--gradient-brand)";
+      btn.style.color = "#fff";
+    } else {
+      btn.classList.remove("is-active");
+      btn.style.background = "";
+      btn.style.color = "";
+    }
+  });
+
+  const views = {
+    overview: document.getElementById("custDashTabOverview"),
+    bookings: document.getElementById("custDashTabBookings"),
+    reviews: document.getElementById("custDashTabReviews"),
+    profile: document.getElementById("custDashTabProfile"),
+  };
+
+  Object.entries(views).forEach(([key, el]) => {
+    if (el) el.hidden = key !== tabName;
+  });
+}
+
+document.querySelectorAll("#custDashTabs [data-tab]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    switchDashTab(btn.dataset.tab);
+  });
+});
+
+async function fetchCustomerDashboardData(targetTab) {
+  try {
+    const res = await fetch("includes/customers/my_dashboard.php");
+    const data = await res.json();
+
+    if (!data.success) {
+      if (res.status === 401) {
+        logout();
+      }
+      return;
+    }
+
+    customerDashboardData = data;
+    renderCustomerDashboardUI();
+
+    if (targetTab) {
+      switchDashTab(targetTab);
+    }
+  } catch (err) {
+    console.error("Failed to fetch customer dashboard data", err);
+  }
+}
+
+function renderCustomerDashboardUI() {
+  if (!customerDashboardData) return;
+  const { customer, summary, appointments, notifications, reviews } = customerDashboardData;
+
+  const greetingEl = document.getElementById("custDashGreeting");
+  if (greetingEl) greetingEl.textContent = `Welcome back, ${customer.first_name}!`;
+
+  const emailEl = document.getElementById("custDashEmail");
+  if (emailEl) emailEl.textContent = `${customer.email} · Member since ${customer.joined_at}`;
+
+  const avatarEl = document.getElementById("custDashAvatar");
+  if (avatarEl) {
+    const initials = customer.first_name ? customer.first_name.substring(0, 1) + (customer.last_name ? customer.last_name.substring(0, 1) : "") : "AN";
+    avatarEl.textContent = initials.toUpperCase();
+  }
+
+  const confEl = document.getElementById("sumConfirmedCount");
+  if (confEl) confEl.textContent = summary.confirmed_count || 0;
+
+  const pendEl = document.getElementById("sumPendingCount");
+  if (pendEl) pendEl.textContent = summary.pending_count || 0;
+
+  const compEl = document.getElementById("sumCompletedCount");
+  if (compEl) compEl.textContent = summary.completed_count || 0;
+
+  const unreadEl = document.getElementById("sumUnreadNotifs");
+  if (unreadEl) unreadEl.textContent = summary.unread_notifications || 0;
+
+  const notifBadges = [document.getElementById("headerNotifBadge"), document.getElementById("custDashNotifBadge")];
+  notifBadges.forEach((b) => {
+    if (b) {
+      if (summary.unread_notifications > 0) {
+        b.textContent = summary.unread_notifications;
+        b.style.display = "inline-block";
+      } else {
+        b.style.display = "none";
+      }
+    }
+  });
+
+  renderHeaderNotificationsList(notifications);
+  renderDashRecentActivity(appointments);
+  renderDashBookingsList(appointments);
+  renderDashNotificationsList(notifications);
+  renderDashReviewsList(reviews, appointments);
+
+  const fnameInput = document.getElementById("custProfFirstName");
+  if (fnameInput) fnameInput.value = customer.first_name || "";
+
+  const lnameInput = document.getElementById("custProfLastName");
+  if (lnameInput) lnameInput.value = customer.last_name || "";
+
+  const emailInput = document.getElementById("custProfEmail");
+  if (emailInput) emailInput.value = customer.email || "";
+
+  const phoneInput = document.getElementById("custProfPhone");
+  if (phoneInput) phoneInput.value = customer.phone || "";
+
+  const passInput = document.getElementById("custProfNewPassword");
+  if (passInput) passInput.value = "";
+}
+
+function renderDashRecentActivity(appointments) {
+  const container = document.getElementById("custDashRecentActivity");
+  if (!container) return;
+
+  if (!appointments || appointments.length === 0) {
+    container.innerHTML = `
+      <div class="card card--center" style="padding: 2rem 1rem; text-align: center;">
+        <p style="font-size: 1rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.5rem;">No appointments yet</p>
+        <p class="muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Book your first luxury nail or spa treatment today!</p>
+        <button class="btn btn--brand" onclick="closeCustomerDashboard(); openBooking();">Book Appointment Now</button>
+      </div>
+    `;
+    return;
+  }
+
+  const recent = appointments.slice(0, 3);
+  container.innerHTML = recent.map((a) => renderAppointmentCardHtml(a)).join("");
+  bindDashAppointmentActionEvents(container);
+}
+
+function renderDashBookingsList(appointments) {
+  const container = document.getElementById("custDashBookingsList");
+  if (!container) return;
+
+  if (!appointments || appointments.length === 0) {
+    container.innerHTML = `
+      <div class="card card--center" style="padding: 2rem 1rem; text-align: center;">
+        <p style="font-size: 1rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.5rem;">No bookings found</p>
+        <p class="muted" style="font-size: 0.85rem; margin-bottom: 1rem;">You don't have any past or upcoming appointments.</p>
+        <button class="btn btn--brand" onclick="closeCustomerDashboard(); openBooking();">Book Appointment Now</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = appointments.map((a) => renderAppointmentCardHtml(a)).join("");
+  bindDashAppointmentActionEvents(container);
+}
+
+function renderAppointmentCardHtml(a) {
+  let statusBadgeClass = "badge--pending";
+  if (a.status === "Confirmed") statusBadgeClass = "badge--confirmed";
+  if (a.status === "Completed") statusBadgeClass = "badge--completed";
+  if (a.status === "Cancelled") statusBadgeClass = "badge--cancelled";
+
+  let actionHtml = "";
+  if (a.status === "Completed") {
+    if (a.has_rating) {
+      actionHtml = `<span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #b45309; border: 1px solid #fde68a; font-weight: 700;">✓ Rated (${a.rating_given} ★)</span>`;
+    } else {
+      actionHtml = `<button class="btn btn--brand dash-rate-now-btn" data-appid="${a.id}" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">⭐ Rate Now</button>`;
+    }
+  } else if (a.status === "Pending") {
+    actionHtml = `<span class="badge badge--pending" style="font-size:0.75rem;">Awaiting Approval</span>`;
+  } else if (a.status === "Confirmed") {
+    actionHtml = `<span class="badge badge--confirmed" style="font-size:0.75rem;">Confirmed Visit</span>`;
+  } else {
+    actionHtml = `<span class="badge badge--cancelled" style="font-size:0.75rem;">Cancelled</span>`;
+  }
+
+  return `
+    <div class="card" style="padding: 1.15rem; margin-bottom: 0.85rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.85rem; border-left: 4px solid ${getAppointmentBorderColor(a.status)};">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+          <span style="font-weight: 800; color: var(--brand-purple, #6b21a8); font-size: 0.95rem;">${a.id}</span>
+          <span class="badge ${statusBadgeClass}">${a.status}</span>
+        </div>
+        <p style="font-size: 0.9rem; font-weight: 700; color: var(--foreground); margin: 0 0 0.25rem;">${a.service}</p>
+        <p style="font-size: 0.8rem; color: var(--muted-foreground); margin: 0;">
+          📅 <strong>${a.date}</strong> at <strong>${a.time}</strong> · ₱${a.price.toFixed(2)}
+        </p>
+      </div>
+      <div>
+        ${actionHtml}
+      </div>
+    </div>
+  `;
+}
+
+function getAppointmentBorderColor(status) {
+  switch (status) {
+    case "Confirmed": return "#6b21a8";
+    case "Completed": return "#10b981";
+    case "Cancelled": return "#ef4444";
+    default: return "#eab308";
+  }
+}
+
+function bindDashAppointmentActionEvents(container) {
+  container.querySelectorAll(".dash-rate-now-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const appId = btn.dataset.appid;
+      closeCustomerDashboard();
+      openRateModalSpecific(appId);
+    });
+  });
+}
+
+async function openRateModalSpecific(targetAppId) {
+  await openRateModal();
+  if (targetAppId) {
+    const select = document.getElementById("rateAppointmentSelect");
+    if (select) {
+      select.value = targetAppId;
+    }
+  }
+}
+
+function renderDashNotificationsList(notifications) {
+  const container = document.getElementById("custDashNotificationsList");
+  if (!container) return;
+
+  if (!notifications || notifications.length === 0) {
+    container.innerHTML = `
+      <div class="card card--center" style="padding: 2rem 1rem; text-align: center;">
+        <p style="font-size: 1rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.5rem;">No notifications</p>
+        <p class="muted" style="font-size: 0.85rem;">You don't have any alerts yet.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = notifications.map((n) => {
+    let icon = "🔔";
+    if (n.type === "confirmed") icon = "✅";
+    if (n.type === "cancelled") icon = "❌";
+    if (n.type === "reminder") icon = "⏰";
+
+    const unreadStyle = !n.is_read ? "background: rgba(236, 72, 153, 0.05); border-left: 4px solid #ec4899;" : "border-left: 4px solid var(--border);";
+
+    return `
+      <div class="card" style="padding: 1rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; ${unreadStyle}">
+        <div style="display: flex; gap: 0.75rem;">
+          <span style="font-size: 1.25rem;">${icon}</span>
+          <div>
+            <p style="font-size: 0.9rem; font-weight: 700; color: var(--foreground); margin: 0 0 0.2rem;">${n.title}</p>
+            <p style="font-size: 0.825rem; color: var(--muted-foreground); margin: 0 0 0.35rem;">${n.message}</p>
+            <span style="font-size: 0.75rem; color: #9ca3af;">${n.created_at}</span>
+          </div>
+        </div>
+        ${!n.is_read ? `<button class="link-btn mark-notif-read-btn" data-id="${n.id}" style="font-size: 0.75rem; white-space: nowrap;">Mark Read</button>` : `<span style="font-size:0.75rem; color:#9ca3af;">Read</span>`}
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".mark-notif-read-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const notifId = btn.dataset.id;
+      const formData = new FormData();
+      formData.append("notification_id", notifId);
+      await fetch("includes/notifications/mark_read.php", { method: "POST", body: formData });
+      fetchCustomerDashboardData("notifications");
+    });
+  });
+}
+
+function renderHeaderNotificationsList(notifications) {
+  const container = document.getElementById("headerNotifList");
+  if (!container) return;
+
+  if (!notifications || notifications.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 1.5rem 0.5rem; text-align: center; color: var(--muted-foreground, #666); font-size: 0.825rem;">
+        No notifications yet
+      </div>
+    `;
+    return;
+  }
+
+  const recent = notifications.slice(0, 5);
+  container.innerHTML = recent.map((n) => {
+    let icon = "🔔";
+    if (n.type === "confirmed") icon = "✅";
+    if (n.type === "cancelled") icon = "❌";
+    if (n.type === "reminder") icon = "⏰";
+
+    const bg = !n.is_read ? "background: rgba(236, 72, 153, 0.06);" : "";
+    return `
+      <div style="padding: 0.6rem; border-radius: 8px; margin-bottom: 0.4rem; font-size: 0.8rem; ${bg}">
+        <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+          <span>${icon}</span>
+          <div>
+            <strong style="color: var(--foreground); font-size: 0.825rem;">${n.title}</strong>
+            <p style="margin: 0.15rem 0; color: var(--muted-foreground); line-height: 1.3;">${n.message}</p>
+            <span style="font-size: 0.7rem; color: #9ca3af;">${n.created_at}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// Notification Popover Toggle
+const notifBellBtn = document.getElementById("notifBellBtn");
+const notifDropdownPop = document.getElementById("notifDropdownPop");
+
+if (notifBellBtn && notifDropdownPop) {
+  notifBellBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    notifDropdownPop.hidden = !notifDropdownPop.hidden;
+  });
+  document.addEventListener("click", (e) => {
+    if (!notifDropdownPop.contains(e.target) && e.target !== notifBellBtn) {
+      notifDropdownPop.hidden = true;
+    }
+  });
+}
+
+const headerMarkAllNotifsRead = document.getElementById("headerMarkAllNotifsRead");
+if (headerMarkAllNotifsRead) {
+  headerMarkAllNotifsRead.addEventListener("click", async () => {
+    const formData = new FormData();
+    formData.append("mark_all", "1");
+    await fetch("includes/notifications/mark_read.php", { method: "POST", body: formData });
+    fetchCustomerDashboardData();
+    showToast("All notifications marked as read.");
+  });
+}
+
+const dashLogoutBtn = document.getElementById("dashLogoutBtn");
+if (dashLogoutBtn) {
+  dashLogoutBtn.addEventListener("click", () => {
+    closeCustomerDashboard();
+    logout();
+  });
+}
+
+const markAllNotifsReadBtn = document.getElementById("markAllNotifsReadBtn");
+if (markAllNotifsReadBtn) {
+  markAllNotifsReadBtn.addEventListener("click", async () => {
+    const formData = new FormData();
+    formData.append("mark_all", "1");
+    await fetch("includes/notifications/mark_read.php", { method: "POST", body: formData });
+    fetchCustomerDashboardData("notifications");
+    showToast("All notifications marked as read.");
+  });
+}
+
+function renderDashReviewsList(reviews, appointments) {
+  const container = document.getElementById("custDashReviewsList");
+  if (!container) return;
+
+  let html = "";
+
+  const unrated = (appointments || []).filter((a) => a.status === "Completed" && !a.has_rating);
+  if (unrated.length > 0) {
+    html += `
+      <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid #fde68a; padding: 1rem; border-radius: 12px; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <p style="font-weight: 700; color: #b45309; margin: 0 0 0.2rem; font-size: 0.9rem;">You have ${unrated.length} completed visit(s) to rate!</p>
+          <p style="font-size: 0.8rem; color: #666; margin: 0;">Share your experience to help us improve.</p>
+        </div>
+        <button class="btn btn--brand" id="dashRateVisitPromptBtn" style="padding: 0.4rem 0.85rem; font-size: 0.8rem;">⭐ Rate Visit Now</button>
+      </div>
+    `;
+  }
+
+  if (!reviews || reviews.length === 0) {
+    html += `
+      <div class="card card--center" style="padding: 2rem 1rem; text-align: center;">
+        <p style="font-size: 1rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.5rem;">No reviews submitted yet</p>
+        <p class="muted" style="font-size: 0.85rem;">Once you complete an appointment, you can share your feedback here.</p>
+      </div>
+    `;
+  } else {
+    html += reviews.map((r) => `
+      <div class="card" style="padding: 1rem; margin-bottom: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+          <span style="font-weight: 700; font-size: 0.9rem; color: var(--foreground);">${r.service_names} (${r.appointment_id})</span>
+          <span style="font-size: 0.85rem; color: #fbbf24;">${starsHtml(r.rating, "0.85rem")}</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--muted-foreground); margin: 0 0 0.35rem;">${r.review_text ? `"${r.review_text}"` : "<em>No written review provided.</em>"}</p>
+        <span style="font-size: 0.75rem; color: #9ca3af;">Submitted on ${r.created_at}</span>
+      </div>
+    `).join("");
+  }
+
+  container.innerHTML = html;
+
+  const promptBtn = container.querySelector("#dashRateVisitPromptBtn");
+  if (promptBtn) {
+    promptBtn.addEventListener("click", () => {
+      closeCustomerDashboard();
+      openRateModal();
+    });
+  }
+}
+
+const dashBookShortcutBtn = document.getElementById("dashBookShortcutBtn");
+if (dashBookShortcutBtn) {
+  dashBookShortcutBtn.addEventListener("click", () => {
+    closeCustomerDashboard();
+    openBooking();
+  });
+}
+
+const dashRateVisitBtn = document.getElementById("dashRateVisitBtn");
+if (dashRateVisitBtn) {
+  dashRateVisitBtn.addEventListener("click", () => {
+    closeCustomerDashboard();
+    openRateModal();
+  });
+}
+
+const custProfileForm = document.getElementById("custProfileForm");
+if (custProfileForm) {
+  custProfileForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fname = document.getElementById("custProfFirstName").value.trim();
+    const lname = document.getElementById("custProfLastName").value.trim();
+    const phone = document.getElementById("custProfPhone").value.trim();
+    const newPass = document.getElementById("custProfNewPassword").value;
+    const errEl = document.getElementById("custProfError");
+    const saveBtn = document.getElementById("custProfSaveBtn");
+
+    errEl.style.display = "none";
+    errEl.textContent = "";
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+
+    const formData = new FormData();
+    formData.append("first_name", fname);
+    formData.append("last_name", lname);
+    formData.append("phone", phone);
+    if (newPass) formData.append("new_password", newPass);
+
+    try {
+      const res = await fetch("includes/customers/update_profile.php", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showToast("Profile updated successfully!");
+        if (currentUser) {
+          currentUser.first_name = fname;
+          updateNavbarState();
+        }
+        document.getElementById("custProfNewPassword").value = "";
+        fetchCustomerDashboardData("profile");
+      } else {
+        errEl.textContent = data.error || "Failed to update profile.";
+        errEl.style.display = "block";
+      }
+    } catch (err) {
+      errEl.textContent = "An error occurred while updating profile.";
+      errEl.style.display = "block";
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Changes";
     }
   });
 }
