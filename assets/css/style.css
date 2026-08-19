@@ -502,6 +502,11 @@ img { max-width: 100%; display: block; }
 .booking-overlay[hidden], .overlay[hidden] {
   display: none !important;
 }
+.cust-dash-view {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
 .booking-modal {
   max-width: 42rem; width: min(92vw, 42rem); margin: 2rem auto;
   background: var(--card); border-radius: var(--radius-card); box-shadow: var(--shadow-float);

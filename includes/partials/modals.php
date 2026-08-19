@@ -227,7 +227,7 @@
   </div>
 
   <!-- ===== Rate Us Modal ===== -->
-  <div class="booking-overlay" id="rateOverlay" hidden style="align-items: center; justify-content: center; background: rgba(28, 27, 41, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+  <div class="booking-overlay" id="rateOverlay" hidden style="align-items: center; justify-content: center; background: rgba(28, 27, 41, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 1000;">
     <div class="auth-card" style="max-width: 460px; width: min(92vw, 460px); margin: 2rem auto; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
       <button class="overlay__close overlay__close--dark" id="rateClose" aria-label="Close modal" style="position: absolute; top: 1rem; right: 1rem;">✕</button>
       <div class="auth-card__logo" style="display: flex; align-items: center; justify-content: center; font-size: 2rem;">⭐</div>
@@ -271,8 +271,8 @@
   </div>
 
   <!-- ===== Customer Dashboard Modal ===== -->
-  <div class="booking-overlay" id="customerDashboardOverlay" hidden style="display: flex; align-items: center; justify-content: center; background: rgba(28, 27, 41, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 1.5rem 1rem;">
-    <div class="auth-card" style="max-width: 900px; width: min(96vw, 900px); max-height: 90vh; overflow-y: auto; margin: 1rem auto; position: relative; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border-radius: 16px; padding: 2rem;">
+  <div class="booking-overlay" id="customerDashboardOverlay" hidden style="display: flex; align-items: center; justify-content: center; background: rgba(28, 27, 41, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 1.5rem 1rem; z-index: 500;">
+    <div class="auth-card" style="max-width: 900px; width: min(96vw, 900px); height: min(85vh, 620px); display: flex; flex-direction: column; margin: 1rem auto; position: relative; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border-radius: 16px; padding: 1.75rem; overflow: hidden;">
       <button class="overlay__close overlay__close--dark" id="customerDashClose" aria-label="Close modal" style="position: absolute; top: 1.25rem; right: 1.25rem;">✕</button>
 
       <!-- Dashboard Header -->

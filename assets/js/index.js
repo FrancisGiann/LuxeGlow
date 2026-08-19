@@ -912,6 +912,7 @@ if (rateForm) {
         closeRateModal();
         showToast("Thank you for your review!");
         fetchReviewsPublic();
+        fetchCustomerDashboardData();
       } else {
         errEl.textContent = data.error || "Failed to submit review.";
         errEl.style.display = "block";
@@ -1179,7 +1180,6 @@ function bindDashAppointmentActionEvents(container) {
   container.querySelectorAll(".dash-rate-now-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const appId = btn.dataset.appid;
-      closeCustomerDashboard();
       openRateModalSpecific(appId);
     });
   });
