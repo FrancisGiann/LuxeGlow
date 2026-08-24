@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    // Public URL prefix for built assets — must match the htdocs sub-folder
+    // the dist output is deployed into ('/luxeglow/' in production).
+    base: env.VITE_ASSET_BASE || '/',
     // 'app' avoids colliding with the legacy assets/ folder when dist is
     // deployed into the PHP project root
     build: { assetsDir: 'app' },

@@ -83,7 +83,10 @@ function SidebarContent({ onNavigate }) {
       <div className="m-4 rounded-2xl border border-white/15 bg-white/10 p-5 text-center backdrop-blur-sm">
         <p className="text-sm font-bold text-white">Need help?</p>
         <p className="mb-3 mt-0.5 text-xs text-blush-100">We're here for you!</p>
-        <a href="/#faqs" className="block rounded-xl bg-black/25 py-2 text-xs font-bold text-white transition-colors hover:bg-black/40">
+        <a
+          href={`${import.meta.env.BASE_URL}#faqs`}
+          className="block rounded-xl bg-black/25 py-2 text-xs font-bold text-white transition-colors hover:bg-black/40"
+        >
           Contact Us
         </a>
       </div>

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DashboardProvider } from './context/DashboardContext';
 import { ToastProvider } from './components/ui/Toast';
@@ -25,9 +25,9 @@ function NotFound() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas px-4 text-center">
       <span className="font-display text-6xl font-extrabold text-brand-800">404</span>
       <p className="text-ink-500">This page doesn't exist.</p>
-      <a href="/" className="rounded-xl bg-brand-800 px-6 py-3 text-sm font-semibold text-white shadow-card hover:bg-brand-900">
+      <Link to="/" className="rounded-xl bg-brand-800 px-6 py-3 text-sm font-semibold text-white shadow-card hover:bg-brand-900">
         Back to Home
-      </a>
+      </Link>
     </div>
   );
 }
