@@ -12,6 +12,7 @@ async function fetchServicesAdmin() {
   if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--muted-foreground); grid-column: 1 / -1;">Loading services...</p>';
   try {
     const res = await fetch("includes/services/list.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     services = await res.json();
     if (document.getElementById("galleryGrid")) renderGallery();
     if (document.getElementById("popularServices") || document.getElementById("recentBookings")) renderDashboard();
@@ -44,6 +45,7 @@ let customers = [];
 async function fetchCustomersAdmin() {
   try {
     const res = await fetch("includes/customers/list.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     customers = await res.json();
     if (document.getElementById("historyBody")) {
       const historySearch = document.getElementById("historySearch");
@@ -60,6 +62,7 @@ let editingFaqId = null;
 async function fetchFaqsAdmin() {
   try {
     const res = await fetch("includes/faqs/list.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     faqs = await res.json();
     if (document.getElementById("faqManagerList")) renderFaqManager();
   } catch (err) {
@@ -994,6 +997,7 @@ async function fetchAboutAdmin() {
 
   try {
     const res = await fetch("includes/about/get.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
     nameInput.value = data.salon_name || "";
     descInput.value = data.description || "";

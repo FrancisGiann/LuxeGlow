@@ -13,6 +13,7 @@ async function fetchServices() {
   if (grid) grid.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--muted-foreground); grid-column: 1 / -1;">Loading services...</p>';
   try {
     const res = await fetch('includes/services/list.php');
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     SERVICES = await res.json();
     isServicesLoaded = true;
     renderServices();
@@ -34,6 +35,7 @@ let publicStats = { total_reviews: 0, average_rating: 0 };
 async function fetchReviewsPublic() {
   try {
     const res = await fetch("includes/reviews/list.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
     if (data.success) {
       publicReviews = data.reviews || [];
@@ -50,6 +52,7 @@ let FAQS = [];
 async function fetchFaqsPublic() {
   try {
     const res = await fetch("includes/faqs/list.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     FAQS = await res.json();
     if (document.getElementById("faqsList")) renderFaqs();
   } catch (err) {
@@ -191,6 +194,7 @@ async function fetchAboutPublic() {
 
   try {
     const res = await fetch("includes/about/get.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
     if (storyEl && data.description) {
       storyEl.textContent = data.description;
@@ -292,6 +296,7 @@ let currentUser = null;
 async function checkSession() {
   try {
     const res = await fetch("includes/auth/session_check.php");
+    if (!res.ok) throw new Error("HTTP error " + res.status);
     const data = await res.json();
     if (data.loggedIn) {
       currentUser = data.customer;
