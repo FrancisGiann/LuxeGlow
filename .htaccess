@@ -1,0 +1,19 @@
+# LuxeGlow — React SPA front door with PHP API passthrough.
+# Deployed to the project root (frontend/dist is copied there).
+
+# React index.html becomes the site home; index.php remains reachable
+# explicitly and redirects here.
+DirectoryIndex index.html index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Serve real files/folders untouched: PHP endpoints, uploads,
+  # admin dashboard, built assets, this SPA's own files.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Client-side routes (e.g. /dashboard/book) fall back to the SPA
+  RewriteRule ^ index.html [L]
+</IfModule>

@@ -1,0 +1,103 @@
+/* ==========================================================================
+   LuxeGlow Design System — single source of truth for every color, font,
+   radius and shadow in the React app. Components must consume these tokens;
+   no hardcoded hex values outside this file.
+   ========================================================================== */
+
+@import "tailwindcss";
+
+@theme {
+  /* ── Brand: Plum (replaces legacy #5b40e1 AND stray #6b21a8) ── */
+  --color-brand-50: #faf5ff;
+  --color-brand-100: #f3e8ff;
+  --color-brand-200: #e9d5ff;
+  --color-brand-300: #d8b4fe;
+  --color-brand-400: #b98af0;
+  --color-brand-500: #9333ea;
+  --color-brand-600: #7e22c0;
+  --color-brand-700: #6d1fa6;
+  --color-brand-800: #6b21a8; /* primary */
+  --color-brand-900: #581c87; /* primary hover */
+
+  /* ── Accent: Blush pink (CTAs & highlights only — never body colors) ── */
+  --color-blush-50: #fdf2f8;
+  --color-blush-100: #fce7f3;
+  --color-blush-300: #f9a8d4;
+  --color-blush-500: #ec4899;
+  --color-blush-600: #db2777;
+  --color-blush-700: #be185d;
+
+  /* ── Gold: ratings / premium accents ONLY ── */
+  --color-gold-100: #fef3c7;
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+
+  /* ── Ink: warm plum-tinted neutral text scale ── */
+  --color-ink-300: #b3acc4;
+  --color-ink-400: #8d85a3;
+  --color-ink-500: #6e6680; /* muted text */
+  --color-ink-700: #4a4258; /* body text */
+  --color-ink-900: #241c35; /* headings */
+
+  /* ── Surfaces ── */
+  --color-canvas: #faf8f5;      /* app background — warm porcelain */
+  --color-surface: #ffffff;     /* cards */
+  --color-line: #eae6ef;        /* borders */
+  --color-line-strong: #ddd7e5;
+
+  /* ── Semantic status ── */
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #e11d48;
+
+  /* ── Typography ── */
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Radii ── */
+  --radius-xl: 12px;   /* buttons, inputs */
+  --radius-2xl: 16px;  /* cards */
+  --radius-3xl: 24px;  /* hero panels */
+
+  /* ── Elevation tiers ── */
+  --shadow-card: 0 8px 24px -12px rgb(36 28 53 / 0.14);
+  --shadow-float: 0 18px 40px -18px rgb(36 28 53 / 0.22);
+  --shadow-pop: 0 12px 32px -10px rgb(36 28 53 / 0.28);
+}
+
+/* ── Base ─────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-canvas text-ink-700 font-sans antialiased;
+    line-height: 1.55;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display text-ink-900 tracking-tight;
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-brand-800);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ── Thin elegant scrollbars for dropdown panes ───────────────── */
+.scroll-slim::-webkit-scrollbar { width: 6px; }
+.scroll-slim::-webkit-scrollbar-track { background: transparent; }
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 9999px;
+}
