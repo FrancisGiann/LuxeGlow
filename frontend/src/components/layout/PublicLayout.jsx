@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getAbout } from '../../api/endpoints';
+import { useFetch } from '../../hooks/useFetch';
 import { AuthModal } from '../auth/AuthModal';
 import { getInitials } from '../../utils/format';
-import { IconMenu, IconX } from '../icons';
+import { IconClock, IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
 
 const NAV_LINKS = [
   ['Home', '#home'],
@@ -125,6 +127,9 @@ function Navbar() {
 }
 
 function Footer() {
+  const { data: about } = useFetch(getAbout);
+  const hours = (about?.business_hours || '').split('\n').map((l) => l.trim()).filter(Boolean);
+
   return (
     <footer id="contact" className="border-t border-line bg-surface">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
@@ -132,12 +137,13 @@ function Footer() {
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-800 to-blush-600 font-display text-base font-bold text-white">AN</span>
             <div>
-              <p className="font-display text-lg font-bold">Astrid Nails &amp; Beauty Bar</p>
+              <p className="font-display text-lg font-bold">{about?.salon_name || 'Astrid Nails & Beauty Bar'}</p>
               <p className="text-xs uppercase tracking-widest text-ink-400">LuxeGlow Experience</p>
             </div>
           </div>
-          <p className="mt-4 max-w-sm text-sm text-ink-500">
-            Your premier destination for beauty and wellness across Metro Manila. Premium products, certified professionals, one relaxing space.
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-500">
+            {about?.description ||
+              'Your premier destination for beauty and wellness. Premium products, certified professionals, one relaxing space.'}
           </p>
         </div>
         <div>
@@ -151,14 +157,23 @@ function Footer() {
         <div>
           <h4 className="text-sm font-bold uppercase tracking-wider text-ink-900">Visit us</h4>
           <ul className="mt-4 flex flex-col gap-2.5 text-sm text-ink-500">
-            <li>Open daily · 9:00 AM – 8:00 PM</li>
-            <li>Metro Manila, Philippines</li>
-            <li>hello@astridnails.ph</li>
+            {hours.map((line) => (
+              <li key={line} className="flex items-start gap-1.5"><span className="text-brand-800"><IconClock size={15} /></span>{line}</li>
+            ))}
+            {about?.address && (
+              <li className="flex items-start gap-1.5"><span className="shrink-0 pt-0.5 text-brand-800"><IconMapPin size={15} /></span>{about.address}</li>
+            )}
+            {about?.phone && (
+              <li className="flex items-start gap-1.5"><span className="pt-0.5 text-brand-800"><IconPhone size={15} /></span>{about.phone}</li>
+            )}
+            {about?.email && (
+              <li className="flex items-start gap-1.5"><span className="pt-0.5 text-brand-800"><IconMail size={15} /></span>{about.email}</li>
+            )}
           </ul>
         </div>
       </div>
       <div className="border-t border-line py-5 text-center text-xs text-ink-400">
-        © {new Date().getFullYear()} Astrid Nails &amp; Beauty Bar. All rights reserved.
+        © {new Date().getFullYear()} {about?.salon_name || 'Astrid Nails & Beauty Bar'}. All rights reserved.
       </div>
     </footer>
   );

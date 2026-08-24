@@ -993,6 +993,11 @@ async function fetchAboutAdmin() {
   const nameInput = document.getElementById("aboutName");
   const descInput = document.getElementById("aboutDesc");
   const missionInput = document.getElementById("aboutMission");
+  const phoneInput = document.getElementById("aboutPhone");
+  const emailInput = document.getElementById("aboutEmail");
+  const addressInput = document.getElementById("aboutAddress");
+  const hoursInput = document.getElementById("aboutHours");
+  const policiesInput = document.getElementById("aboutPolicies");
   if (!nameInput || !descInput || !missionInput) return;
 
   try {
@@ -1002,6 +1007,11 @@ async function fetchAboutAdmin() {
     nameInput.value = data.salon_name || "";
     descInput.value = data.description || "";
     missionInput.value = data.mission_statement || "";
+    if (phoneInput) phoneInput.value = data.phone || "";
+    if (emailInput) emailInput.value = data.email || "";
+    if (addressInput) addressInput.value = data.address || "";
+    if (hoursInput) hoursInput.value = data.business_hours || "";
+    if (policiesInput) policiesInput.value = data.salon_policies || "";
   } catch (err) {
     console.error("Failed to fetch About content", err);
   }
@@ -1023,6 +1033,18 @@ if (saveAboutBtn) {
     formData.append("salon_name", nameVal);
     formData.append("description", descVal);
     formData.append("mission_statement", missionVal);
+
+    const optionalFields = [
+      ["phone", "aboutPhone"],
+      ["email", "aboutEmail"],
+      ["address", "aboutAddress"],
+      ["business_hours", "aboutHours"],
+      ["salon_policies", "aboutPolicies"],
+    ];
+    optionalFields.forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      if (el) formData.append(key, el.value.trim());
+    });
 
     try {
       const res = await fetch("includes/about/update.php", {

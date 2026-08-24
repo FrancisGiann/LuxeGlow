@@ -100,3 +100,23 @@ export const IconSparkle = (p) => (
     <path d="M19 3v3M17.5 4.5h3" />
   </Svg>
 );
+
+export const IconPhone = (p) => (
+  <Svg {...p}>
+    <path d="M6.8 3.5H9l1.5 4-2 1.5a11.5 11.5 0 0 0 4.5 4.5l1.5-2 4 1.5v2.2a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4.8 5.7a2 2 0 0 1 2-2.2Z" />
+  </Svg>
+);
+
+export const IconMail = (p) => (
+  <Svg {...p}>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="m4.5 7 7.5 5.5L19.5 7" />
+  </Svg>
+);
+
+export const IconMapPin = (p) => (
+  <Svg {...p}>
+    <path d="M12 21s-6.5-5.2-6.5-10a6.5 6.5 0 1 1 13 0c0 4.8-6.5 10-6.5 10Z" />
+    <circle cx="12" cy="10.5" r="2.2" />
+  </Svg>
+);
