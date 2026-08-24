@@ -394,6 +394,14 @@ document.getElementById("loginSubmit").addEventListener("click", async () => {
       closeAuth();
       await checkSession();
       showToast(`Welcome back, ${currentUser.first_name}!`);
+    } else if (data.needs_verification) {
+      const emailDisplay = document.getElementById("verifyEmailDisplay");
+      if (emailDisplay) emailDisplay.textContent = document.getElementById("loginEmail").value;
+      
+      // Auto-trigger a resend to ensure they have an OTP
+      fetch("includes/auth/resend_otp.php", { method: "POST" });
+      
+      showAuthView("verify");
     } else {
       errEl.textContent = data.error;
       errEl.style.display = "block";
@@ -484,12 +492,48 @@ document.getElementById("registerSubmit").addEventListener("click", async () => 
   }
 });
 
-document.getElementById("resendBtn").addEventListener("click", startVerifyTimer);
+document.getElementById("resendBtn").addEventListener("click", async () => {
+  try {
+    const res = await fetch("includes/auth/resend_otp.php", { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      showToast("OTP resent successfully!");
+      startVerifyTimer();
+    } else {
+      showToast(data.error);
+    }
+  } catch (err) {
+    showToast("An error occurred while resending the OTP.");
+  }
+});
 document.getElementById("verifySubmit").addEventListener("click", async () => {
-  // TODO: Replace with real email OTP in Step 11
-  closeAuth();
-  await checkSession();
-  showToast(`Account verified! Welcome, ${currentUser.first_name}!`);
+  const otpInputs = document.querySelectorAll("#otpInputs input");
+  let otp = "";
+  otpInputs.forEach(input => otp += input.value);
+
+  if (otp.length !== 6) {
+    showToast("Please enter the 6-digit code.");
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('otp', otp);
+    const res = await fetch("includes/auth/verify.php", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeAuth();
+      await checkSession();
+      showToast(`Account verified! Welcome, ${currentUser ? currentUser.first_name : ''}!`);
+    } else {
+      showToast(data.error);
+    }
+  } catch (err) {
+    showToast("An error occurred during verification.");
+  }
 });
 
 // Run on page load

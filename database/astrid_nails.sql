@@ -116,6 +116,7 @@ CREATE TABLE `customers` (
   `phone` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `email_verified` tinyint(1) NOT NULL DEFAULT 0,
+  `otp_code` varchar(6) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`customer_id`),
   UNIQUE KEY `email` (`email`)

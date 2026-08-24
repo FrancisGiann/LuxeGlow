@@ -18,7 +18,7 @@ if (!$email || !$password) {
     exit;
 }
 
-$stmt = $pdo->prepare("SELECT customer_id, first_name, password_hash FROM customers WHERE email = ?");
+$stmt = $pdo->prepare("SELECT customer_id, first_name, password_hash, email_verified FROM customers WHERE email = ?");
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 
@@ -27,6 +27,11 @@ if ($user && password_verify($password, $user['password_hash'])) {
     $_SESSION['first_name'] = $user['first_name'];
     $_SESSION['email'] = $email;
     
+    if (!$user['email_verified']) {
+        echo json_encode(['success' => false, 'needs_verification' => true]);
+        exit;
+    }
+
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);

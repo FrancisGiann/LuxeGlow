@@ -49,21 +49,45 @@ if ($stmt->fetch()) {
 // Hash password
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
+$otp = sprintf("%06d", mt_rand(1, 999999));
+
 try {
     // Insert into database
-    // TODO: replace with real email OTP in Step 11 (set email_verified = 0 initially)
     $stmt = $pdo->prepare("
-        INSERT INTO customers (first_name, last_name, email, phone, password_hash, email_verified) 
-        VALUES (?, ?, ?, ?, ?, 1)
+        INSERT INTO customers (first_name, last_name, email, phone, password_hash, email_verified, otp_code) 
+        VALUES (?, ?, ?, ?, ?, 0, ?)
     ");
-    $stmt->execute([$firstName, $lastName, $email, $phone, $passwordHash]);
+    $stmt->execute([$firstName, $lastName, $email, $phone, $passwordHash, $otp]);
     
-    // Auto-login after registration
+    // Auto-login after registration but keep them unverified
     $_SESSION['customer_id'] = $pdo->lastInsertId();
     $_SESSION['first_name'] = $firstName;
     $_SESSION['email'] = $email;
     
+    // Send email
+    $mailConfig = require __DIR__ . '/../../config/mail.php';
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+    
+    $mail->isSMTP();
+    $mail->Host       = $mailConfig['host'];
+    $mail->SMTPAuth   = true;
+    $mail->Username   = $mailConfig['username'];
+    $mail->Password   = $mailConfig['password'];
+    $mail->SMTPSecure = $mailConfig['encryption'];
+    $mail->Port       = $mailConfig['port'];
+
+    $mail->setFrom($mailConfig['from_address'], $mailConfig['from_name']);
+    $mail->addAddress($email, $firstName . ' ' . $lastName);
+
+    $mail->isHTML(true);
+    $mail->Subject = 'Your Verification Code';
+    $mail->Body    = "Hello {$firstName},<br><br>Your verification code is: <b>{$otp}</b><br><br>Thank you!";
+
+    $mail->send();
+    
     echo json_encode(['success' => true]);
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Registration successful, but failed to send email: ' . $e->getMessage()]);
 } catch (PDOException $e) {
     echo json_encode(['success' => false, 'error' => 'Database error during registration.']);
 }
