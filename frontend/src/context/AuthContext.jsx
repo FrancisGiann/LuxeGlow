@@ -83,7 +83,12 @@ export function AuthProvider({ children }) {
 
   const resend = useCallback(async () => {
     const data = await api.resendOtp();
-    return { ok: !!data.success, error: data.error };
+    const retryAfter = Number(data.retry_after ?? data.remaining ?? 0);
+    return {
+      ok: !!data.success,
+      error: data.error,
+      retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 0,
+    };
   }, []);
 
   const requestPasswordReset = useCallback(async (email) => {

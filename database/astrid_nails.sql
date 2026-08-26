@@ -117,6 +117,8 @@ CREATE TABLE `customers` (
   `password_hash` varchar(255) NOT NULL,
   `email_verified` tinyint(1) NOT NULL DEFAULT 0,
   `otp_code` varchar(6) DEFAULT NULL,
+  `otp_expires_at` datetime DEFAULT NULL,
+  `otp_last_sent_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`customer_id`),
   UNIQUE KEY `email` (`email`)
@@ -129,7 +131,7 @@ CREATE TABLE `customers` (
 
 LOCK TABLES `customers` WRITE;
 /*!40000 ALTER TABLE `customers` DISABLE KEYS */;
-INSERT INTO `customers` VALUES (1,'Maria','Santos','maria.santos@email.com','0917 221 4488','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(2,'Jasmine','Reyes','jasmine.reyes@email.com','0918 553 1102','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(3,'Andrea','Lim','andrea.lim@email.com','0921 447 9080','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(4,'Paolo','Cruz','paolo.cruz@email.com','0906 118 2277','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(5,'Kim','Dela Cruz','kim.dc@email.com','0995 330 7712','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(6,'sadas','asdasd','asdad@ga.com','123123123','$2y$10$ddWT531G5TLRijifmw1bYuom9eRo1TKimaeZsFWZ37PZzBuojagJy',1,NULL,'2026-08-15 15:18:09'),(7,'sadas','asdasd','francisgiann25@gmail.com','123123123','$2y$10$CKdMMsvKspYTEhGndYXJPey/bXwP89.p7VYBb4gSfoubpjwj5tARS',1,NULL,'2026-08-15 15:19:27');
+INSERT INTO `customers` VALUES (1,'Maria','Santos','maria.santos@email.com','0917 221 4488','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,NULL,NULL,'2026-08-15 14:56:56'),(2,'Jasmine','Reyes','jasmine.reyes@email.com','0918 553 1102','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,NULL,NULL,'2026-08-15 14:56:56'),(3,'Andrea','Lim','andrea.lim@email.com','0921 447 9080','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,NULL,NULL,'2026-08-15 14:56:56'),(4,'Paolo','Cruz','paolo.cruz@email.com','0906 118 2277','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,NULL,NULL,'2026-08-15 14:56:56'),(5,'Kim','Dela Cruz','kim.dc@email.com','0995 330 7712','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,NULL,NULL,'2026-08-15 14:56:56'),(6,'sadas','asdasd','asdad@ga.com','123123123','$2y$10$ddWT531G5TLRijifmw1bYuom9eRo1TKimaeZsFWZ37PZzBuojagJy',1,NULL,NULL,NULL,'2026-08-15 15:18:09'),(7,'sadas','asdasd','francisgiann25@gmail.com','123123123','$2y$10$CKdMMsvKspYTEhGndYXJPey/bXwP89.p7VYBb4gSfoubpjwj5tARS',1,NULL,NULL,NULL,'2026-08-15 15:19:27');
 /*!40000 ALTER TABLE `customers` ENABLE KEYS */;
 UNLOCK TABLES;
 

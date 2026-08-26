@@ -47,6 +47,8 @@ export function AuthModal() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState(['', '', '', '', '', '']);
   const [resendIn, setResendIn] = useState(0);
+  const [resendForEmail, setResendForEmail] = useState('');
+  const [resendBusy, setResendBusy] = useState(false);
   const otpRefs = useRef([]);
   const resetCodeRefs = useRef([]);
 
@@ -54,7 +56,6 @@ export function AuthModal() {
     setError('');
     if (modalView === 'verify') {
       setOtp(['', '', '', '', '', '']);
-      setResendIn(300);
     }
     if (modalView === 'forgot-reset') setResetCode(['', '', '', '', '', '']);
     if (!modalView) {
@@ -81,6 +82,9 @@ export function AuthModal() {
   }, [modalView, closeAuth]);
 
   if (!modalView) return null;
+
+  const resendKey = String(verifyEmail || '').trim().toLowerCase();
+  const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
 
   const finishAndGoDashboard = () => {
     closeAuth();
@@ -140,7 +144,7 @@ export function AuthModal() {
 
   const handleVerify = async () => {
     const code = otp.join('');
-    if (code.length !== 6) {
+    if (!/^\d{6}$/.test(code)) {
       setError('Please enter the complete 6-digit code.');
       return;
     }
@@ -160,12 +164,21 @@ export function AuthModal() {
   };
 
   const handleResend = async () => {
-    if (resendIn > 0) return;
-    const res = await resend();
-    if (res.ok) {
-      toast('A new OTP has been sent.', 'info');
-      setResendIn(300);
-    } else toast(res.error || 'Could not resend the code right now.', 'error');
+    if (resendRemaining > 0 || resendBusy) return;
+    setResendBusy(true);
+    try {
+      const res = await resend();
+      if (res.retryAfter > 0) {
+        setResendForEmail(resendKey);
+        setResendIn(res.retryAfter);
+      }
+      if (res.ok) toast('A new OTP has been sent.', 'info');
+      else toast(res.error || 'Could not resend the code right now.', 'error');
+    } catch {
+      toast('Could not resend the code right now. Please try again.', 'error');
+    } finally {
+      setResendBusy(false);
+    }
   };
 
   const handleRequestReset = async (e) => {
@@ -391,8 +404,8 @@ export function AuthModal() {
               <Button block size="lg" loading={busy} onClick={handleVerify}>Verify code</Button>
               <div className="text-center text-sm text-ink-500">
                 Didn't get it?{' '}
-                <button type="button" onClick={handleResend} disabled={resendIn > 0} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
-                  {resendIn > 0 ? `Resend in ${Math.floor(resendIn / 60)}:${String(resendIn % 60).padStart(2, '0')}` : 'Resend email'}
+                <button type="button" onClick={handleResend} disabled={resendRemaining > 0 || resendBusy} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
+                  {resendBusy ? 'Sending…' : resendRemaining > 0 ? `Resend in ${Math.floor(resendRemaining / 60)}:${String(resendRemaining % 60).padStart(2, '0')}` : 'Resend email'}
                 </button>
               </div>
               <p className="text-center text-xs text-ink-400">
