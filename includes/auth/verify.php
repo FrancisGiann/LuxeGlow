@@ -37,5 +37,6 @@ try {
 
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {
+    error_log('OTP verification database error: ' . $e->getMessage());
     echo json_encode(['success' => false, 'error' => 'Database error.']);
 }

@@ -38,20 +38,20 @@ if (strlen($password) < 8) {
     exit;
 }
 
-// Check if email exists
-$stmt = $pdo->prepare("SELECT customer_id FROM customers WHERE email = ?");
-$stmt->execute([$email]);
-if ($stmt->fetch()) {
-    echo json_encode(['success' => false, 'error' => 'Email is already registered.']);
-    exit;
-}
-
 // Hash password
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
 $otp = sprintf("%06d", mt_rand(1, 999999));
 
 try {
+    // Check if email exists
+    $stmt = $pdo->prepare("SELECT customer_id FROM customers WHERE email = ?");
+    $stmt->execute([$email]);
+    if ($stmt->fetch()) {
+        echo json_encode(['success' => false, 'error' => 'Email is already registered.']);
+        exit;
+    }
+
     // Insert into database
     $stmt = $pdo->prepare("
         INSERT INTO customers (first_name, last_name, email, phone, password_hash, email_verified, otp_code) 
@@ -63,7 +63,17 @@ try {
     $_SESSION['customer_id'] = $pdo->lastInsertId();
     $_SESSION['first_name'] = $firstName;
     $_SESSION['email'] = $email;
-    
+} catch (PDOException $e) {
+    error_log('Registration database error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Database error during registration.']);
+    exit;
+} catch (Throwable $e) {
+    error_log('Registration failed: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Unable to complete registration.']);
+    exit;
+}
+
+try {
     // Send email
     $mailConfig = require __DIR__ . '/../../config/mail.php';
     $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
@@ -84,10 +94,10 @@ try {
     $mail->Body    = "Hello {$firstName},<br><br>Your verification code is: <b>{$otp}</b><br><br>Thank you!";
 
     $mail->send();
-    
-    echo json_encode(['success' => true]);
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => 'Registration successful, but failed to send email: ' . $e->getMessage()]);
-} catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => 'Database error during registration.']);
+} catch (Throwable $e) {
+    error_log('Registration verification email failed: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Registration completed, but the verification email could not be sent. Please try again.']);
+    exit;
 }
+
+echo json_encode(['success' => true]);

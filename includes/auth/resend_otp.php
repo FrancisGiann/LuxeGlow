@@ -20,7 +20,17 @@ $otp = sprintf("%06d", mt_rand(1, 999999));
 try {
     $stmt = $pdo->prepare("UPDATE customers SET otp_code = ? WHERE customer_id = ?");
     $stmt->execute([$otp, $_SESSION['customer_id']]);
-    
+} catch (PDOException $e) {
+    error_log('OTP resend database error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Database error while preparing the verification code.']);
+    exit;
+} catch (Throwable $e) {
+    error_log('OTP resend failed: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Unable to prepare a new verification code.']);
+    exit;
+}
+
+try {
     // Send email
     $mailConfig = require __DIR__ . '/../../config/mail.php';
     $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
@@ -41,10 +51,10 @@ try {
     $mail->Body    = "Hello {$_SESSION['first_name']},<br><br>Your new verification code is: <b>{$otp}</b><br><br>Thank you!";
 
     $mail->send();
-    
-    echo json_encode(['success' => true]);
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => 'Failed to resend email: ' . $e->getMessage()]);
-} catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => 'Database error.']);
+} catch (Throwable $e) {
+    error_log('OTP resend email failed: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'The new verification code was saved, but the email could not be sent. Please try again.']);
+    exit;
 }
+
+echo json_encode(['success' => true]);
