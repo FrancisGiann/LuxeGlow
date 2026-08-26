@@ -3,8 +3,8 @@ import * as api from '../api/endpoints';
 
 /**
  * Owns the PHP session state AND the auth modal (login / staff login /
- * register / OTP verify). Mirrors the legacy flows 1:1 — the untouched
- * endpoints decide everything.
+ * register / OTP verify / password reset). The PHP endpoints remain the
+ * source of truth for credential and token decisions.
  */
 const AuthContext = createContext(null);
 
@@ -50,10 +50,11 @@ export function AuthProvider({ children }) {
     }
     if (data.success) {
       await refreshSession();
+      closeAuth();
       return { ok: true };
     }
     return { ok: false, error: data.error || 'Invalid email or password.' };
-  }, [refreshSession]);
+  }, [refreshSession, closeAuth]);
 
   const loginStaff = useCallback(async (username, password) => {
     const data = await api.loginStaff(username, password);
@@ -85,6 +86,16 @@ export function AuthProvider({ children }) {
     return { ok: !!data.success, error: data.error };
   }, []);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    const data = await api.requestPasswordReset(email);
+    return { ok: !!data.success, error: data.error, message: data.message };
+  }, []);
+
+  const completePasswordReset = useCallback(async (fields) => {
+    const data = await api.completePasswordReset(fields);
+    return { ok: !!data.success, error: data.error, message: data.message };
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.logoutCustomer();
@@ -108,10 +119,12 @@ export function AuthProvider({ children }) {
       register,
       verify,
       resend,
+      requestPasswordReset,
+      completePasswordReset,
       logout,
       refreshSession,
     }),
-    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, verify, resend, logout, refreshSession]
+    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, verify, resend, requestPasswordReset, completePasswordReset, logout, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

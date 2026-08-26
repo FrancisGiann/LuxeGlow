@@ -97,9 +97,9 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
   const selected = ratable?.find((a) => String(a.appointment_id) === appointmentId);
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto overscroll-contain bg-ink-900/75 px-4 py-6 backdrop-blur-md sm:items-center sm:px-6 sm:py-8" role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="relative my-auto w-full max-w-md">
+      <div className="relative my-6 w-full max-w-md sm:my-8">
         <button
           onClick={onClose}
           aria-label="Close"
@@ -108,7 +108,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
           <IconX size={16} />
         </button>
 
-        <form onSubmit={submit} className="rounded-3xl border border-line bg-surface p-8 shadow-float">
+        <form onSubmit={submit} className="rounded-3xl border border-line bg-surface p-5 shadow-float sm:p-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gold-100 text-gold-600">
               <IconStar filled />

@@ -10,6 +10,8 @@ const VIEWS = {
   admin: 'Admin / Staff Login',
   register: 'Create an Account',
   verify: 'Verify Your Email',
+  'forgot-request': 'Reset Your Password',
+  'forgot-reset': 'Choose a New Password',
 };
 
 function BrandMark() {
@@ -23,21 +25,41 @@ function BrandMark() {
 }
 
 export function AuthModal() {
-  const { modalView, closeAuth, verifyEmail, openAuth, login, loginStaff, register, verify, resend } = useAuth();
+  const {
+    modalView,
+    closeAuth,
+    verifyEmail,
+    openAuth,
+    login,
+    loginStaff,
+    register,
+    verify,
+    resend,
+    requestPasswordReset,
+    completePasswordReset,
+  } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState(['', '', '', '', '', '']);
   const [resendIn, setResendIn] = useState(0);
   const otpRefs = useRef([]);
+  const resetCodeRefs = useRef([]);
 
   useEffect(() => {
     setError('');
     if (modalView === 'verify') {
       setOtp(['', '', '', '', '', '']);
       setResendIn(300);
+    }
+    if (modalView === 'forgot-reset') setResetCode(['', '', '', '', '', '']);
+    if (!modalView) {
+      setResetEmail('');
+      setResetCode(['', '', '', '', '', '']);
     }
   }, [modalView]);
 
@@ -60,7 +82,10 @@ export function AuthModal() {
 
   if (!modalView) return null;
 
-  const finishAndGoDashboard = () => navigate('/dashboard');
+  const finishAndGoDashboard = () => {
+    closeAuth();
+    navigate('/dashboard/overview', { replace: true });
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -143,6 +168,56 @@ export function AuthModal() {
     } else toast(res.error || 'Could not resend the code right now.', 'error');
   };
 
+  const handleRequestReset = async (e) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    const email = String(new FormData(e.currentTarget).get('email') || '').trim();
+    try {
+      const res = await requestPasswordReset(email);
+      if (res.ok) {
+        setResetEmail(email);
+        openAuth('forgot-reset');
+      } else setError(res.error || 'Could not process that request right now.');
+    } catch {
+      setError('Could not process that request right now. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCompleteReset = async (e) => {
+    e.preventDefault();
+    const fields = Object.fromEntries(new FormData(e.currentTarget));
+    const code = resetCode.join('');
+    if (code.length !== 6) {
+      setError('Please enter the complete 6-digit code.');
+      return;
+    }
+    if (fields.password !== fields.confirm_password) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError('');
+    setBusy(true);
+    try {
+      const res = await completePasswordReset({
+        email: resetEmail,
+        code,
+        password: fields.password,
+        confirmPassword: fields.confirm_password,
+      });
+      if (res.ok) {
+        openAuth('login');
+        toast('Password reset successful. You can now log in.', 'success');
+      } else setError(res.error || 'That code is invalid or expired.');
+    } catch {
+      setError('Could not reset your password right now. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const setOtpDigit = (i, val) => {
     const digit = val.replace(/\D/g, '').slice(-1);
     setOtp((prev) => prev.map((d, idx) => (idx === i ? digit : d)));
@@ -152,6 +227,16 @@ export function AuthModal() {
   const onOtpKeyDown = (i, e) => {
     if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
     if (e.key === 'Enter') handleVerify();
+  };
+
+  const setResetCodeDigit = (i, val) => {
+    const digit = val.replace(/\D/g, '').slice(-1);
+    setResetCode((prev) => prev.map((d, idx) => (idx === i ? digit : d)));
+    if (digit && i < 5) resetCodeRefs.current[i + 1]?.focus();
+  };
+
+  const onResetCodeKeyDown = (i, e) => {
+    if (e.key === 'Backspace' && !resetCode[i] && i > 0) resetCodeRefs.current[i - 1]?.focus();
   };
 
   return (
@@ -174,6 +259,8 @@ export function AuthModal() {
             {modalView === 'admin' && 'Restricted access for salon staff.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Enter the 6-digit code we emailed you.'}
+            {modalView === 'forgot-request' && 'We will email a reset code if that address is registered.'}
+            {modalView === 'forgot-reset' && 'Enter the code from your email and choose a new password.'}
           </p>
 
           {/* ── LOGIN ── */}
@@ -184,12 +271,62 @@ export function AuthModal() {
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Log in</Button>
               <div className="flex flex-col items-center gap-2 pt-2 text-sm text-ink-500">
+                <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Forgot password?</button>
                 <span>
                   New here?{' '}
                   <button type="button" onClick={() => openAuth('register')} className="font-semibold text-brand-800 hover:text-brand-900">Create an account</button>
                 </span>
                 <button type="button" onClick={() => openAuth('admin')} className="font-semibold text-brand-800 hover:text-brand-900">🔐 Staff / Admin sign-in</button>
               </div>
+            </form>
+          )}
+
+          {/* ── PASSWORD RESET REQUEST ── */}
+          {modalView === 'forgot-request' && (
+            <form onSubmit={handleRequestReset} className="mt-6 flex flex-col gap-4" noValidate>
+              <Input id="reset-request-email" name="email" type="email" label="Registered email address" placeholder="you@example.com" autoComplete="email" required />
+              {error && <p className="text-sm font-medium text-danger">{error}</p>}
+              <Button type="submit" block size="lg" loading={busy}>Send reset code</Button>
+              <p className="pt-1 text-center text-sm text-ink-500">
+                Remembered your password?{' '}
+                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">← Back to login</button>
+              </p>
+            </form>
+          )}
+
+          {/* ── PASSWORD RESET COMPLETION ── */}
+          {modalView === 'forgot-reset' && (
+            <form onSubmit={handleCompleteReset} className="mt-6 flex flex-col gap-4" noValidate>
+              <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Code sent to</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail}</p>
+              </div>
+              <div className="flex justify-center gap-2">
+                {resetCode.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { resetCodeRefs.current[i] = el; }}
+                    value={digit}
+                    onChange={(e) => setResetCodeDigit(i, e.target.value)}
+                    onKeyDown={(e) => onResetCodeKeyDown(i, e)}
+                    onFocus={(e) => e.target.select()}
+                    inputMode="numeric"
+                    maxLength={1}
+                    aria-label={`Reset code digit ${i + 1}`}
+                    className="h-12 w-11 rounded-xl border border-line bg-white text-center font-display text-xl font-bold text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
+                  />
+                ))}
+              </div>
+              <Input id="reset-password" name="password" type="password" label="New password" placeholder="Minimum 8 characters" autoComplete="new-password" minLength={8} required />
+              <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={8} required />
+              {error && <p className="text-sm font-medium text-danger">{error}</p>}
+              <Button type="submit" block size="lg" loading={busy}>Reset password</Button>
+              <p className="pt-1 text-center text-sm text-ink-500">
+                Need another code?{' '}
+                <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
+                <span className="mx-1">·</span>
+                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
+              </p>
             </form>
           )}
 

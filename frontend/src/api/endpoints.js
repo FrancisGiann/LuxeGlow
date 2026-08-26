@@ -10,6 +10,15 @@ export const registerCustomer = (fields) =>
   apiPost('includes/auth/register.php', fields);
 export const verifyOtp = (otp) => apiPost('includes/auth/verify.php', { otp });
 export const resendOtp = () => apiPost('includes/auth/resend_otp.php');
+export const requestPasswordReset = (email) =>
+  apiPost('includes/auth/request_password_reset.php', { email });
+export const completePasswordReset = ({ email, code, password, confirmPassword }) =>
+  apiPost('includes/auth/complete_password_reset.php', {
+    email,
+    code,
+    password,
+    confirm_password: confirmPassword,
+  });
 export const logoutCustomer = () => apiPost('includes/auth/logout.php');
 
 /* ── Public marketing content ─────────────────────────────────── */

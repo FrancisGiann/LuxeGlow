@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$email = trim($_POST['email'] ?? '');
+$email = strtolower(trim((string)($_POST['email'] ?? '')));
 $password = $_POST['password'] ?? '';
 
 if (!$email || !$password) {
@@ -23,6 +23,7 @@ $stmt->execute([$email]);
 $user = $stmt->fetch();
 
 if ($user && password_verify($password, $user['password_hash'])) {
+    session_regenerate_id(true);
     $_SESSION['customer_id'] = $user['customer_id'];
     $_SESSION['first_name'] = $user['first_name'];
     $_SESSION['email'] = $email;

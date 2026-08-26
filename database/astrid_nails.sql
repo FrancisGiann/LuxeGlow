@@ -129,9 +129,32 @@ CREATE TABLE `customers` (
 
 LOCK TABLES `customers` WRITE;
 /*!40000 ALTER TABLE `customers` DISABLE KEYS */;
-INSERT INTO `customers` VALUES (1,'Maria','Santos','maria.santos@email.com','0917 221 4488','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,'2026-08-15 14:56:56'),(2,'Jasmine','Reyes','jasmine.reyes@email.com','0918 553 1102','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,'2026-08-15 14:56:56'),(3,'Andrea','Lim','andrea.lim@email.com','0921 447 9080','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,'2026-08-15 14:56:56'),(4,'Paolo','Cruz','paolo.cruz@email.com','0906 118 2277','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,'2026-08-15 14:56:56'),(5,'Kim','Dela Cruz','kim.dc@email.com','0995 330 7712','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,'2026-08-15 14:56:56'),(6,'sadas','asdasd','asdad@ga.com','123123123','$2y$10$ddWT531G5TLRijifmw1bYuom9eRo1TKimaeZsFWZ37PZzBuojagJy',1,'2026-08-15 15:18:09'),(7,'sadas','asdasd','francisgiann25@gmail.com','123123123','$2y$10$CKdMMsvKspYTEhGndYXJPey/bXwP89.p7VYBb4gSfoubpjwj5tARS',1,'2026-08-15 15:19:27');
+INSERT INTO `customers` VALUES (1,'Maria','Santos','maria.santos@email.com','0917 221 4488','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(2,'Jasmine','Reyes','jasmine.reyes@email.com','0918 553 1102','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(3,'Andrea','Lim','andrea.lim@email.com','0921 447 9080','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(4,'Paolo','Cruz','paolo.cruz@email.com','0906 118 2277','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(5,'Kim','Dela Cruz','kim.dc@email.com','0995 330 7712','$2y$12$M9WtLhJa5iO7yQ9OuhZ30O98.gV.GbMyscP.C8rMlkGVBiQsPvQoO',1,NULL,'2026-08-15 14:56:56'),(6,'sadas','asdasd','asdad@ga.com','123123123','$2y$10$ddWT531G5TLRijifmw1bYuom9eRo1TKimaeZsFWZ37PZzBuojagJy',1,NULL,'2026-08-15 15:18:09'),(7,'sadas','asdasd','francisgiann25@gmail.com','123123123','$2y$10$CKdMMsvKspYTEhGndYXJPey/bXwP89.p7VYBb4gSfoubpjwj5tARS',1,NULL,'2026-08-15 15:19:27');
 /*!40000 ALTER TABLE `customers` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `password_reset_tokens`
+--
+
+DROP TABLE IF EXISTS `password_reset_tokens`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `password_reset_tokens` (
+  `reset_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `customer_id` int(11) NOT NULL,
+  `token_hash` varchar(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `attempts` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `used_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`reset_id`),
+  UNIQUE KEY `uq_password_reset_customer` (`customer_id`),
+  UNIQUE KEY `uq_password_reset_token_hash` (`token_hash`),
+  KEY `idx_password_reset_expires_at` (`expires_at`),
+  CONSTRAINT `fk_password_reset_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`customer_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `faqs`
