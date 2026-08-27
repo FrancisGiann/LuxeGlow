@@ -68,7 +68,7 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Card>
+      <Card className="p-6 sm:p-8">
         <CardHeader
           title="My Profile & Account Settings"
           subtitle="Update your personal details and account password."

@@ -10,12 +10,13 @@ export const getInitials = (first = '', last = '') => {
   return (a + b).toUpperCase() || 'A';
 };
 
-/** Combine the backend's raw_date ('YYYY-MM-DD') + raw_time ('HH:MM:SS'). */
+/** Parse the salon's Asia/Manila wall-clock date/time as an instant. */
 export const toAppointmentDate = (rawDate, rawTime) =>
-  new Date(`${rawDate}T${rawTime || '00:00:00'}`);
+  new Date(`${rawDate}T${rawTime || '00:00:00'}+08:00`);
 
 export const formatLongDate = (date) =>
   date.toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila',
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -23,4 +24,4 @@ export const formatLongDate = (date) =>
   });
 
 export const formatTime = (date) =>
-  date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
+  date.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });

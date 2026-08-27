@@ -114,6 +114,13 @@ export const IconMail = (p) => (
   </Svg>
 );
 
+export const IconPrinter = (p) => (
+  <Svg {...p}>
+    <path d="M7 9V4.5h10V9M7 17H4.5A1.5 1.5 0 0 1 3 15.5v-4A2.5 2.5 0 0 1 5.5 9h13a2.5 2.5 0 0 1 2.5 2.5v4a1.5 1.5 0 0 1-1.5 1.5H17" />
+    <path d="M7 14h10v6H7zM18 12h.01" />
+  </Svg>
+);
+
 export const IconMapPin = (p) => (
   <Svg {...p}>
     <path d="M12 21s-6.5-5.2-6.5-10a6.5 6.5 0 1 1 13 0c0 4.8-6.5 10-6.5 10Z" />

@@ -101,3 +101,63 @@
   background: var(--color-line-strong);
   border-radius: 9999px;
 }
+
+/* ── Receipt printing ────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  body.receipt-printing {
+    background: white !important;
+  }
+
+  /* The open preview is the only visible document while printing. */
+  body.receipt-printing * {
+    visibility: hidden !important;
+  }
+
+  body.receipt-printing .receipt-print-document,
+  body.receipt-printing .receipt-print-document * {
+    visibility: visible !important;
+  }
+
+  body.receipt-printing .receipt-print-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  body.receipt-printing .receipt-print-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  body.receipt-printing .receipt-print-actions,
+  body.receipt-printing .receipt-print-backdrop {
+    display: none !important;
+  }
+
+  body.receipt-printing .receipt-print-document,
+  body.receipt-printing .receipt-print-document * {
+    color: black !important;
+    background: white !important;
+    border-color: black !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.receipt-printing .receipt-print-document {
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    break-inside: avoid;
+  }
+}

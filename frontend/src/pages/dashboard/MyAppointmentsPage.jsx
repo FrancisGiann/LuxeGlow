@@ -6,9 +6,10 @@ import { EmptyState, SkeletonRows } from '../../components/ui/EmptyState';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { Button } from '../../components/ui/Button';
 import { RateVisitModal } from '../../components/dashboard/RateVisitModal';
+import { BookingReceiptModal } from '../../components/booking/BookingReceiptModal';
 import { classifyAppointments } from '../../utils/appointments';
 import { formatPeso, toAppointmentDate } from '../../utils/format';
-import { IconStar } from '../../components/icons';
+import { IconPrinter, IconStar } from '../../components/icons';
 
 const TABS = [
   ['upcoming', 'Upcoming'],
@@ -26,15 +27,16 @@ function StarsRow({ rating }) {
   );
 }
 
-function AppointmentCard({ appt, onRate }) {
+function AppointmentCard({ appt, onRate, onReceipt }) {
   const dt = toAppointmentDate(appt.raw_date, appt.raw_time);
   const dateLabel = dt.toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila',
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
-  const timeLabel = dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const timeLabel = dt.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
 
   return (
     <li className="flex flex-col gap-4 border-b border-line py-5 first:pt-0 last:border-b-0 last:pb-0 sm:flex-row sm:items-center">
@@ -63,19 +65,31 @@ function AppointmentCard({ appt, onRate }) {
         {appt.has_rating ? (
           <StarsRow rating={appt.rating_given} />
         ) : appt.status === 'Completed' ? (
-          <button onClick={() => onRate(appt.id)} className="text-xs font-bold text-blush-600 transition-colors hover:text-blush-700">
+          <button type="button" onClick={() => onRate(appt.id)} className="text-xs font-bold text-blush-600 transition-colors hover:text-blush-700">
             ★ Rate this visit
           </button>
         ) : null}
+        {appt.status === 'Completed' && (
+          <button
+            type="button"
+            onClick={() => onReceipt(appt)}
+            aria-label={`View or print receipt for appointment ${appt.id}`}
+            className="inline-flex items-center gap-1 text-xs font-bold text-brand-800 transition-colors hover:text-brand-900"
+          >
+            <IconPrinter size={13} />
+            View / Print Receipt
+          </button>
+        )}
       </div>
     </li>
   );
 }
 
 export function MyAppointmentsPage() {
-  const { appointments, loading } = useDashboard();
+  const { appointments, customer, loading } = useDashboard();
   const [tab, setTab] = useState('upcoming');
   const [rateFor, setRateFor] = useState(null); // appointment id | 'any'
+  const [receiptFor, setReceiptFor] = useState(null);
 
   const groups = useMemo(() => classifyAppointments(appointments), [appointments]);
   const visible = groups[tab];
@@ -149,7 +163,7 @@ export function MyAppointmentsPage() {
         {!loading && visible.length > 0 && (
           <ul className="divide-y divide-line">
             {visible.map((a) => (
-              <AppointmentCard key={a.id} appt={a} onRate={(id) => setRateFor(id)} />
+              <AppointmentCard key={a.id} appt={a} onRate={(id) => setRateFor(id)} onReceipt={(appt) => setReceiptFor(appt)} />
             ))}
           </ul>
         )}
@@ -157,6 +171,22 @@ export function MyAppointmentsPage() {
 
       {rateFor !== null && (
         <RateVisitModal presetAppointmentId={String(rateFor)} onClose={() => setRateFor(null)} />
+      )}
+
+      {receiptFor && (
+        <BookingReceiptModal
+          receipt={{
+            reference: receiptFor.id,
+            customer,
+            service: receiptFor.service,
+            raw_date: receiptFor.raw_date,
+            raw_time: receiptFor.raw_time,
+            price: receiptFor.price,
+            status: receiptFor.status,
+            createdAt: receiptFor.created_at,
+          }}
+          onClose={() => setReceiptFor(null)}
+        />
       )}
     </div>
   );

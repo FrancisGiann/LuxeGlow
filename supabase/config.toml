@@ -1,0 +1,10 @@
+# Functions validate their own boundary: process-notifications uses the
+# scheduler secret and invite-staff verifies the caller with the service client.
+[functions.process-notifications]
+verify_jwt = false
+
+[functions.invite-staff]
+verify_jwt = false
+
+[functions.reset-staff-password]
+verify_jwt = false

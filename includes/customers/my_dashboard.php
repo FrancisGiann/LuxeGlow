@@ -68,6 +68,7 @@ try {
             'service_image'=> !empty($row['service_image']) ? $row['service_image'] : '',
             'price'        => (float)$row['price'],
             'status'       => $row['status'],
+            'created_at'   => $row['created_at'],
             'has_rating'   => !empty($row['review_id']),
             'rating_given' => $row['rating_given'] ? (int)$row['rating_given'] : null,
             'review_text'  => $row['review_text'] ?: ''

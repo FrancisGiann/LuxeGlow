@@ -4,12 +4,12 @@ import { useAuth } from './AuthContext';
 
 /**
  * Single source of truth for the logged-in customer's data, sourced from the
- * untouched `my_dashboard.php` aggregate endpoint. Both the top-bar bell and
- * the dashboard Notifications page consume THIS state — which is what
- * guarantees the two can never drift apart (audit fix #4).
+ * Supabase RLS-protected aggregate queries. Both the top-bar bell and the
+ * dashboard Notifications page consume THIS state — which guarantees the two
+ * can never drift apart.
  *
  * Mutating actions (mark read) optimistically update local state, then
- * re-sync from the server in the background.
+ * re-sync from Supabase in the background.
  */
 const POLL_MS = 30_000;
 

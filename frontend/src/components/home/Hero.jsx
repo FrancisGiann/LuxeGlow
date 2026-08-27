@@ -66,8 +66,9 @@ export function Hero() {
         {/* Editorial collage */}
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 grid-rows-2 gap-4">
-            <div className="col-span-2 row-span-2 flex min-h-[380px] items-end rounded-3xl bg-gradient-to-br from-brand-800 via-brand-600 to-blush-600 p-7 shadow-float">
-              <p className="font-display text-2xl font-bold text-white">A sanctuary of style,<br />built around you.</p>
+            <div className="col-span-2 row-span-2 relative flex min-h-[380px] items-end overflow-hidden rounded-3xl bg-cover bg-center p-7 shadow-float" style={{ backgroundImage: "url('/homepage_hero.jpg')" }}>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+              <p className="relative z-10 font-display text-2xl font-bold text-white">A sanctuary of style,<br />built around you.</p>
             </div>
             <div className="flex items-end rounded-3xl border border-line bg-surface p-5 shadow-card">
               <p className="text-sm font-semibold text-ink-900">Nail Art Studio</p>

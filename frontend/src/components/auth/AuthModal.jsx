@@ -116,9 +116,7 @@ export function AuthModal() {
       const res = await loginStaff(f.get('username'), f.get('password'));
       if (res.ok) {
         toast('Welcome back, staff!', 'success');
-        // Legacy staff area stays on PHP for now (out of React scope)
-        const legacy = import.meta.env.VITE_LEGACY_APP_URL || '/luxeglow';
-        window.location.href = `${legacy.replace(/\/+$/, '')}/admin_dashboard.php`;
+        navigate(res.redirect || '/admin', { replace: true });
       } else setError(res.error);
     } catch {
       setError('Something went wrong. Please try again.');
@@ -190,7 +188,8 @@ export function AuthModal() {
       const res = await requestPasswordReset(email);
       if (res.ok) {
         setResetEmail(email);
-        openAuth('forgot-reset');
+        openAuth('login');
+        toast(res.message || 'Check your email for a secure password-reset link.', 'info');
       } else setError(res.error || 'Could not process that request right now.');
     } catch {
       setError('Could not process that request right now. Please try again.');
@@ -203,8 +202,8 @@ export function AuthModal() {
     e.preventDefault();
     const fields = Object.fromEntries(new FormData(e.currentTarget));
     const code = resetCode.join('');
-    if (code.length !== 6) {
-      setError('Please enter the complete 6-digit code.');
+    if (code && !/^\d{6}$/.test(code)) {
+      setError('Enter all 6 digits, or use the secure reset link from your email.');
       return;
     }
     if (fields.password !== fields.confirm_password) {
@@ -272,8 +271,8 @@ export function AuthModal() {
             {modalView === 'admin' && 'Restricted access for salon staff.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Enter the 6-digit code we emailed you.'}
-            {modalView === 'forgot-request' && 'We will email a reset code if that address is registered.'}
-            {modalView === 'forgot-reset' && 'Enter the code from your email and choose a new password.'}
+            {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
+            {modalView === 'forgot-reset' && 'Use the secure link from your email, then choose a new password.'}
           </p>
 
           {/* ── LOGIN ── */}
@@ -299,7 +298,7 @@ export function AuthModal() {
             <form onSubmit={handleRequestReset} className="mt-6 flex flex-col gap-4" noValidate>
               <Input id="reset-request-email" name="email" type="email" label="Registered email address" placeholder="you@example.com" autoComplete="email" required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy}>Send reset code</Button>
+              <Button type="submit" block size="lg" loading={busy}>Email reset link</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Remembered your password?{' '}
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">← Back to login</button>
@@ -314,6 +313,7 @@ export function AuthModal() {
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Code sent to</p>
                 <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail}</p>
               </div>
+              <p className="text-center text-sm text-ink-500">A reset link creates a short-lived recovery session. If your email template is configured for OTPs, enter that 6-digit code below.</p>
               <div className="flex justify-center gap-2">
                 {resetCode.map((digit, i) => (
                   <input
@@ -346,7 +346,7 @@ export function AuthModal() {
           {/* ── STAFF ── */}
           {modalView === 'admin' && (
             <form onSubmit={handleStaffLogin} className="mt-6 flex flex-col gap-4" noValidate>
-              <Input id="staff-username" name="username" label="Username" placeholder="e.g. astrid.admin" autoComplete="username" required />
+              <Input id="staff-username" name="username" type="email" label="Staff email address" placeholder="staff@example.com" autoComplete="username" required />
               <Input id="staff-password" name="password" type="password" label="Password" placeholder="••••••••" autoComplete="current-password" required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Log in as Staff</Button>

@@ -14,7 +14,7 @@ export function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Card>
+      <Card className="p-6 sm:p-8">
         <CardHeader
           title="Notifications Center"
           subtitle={unread ? `${unread} unread notification${unread > 1 ? 's' : ''}` : 'You are all caught up.'}

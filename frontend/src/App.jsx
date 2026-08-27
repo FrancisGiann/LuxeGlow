@@ -12,11 +12,19 @@ import { MyAppointmentsPage } from './pages/dashboard/MyAppointmentsPage';
 import { NotificationsPage } from './pages/dashboard/NotificationsPage';
 import { ReviewsPage } from './pages/dashboard/ReviewsPage';
 import { ProfilePage } from './pages/dashboard/ProfilePage';
+import { AdminPage } from './pages/AdminPage';
 
 function RequireAuth({ children }) {
   const { status } = useAuth();
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
+  return children;
+}
+
+function RequireStaff({ children }) {
+  const { status, customer } = useAuth();
+  if (status === 'loading') return <PageLoader />;
+  if (status === 'guest' || !['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
 
@@ -41,6 +49,7 @@ export default function App() {
             {/* Marketing site */}
             <Route element={<PublicLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/reset-password" element={<HomePage />} />
             </Route>
 
             {/* Web-app shell — deliberately distinct layout */}
@@ -60,6 +69,8 @@ export default function App() {
               <Route path="reviews" element={<ReviewsPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>
+
+            <Route path="/admin" element={<RequireStaff><AdminPage /></RequireStaff>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

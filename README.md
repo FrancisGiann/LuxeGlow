@@ -1,74 +1,58 @@
-# Astrid Nails & Beauty Bar — Project Setup Guide
+# Astrid Nails & Beauty Bar (LuxeGlow)
 
-Welcome to the Astrid Nails & Beauty Bar system (LuxeGlow capstone). The customer-facing
-frontend is a **React + Tailwind CSS** single-page app; the PHP backend (booking logic,
-conflict detection, notifications, MySQL) is untouched and continues to serve all data.
-
-## Architecture
+The active customer and staff application is a React/Vite SPA backed by
+Supabase Auth, Postgres/RLS, Storage and Edge Functions. The old PHP/MySQL
+surface remains only as a rollback archive; it is not an active data path.
 
 ```
-browser ──► React SPA (index.html, /app/*.js)      ← frontend/dist, deployed to project root
-              │  fetch() same-origin
-              ▼
-           PHP API endpoints (/includes/*)          ← unchanged backend
-           Admin dashboard (admin_dashboard.php)    ← still classic PHP (staff area)
+browser ──► React SPA ──► Supabase Auth + PostgREST/RPC + Storage
+                              │
+                              └── scheduled Edge Function ──► email provider
 ```
 
-- **Customer site:** `http://localhost/Luxeglow/` — React app (`/dashboard/*` are SPA routes)
-- **Staff/Admin area:** `http://localhost/Luxeglow/admin_dashboard.php` — legacy PHP, kept as-is
-- Legacy links (`index.php`, `customer_dashboard.php?tab=…`) 302-redirect into the React app
+## Local development
 
-## 1. Install XAMPP
-Download from [Apache Friends](https://www.apachefriends.org/index.html). Default settings with Apache + MySQL are fine.
-
-## 2. Copy the Project Files
-Paste this project folder into your XAMPP htdocs directory:
-`C:\xampp\htdocs\Luxeglow`
-
-> The deployed frontend ships pre-built in this repo (`index.html` + `/app/`). To skip Node entirely, jump to step 3.
-
-## 3. Start Apache and MySQL
-Use the XAMPP Control Panel and start both modules.
-
-## 4. Import the Database
-1. Open [http://localhost/phpmyadmin/](http://localhost/phpmyadmin/)
-2. **Import** tab → choose `database/astrid_nails.sql` → **Go**
-
-## 5. View the Website
-Open: **[http://localhost/Luxeglow/](http://localhost/Luxeglow/)**
-
-### Demo Customer Accounts
-- `maria.santos@email.com` / `password123`
-- `jasmine.reyes@email.com` / `password123`
-
-### Staff Login Credentials
-- **Super Admin:** `astrid.admin` / `Ast#2026luxe`
-- **Salon Manager:** `rina.mgr` / `Rina#2026`
-- **Nail Technician:** `joy.tech` / `Joy#2026`
-*(Sign in via "Login → Staff / Admin sign-in" on the React site, or directly at admin_dashboard.php)*
-
----
-
-## Frontend Development (React)
-
-The React source lives in `frontend/`. Rebuild after making changes:
-
-```bash
+```sh
 cd frontend
 npm install
-npm run dev        # dev server on http://localhost:5173, proxies /includes + /uploads to XAMPP
-npm run build      # production build → dist/
+cp .env.example .env.development
+# set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm run dev
 ```
 
-Deploy a fresh production build into the project root:
+Build with `npm run build`. Deploy the resulting `frontend/dist` directory to
+your chosen static host and configure its SPA fallback. `VITE_ASSET_BASE` and
+`VITE_ROUTER_BASE` must match the host sub-path when one is used.
 
-```bash
-# from the frontend/ folder
-cp -r dist/. ../
-```
+## Supabase setup
 
-Configuration lives in env files (see `.env.example`):
-- `.env.development` — Vite proxy target (`VITE_PHP_ORIGIN`, `VITE_PHP_SUBDIR`)
-- `.env.production` — `VITE_API_BASE=/luxeglow` (sub-path prefix baked into the bundle)
+1. Create a Supabase project and configure email Auth (SMTP/provider and OTP or
+   recovery templates) plus the production redirect URL.
+2. Install the Supabase CLI, link the project, and run
+   `supabase db push`. The canonical schema and RLS policies are in
+   [`database/supabase/`](database/supabase/README.md).
+3. Set Edge Function secrets for `process-notifications` and `invite-staff`.
+   Schedule `process-notifications` once per minute with the documented
+   `x-cron-token` header.
+4. Seed services/content and migrate existing MariaDB data using the
+   read-only exporter and transactional import runbook. Do not import legacy
+   password hashes directly into GoTrue; use forced reset/invitation.
 
-Change it if your htdocs folder name differs.
+Required variables are documented in [`.env.example`](.env.example) and
+`frontend/.env.example`. `SUPABASE_SERVICE_ROLE_KEY` is server-only and must
+never use a `VITE_` prefix.
+
+## Active workflows
+
+- Customers register, verify email, sign in, reset passwords, update profiles,
+  view notifications/reviews, upload no privileged data, and book appointments
+  through the `book_appointment` RPC.
+- Staff/admin users sign in with Supabase Auth and use the `/admin` workspace
+  for appointment status, services and Storage image management. Admins can
+  invite additional staff through the protected Edge Function.
+- Postgres triggers create notification rows/outbox jobs. The scheduled worker
+  sends transactional mail and performs late pending cancellation/reminders.
+
+For migration, password handling, timezone guarantees, scheduler setup,
+rollback, and the explicit legacy boundary, read
+[`database/supabase/README.md`](database/supabase/README.md).

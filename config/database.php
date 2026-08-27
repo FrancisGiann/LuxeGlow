@@ -1,51 +1,44 @@
 <?php
-// config/database.php
+// Legacy PHP compatibility boundary.
+//
+// The active application uses Supabase PostgREST/RPC and never includes this
+// file. Keep a Postgres PDO connection available only for a separately audited
+// PHP compatibility port; the old MySQL/MariaDB DSN has deliberately been
+// removed so legacy endpoints fail closed instead of dual-writing data.
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
 
-define('DB_HOST', $_ENV['DB_HOST'] ?? '127.0.0.1');
-define('DB_NAME', $_ENV['DB_NAME'] ?? 'astrid_nails');
-define('DB_USER', $_ENV['DB_USER'] ?? 'root');
-define('DB_PASS', $_ENV['DB_PASS'] ?? '');
+$dsn = trim((string)($_ENV['SUPABASE_PDO_DSN'] ?? ''));
+$user = (string)($_ENV['SUPABASE_DB_USER'] ?? '');
+$password = (string)($_ENV['SUPABASE_DB_PASSWORD'] ?? '');
 
-try {
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ]
-    );
-} catch (PDOException $e) {
-    // Endpoint scripts live under includes/, while page scripts may include this
-    // file to render HTML. Use the actual caller path instead of request headers
-    // or URL text, which can be absent or spoofed.
-    $caller = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[0]['file'] ?? '';
-    $caller = $caller !== '' ? realpath($caller) : false;
-    $endpointDirectory = realpath(__DIR__ . '/../includes');
-    $isEndpoint = $caller !== false
-        && $endpointDirectory !== false
-        && strncmp($caller, $endpointDirectory . DIRECTORY_SEPARATOR, strlen($endpointDirectory . DIRECTORY_SEPARATOR)) === 0;
-
-    // Keep connection details out of responses; retain the diagnostic in the
-    // server log for operators.
-    error_log('Database connection failed: ' . $e->getMessage());
-
-    if ($isEndpoint) {
-        http_response_code(500);
+if ($dsn === '' || $user === '') {
+    error_log('Legacy PHP database boundary is disabled; use Supabase client/RPC or configure SUPABASE_PDO_DSN for an audited compatibility port.');
+    http_response_code(503);
+    if (PHP_SAPI !== 'cli') {
         header('Content-Type: application/json; charset=UTF-8');
-        echo json_encode(['success' => false, 'error' => 'Database connection unavailable.']);
+        echo json_encode(['success' => false, 'error' => 'Legacy PHP data boundary is disabled.']);
         exit;
     }
+    throw new RuntimeException('Legacy PHP database boundary is disabled.');
+}
 
-    // Direct page includes retain a plain failure response without leaking
-    // connection details.
-    http_response_code(500);
-    die('Database connection unavailable.');
+try {
+    $pdo = new PDO($dsn, $user, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+} catch (PDOException $e) {
+    error_log('Supabase Postgres compatibility connection failed: ' . $e->getMessage());
+    http_response_code(503);
+    if (PHP_SAPI !== 'cli') {
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['success' => false, 'error' => 'Legacy PHP data boundary unavailable.']);
+        exit;
+    }
+    throw new RuntimeException('Legacy PHP database boundary unavailable.', 0, $e);
 }

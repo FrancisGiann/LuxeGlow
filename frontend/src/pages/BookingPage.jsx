@@ -8,18 +8,22 @@ import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Field';
 import { Spinner } from '../components/ui/Spinner';
+import { BookingReceiptModal } from '../components/booking/BookingReceiptModal';
 import { IconCheckCircle, IconClock, IconStar } from '../components/icons';
 import { formatPeso } from '../utils/format';
 
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const manilaISO = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
+const todayISO = () => manilaISO();
+
 const maxISO = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 60);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [year, month, day] = manilaISO().split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day + 60));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 };
 
 /* ── Section 1: service picker ─────────────────────────────────── */
@@ -108,48 +112,71 @@ function SlotGrid({ slots, loading, selectedTime, onSelect }) {
 }
 
 /* ── Success panel ─────────────────────────────────────────────── */
-function BookingSuccess({ reference, summary, onBookAnother }) {
+function BookingSuccess({ reference, summary, customer, onBookAnother }) {
   const navigate = useNavigate();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
   return (
-    <Card className="mx-auto max-w-2xl p-8 text-center sm:p-10">
-      <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
-        <IconCheckCircle size={34} />
-      </span>
-      <h2 className="mt-5 font-display text-3xl font-bold">Booking Confirmed!</h2>
-      <p className="mt-2 text-sm text-ink-500">
-        Your request has been received and is currently <strong className="text-warning">Pending</strong> approval.
-        We'll notify you once the salon confirms.
-      </p>
+    <>
+      <Card className="mx-auto max-w-2xl p-8 text-center sm:p-10">
+        <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
+          <IconCheckCircle size={34} />
+        </span>
+        <h2 className="mt-5 font-display text-3xl font-bold">Booking Confirmed!</h2>
+        <p className="mt-2 text-sm text-ink-500">
+          Your request has been received and is currently <strong className="text-warning">Pending</strong> approval.
+          We'll notify you once the salon confirms.
+        </p>
 
-      <div className="mx-auto mt-7 max-w-sm rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 px-6 py-5">
-        <p className="text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Your booking reference</p>
-        <p className="mt-1 font-display text-3xl font-extrabold tracking-wide text-brand-800">{reference}</p>
-      </div>
+        <div className="mx-auto mt-7 max-w-sm rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Your booking reference</p>
+          <p className="mt-1 font-display text-3xl font-extrabold tracking-wide text-brand-800">{reference}</p>
+        </div>
 
-      <dl className="mx-auto mt-7 max-w-sm space-y-2.5 rounded-2xl border border-line px-6 py-5 text-left text-sm">
-        {summary.services && (
-          <>
-            <dt className="text-xs font-bold uppercase tracking-wide text-ink-400">Services</dt>
-            <dd className="mb-2 font-medium text-ink-900">{summary.services}</dd>
-          </>
-        )}
-        <div className="flex justify-between"><dt className="text-ink-500">Date</dt><dd className="font-medium">{summary.date}</dd></div>
-        <div className="flex justify-between"><dt className="text-ink-500">Time</dt><dd className="font-medium">{summary.time}</dd></div>
-        <div className="flex justify-between border-t border-line pt-2.5"><dt className="font-bold text-ink-900">Total</dt><dd className="font-display text-lg font-bold text-brand-800">{formatPeso(summary.total)}</dd></div>
-      </dl>
+        <dl className="mx-auto mt-7 max-w-sm space-y-2.5 rounded-2xl border border-line px-6 py-5 text-left text-sm">
+          {summary.services && (
+            <>
+              <dt className="text-xs font-bold uppercase tracking-wide text-ink-400">Services</dt>
+              <dd className="mb-2 font-medium text-ink-900">{summary.services}</dd>
+            </>
+          )}
+          <div className="flex justify-between"><dt className="text-ink-500">Date</dt><dd className="font-medium">{summary.date}</dd></div>
+          <div className="flex justify-between"><dt className="text-ink-500">Time</dt><dd className="font-medium">{summary.time}</dd></div>
+          <div className="flex justify-between border-t border-line pt-2.5"><dt className="font-bold text-ink-900">Service total</dt><dd className="font-display text-lg font-bold text-brand-800">{formatPeso(summary.total)}</dd></div>
+        </dl>
 
-      <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-        <Button onClick={() => navigate('/dashboard/appointments')}>View My Appointments</Button>
-        <Button variant="soft" onClick={onBookAnother}>Book Another</Button>
-      </div>
-    </Card>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Button type="button" onClick={() => navigate('/dashboard/appointments')}>View My Appointments</Button>
+          <Button type="button" variant="soft" onClick={() => setReceiptOpen(true)}>View / Print Receipt</Button>
+          <Button type="button" variant="ghost" onClick={onBookAnother}>Book Another</Button>
+        </div>
+        <p className="mt-4 text-xs font-medium text-ink-400">Appointment record only — not proof of payment.</p>
+      </Card>
+
+      {receiptOpen && (
+        <BookingReceiptModal
+          receipt={{
+            reference,
+            customer,
+            services: summary.serviceItems || summary.services,
+            appointmentDate: summary.rawDate,
+            appointmentTime: summary.rawTime || summary.time,
+            dateLabel: summary.date,
+            serviceTotal: summary.total,
+            status: 'Pending',
+            createdAt: summary.createdAt,
+          }}
+          onClose={() => setReceiptOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
 /* ── Page ──────────────────────────────────────────────────────── */
 export function BookingPage() {
   const { customer } = useAuth();
-  const { refresh: refreshDashboard } = useDashboard();
+  const { customer: dashboardCustomer, refresh: refreshDashboard } = useDashboard();
   const toast = useToast();
 
   const [services, setServices] = useState(null);
@@ -209,7 +236,7 @@ export function BookingPage() {
 
   const prettyDate = useMemo(() => {
     if (!date) return '';
-    const d = new Date(`${date}T00:00:00`);
+    const d = new Date(`${date}T00:00:00+08:00`);
     return d.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   }, [date]);
 
@@ -224,13 +251,19 @@ export function BookingPage() {
     try {
       const res = await createAppointment({ serviceIds: selectedIds, date, time });
       if (res.success) {
+        const createdAt = new Date().toISOString();
         setSuccess({
           reference: res.appointment_id,
+          customer: dashboardCustomer || customer,
           summary: {
             services: selectedServices.map((s) => s.name).join(', '),
+            serviceItems: selectedServices.map((s) => ({ name: s.name, price: s.price })),
+            rawDate: date,
+            rawTime: time,
             date: prettyDate,
             time,
             total: totalPrice,
+            createdAt,
           },
         });
         refreshDashboard();
@@ -264,7 +297,7 @@ export function BookingPage() {
   if (success) {
     return (
       <div className="mx-auto max-w-6xl">
-        <BookingSuccess reference={success.reference} summary={success.summary} onBookAnother={resetForm} />
+        <BookingSuccess reference={success.reference} summary={success.summary} customer={success.customer} onBookAnother={resetForm} />
       </div>
     );
   }

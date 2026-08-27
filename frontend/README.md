@@ -1,16 +1,19 @@
-# React + Vite
+# LuxeGlow frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This React/Vite app talks directly to Supabase with the publishable anon key.
+There is no PHP session or same-origin API proxy in the active frontend.
 
-Currently, two official plugins are available:
+```sh
+npm install
+cp .env.example .env.development
+# fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm run dev
+npm run build
+npm run lint
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+The client-side `src/api` modules only issue RLS-protected PostgREST queries,
+Storage operations, and the `book_appointment` RPC. Service-role operations
+such as staff invitations and notification email delivery run in Supabase
+Edge Functions. See [`../database/supabase/README.md`](../database/supabase/README.md)
+for deployment and migration instructions.
