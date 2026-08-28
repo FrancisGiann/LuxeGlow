@@ -1,8 +1,12 @@
-export function Card({ as: Tag = 'div', className = '', hoverable = false, children, ...props }) {
+export function Card({ as: Tag = 'div', className = '', hoverable = false, elevated = false, children, ...props }) {
   return (
     <Tag
-      className={`rounded-2xl border border-line bg-surface shadow-card ${
-        hoverable ? 'transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-float' : ''
+      className={`rounded-2xl border border-line bg-surface ${
+        hoverable ? 'group' : ''
+      } ${
+        elevated ? 'shadow-card' : ''
+      } ${
+        hoverable ? 'transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300' : ''
       } ${className}`}
       {...props}
     >
@@ -11,15 +15,12 @@ export function Card({ as: Tag = 'div', className = '', hoverable = false, child
   );
 }
 
-export function SectionHeading({ eyebrow, title, subtitle, align = 'center' }) {
+export function SectionHeading({ title, subtitle, align = 'center' }) {
   const alignCls = align === 'center' ? 'items-center text-center mx-auto' : 'items-start text-left';
   return (
     <div className={`flex max-w-2xl flex-col gap-3 ${alignCls}`}>
-      {eyebrow && (
-        <span className="text-xs font-bold uppercase tracking-[0.2em] text-blush-600">{eyebrow}</span>
-      )}
-      <h2 className="font-display text-3xl font-bold sm:text-4xl">{title}</h2>
-      {subtitle && <p className="text-base text-ink-500">{subtitle}</p>}
+      <h2 className="font-display text-3xl font-medium leading-tight sm:text-4xl">{title}</h2>
+      {subtitle && <p className="max-w-xl text-base leading-relaxed text-ink-500">{subtitle}</p>}
     </div>
   );
 }

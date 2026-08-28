@@ -1,50 +1,51 @@
 /* ==========================================================================
-   LuxeGlow Design System — single source of truth for every color, font,
-   radius and shadow in the React app. Components must consume these tokens;
-   no hardcoded hex values outside this file.
+   Astrid Nails & Beauty Bar — Soft Luxury Salon design tokens.
+   Components consume these tokens so the public and operational surfaces
+   share one visual language without flattening their different densities.
    ========================================================================== */
 
 @import "tailwindcss";
 
 @theme {
-  /* ── Brand: Plum (replaces legacy #5b40e1 AND stray #6b21a8) ── */
-  --color-brand-50: #faf5ff;
-  --color-brand-100: #f3e8ff;
-  --color-brand-200: #e9d5ff;
-  --color-brand-300: #d8b4fe;
-  --color-brand-400: #b98af0;
-  --color-brand-500: #9333ea;
-  --color-brand-600: #7e22c0;
-  --color-brand-700: #6d1fa6;
-  --color-brand-800: #6b21a8; /* primary */
-  --color-brand-900: #581c87; /* primary hover */
+  /* Plum: primary actions and selected states. */
+  --color-brand-50: #f8f1f8;
+  --color-brand-100: #eee0ee;
+  --color-brand-200: #dcc2dc;
+  --color-brand-300: #c197c4;
+  --color-brand-400: #a06aaa;
+  --color-brand-500: #7d398e;
+  --color-brand-600: #6c147e;
+  --color-brand-700: #581568;
+  --color-brand-800: #4a146b;
+  --color-brand-900: #32103f;
 
-  /* ── Accent: Blush pink (CTAs & highlights only — never body colors) ── */
-  --color-blush-50: #fdf2f8;
-  --color-blush-100: #fce7f3;
-  --color-blush-300: #f9a8d4;
-  --color-blush-500: #ec4899;
-  --color-blush-600: #db2777;
-  --color-blush-700: #be185d;
+  /* Blush fields and secondary emphasis. */
+  --color-blush-50: #fbf5f3;
+  --color-blush-100: #ebdfdc;
+  --color-blush-200: #e1cbc7;
+  --color-blush-300: #d7b6b0;
+  --color-blush-500: #bf6d83;
+  --color-blush-600: #a84969;
+  --color-blush-700: #87344f;
 
-  /* ── Gold: ratings / premium accents ONLY ── */
-  --color-gold-100: #fef3c7;
-  --color-gold-400: #fbbf24;
-  --color-gold-500: #f59e0b;
-  --color-gold-600: #d97706;
+  /* Brass is deliberately quiet. */
+  --color-gold-100: #f3eadc;
+  --color-gold-400: #d5bd8f;
+  --color-gold-500: #b69a42;
+  --color-gold-600: #806b2b;
 
-  /* ── Ink: warm plum-tinted neutral text scale ── */
-  --color-ink-300: #b3acc4;
-  --color-ink-400: #8d85a3;
-  --color-ink-500: #6e6680; /* muted text */
-  --color-ink-700: #4a4258; /* body text */
-  --color-ink-900: #241c35; /* headings */
+  /* Ink has enough blue to stay crisp on porcelain. */
+  --color-ink-300: #bbb5bf;
+  --color-ink-400: #8b828d;
+  --color-ink-500: #68606b;
+  --color-ink-700: #38323c;
+  --color-ink-900: #17172e;
 
   /* ── Surfaces ── */
-  --color-canvas: #faf8f5;      /* app background — warm porcelain */
-  --color-surface: #ffffff;     /* cards */
-  --color-line: #eae6ef;        /* borders */
-  --color-line-strong: #ddd7e5;
+  --color-canvas: #fbfaf9;
+  --color-surface: #fffefd;
+  --color-line: #e9e3df;
+  --color-line-strong: #d5ccc6;
 
   /* ── Semantic status ── */
   --color-success: #059669;
@@ -52,30 +53,54 @@
   --color-danger: #e11d48;
 
   /* ── Typography ── */
-  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bodoni Moda", Georgia, serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 
   /* ── Radii ── */
-  --radius-xl: 12px;   /* buttons, inputs */
-  --radius-2xl: 16px;  /* cards */
-  --radius-3xl: 24px;  /* hero panels */
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 16px;
 
   /* ── Elevation tiers ── */
-  --shadow-card: 0 8px 24px -12px rgb(36 28 53 / 0.14);
-  --shadow-float: 0 18px 40px -18px rgb(36 28 53 / 0.22);
-  --shadow-pop: 0 12px 32px -10px rgb(36 28 53 / 0.28);
+  --shadow-card: 0 8px 24px -16px rgb(23 23 46 / 0.2);
+  --shadow-float: 0 18px 40px -20px rgb(23 23 46 / 0.27);
+  --shadow-pop: 0 14px 36px -18px rgb(23 23 46 / 0.32);
 }
 
 /* ── Base ─────────────────────────────────────────────────────── */
 @layer base {
+  :root {
+    color-scheme: light;
+    accent-color: var(--color-brand-800);
+  }
+
   html {
     scroll-behavior: smooth;
+    scrollbar-color: var(--color-line-strong) var(--color-canvas);
+    scrollbar-width: thin;
   }
 
   body {
     @apply bg-canvas text-ink-700 font-sans antialiased;
     line-height: 1.55;
+    caret-color: var(--color-brand-800);
   }
+
+  button, input, textarea, select { font: inherit; }
+
+  button:disabled { cursor: not-allowed; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--color-canvas); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border: 3px solid var(--color-canvas);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-400); }
+
+  input, textarea, select { caret-color: var(--color-brand-800); }
+  a { text-underline-offset: 3px; }
 
   h1, h2, h3, h4 {
     @apply font-display text-ink-900 tracking-tight;
@@ -91,6 +116,19 @@
     outline: 2px solid var(--color-brand-800);
     outline-offset: 2px;
     border-radius: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

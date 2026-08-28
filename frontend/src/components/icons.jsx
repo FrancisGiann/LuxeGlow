@@ -94,6 +94,13 @@ export const IconCheckCircle = (p) => (
   </Svg>
 );
 
+export const IconAlertCircle = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 8v4.5M12 16.2v.1" />
+  </Svg>
+);
+
 export const IconSparkle = (p) => (
   <Svg {...p}>
     <path d="M12 4.5 13.8 9.7 19 11.5l-5.2 1.8L12 18.5l-1.8-5.2L5 11.5l5.2-1.8L12 4.5Z" />

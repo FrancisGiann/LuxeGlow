@@ -1,7 +1,13 @@
-export function EmptyState({ icon = '✦', title, description, action }) {
+import { IconSparkle } from '../icons';
+
+export function EmptyState({ icon: Icon = IconSparkle, title, description, action }) {
+  const DisplayIcon = typeof Icon === 'function' ? Icon : IconSparkle;
+
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-2xl">{icon}</div>
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-800">
+        <DisplayIcon size={24} />
+      </div>
       <h4 className="font-display text-lg font-bold text-ink-900">{title}</h4>
       {description && <p className="max-w-sm text-sm text-ink-500">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
