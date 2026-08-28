@@ -231,7 +231,7 @@ export function BookingReceiptModal({ receipt, onClose }) {
 
           <div className="mt-6 grid gap-6 sm:grid-cols-2">
             <section aria-labelledby={`${titleId}-booking`}>
-              <h3 id={`${titleId}-booking`} className="text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Booking details</h3>
+              <h3 id={`${titleId}-booking`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Booking details</h3>
               <dl className="mt-2">
                 <ReceiptRow label="Booking reference">{normalized.reference || '—'}</ReceiptRow>
                 <ReceiptRow label="Appointment date">{appointmentDate}</ReceiptRow>
@@ -241,7 +241,7 @@ export function BookingReceiptModal({ receipt, onClose }) {
             </section>
 
             <section aria-labelledby={`${titleId}-customer`}>
-              <h3 id={`${titleId}-customer`} className="text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Customer</h3>
+              <h3 id={`${titleId}-customer`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Customer</h3>
               <dl className="mt-2">
                 <ReceiptRow label="Name">{normalized.customerName}</ReceiptRow>
                 <ReceiptRow label="Email">{normalized.email || '—'}</ReceiptRow>
@@ -251,7 +251,7 @@ export function BookingReceiptModal({ receipt, onClose }) {
           </div>
 
           <section className="mt-7" aria-labelledby={`${titleId}-services`}>
-            <h3 id={`${titleId}-services`} className="text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Services</h3>
+            <h3 id={`${titleId}-services`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Services</h3>
             <div className="mt-2 rounded-2xl border border-line">
               {normalized.services.length > 0 ? (
                 <ul>

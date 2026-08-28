@@ -26,7 +26,7 @@ export function AboutSection() {
               {about?.phone && <div className="flex items-start gap-3"><IconPhone size={17} className="mt-0.5 shrink-0 text-gold-500" /><dd><a href={`tel:${about.phone.replace(/\s/g, '')}`} className="text-ink-700 hover:text-brand-800">{about.phone}</a></dd></div>}
               {about?.email && <div className="flex items-start gap-3"><IconMail size={17} className="mt-0.5 shrink-0 text-gold-500" /><dd><a href={`mailto:${about.email}`} className="break-all text-ink-700 hover:text-brand-800">{about.email}</a></dd></div>}
             </dl>
-            {hours.length > 0 && <div className="mt-9 border-t border-line pt-5"><h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-500"><IconClock size={14} className="text-gold-500" />Hours</h4><ul className="mt-3 flex flex-col gap-1.5 text-sm text-ink-700">{hours.map((line) => <li key={line}>{line}</li>)}</ul></div>}
+            {hours.length > 0 && <div className="mt-9 border-t border-line pt-5"><h4 className="flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-[0.18em] text-ink-500"><IconClock size={14} className="text-gold-500" />Hours</h4><ul className="mt-3 flex flex-col gap-1.5 text-sm text-ink-700">{hours.map((line) => <li key={line}>{line}</li>)}</ul></div>}
           </div>
         </div>
       </div>

@@ -8,8 +8,8 @@
 
 @theme {
   /* Plum: primary actions and selected states. */
-  --color-brand-50: #f8f1f8;
-  --color-brand-100: #eee0ee;
+  --color-brand-50: #f8f0f6;
+  --color-brand-100: #ecdeea;
   --color-brand-200: #dcc2dc;
   --color-brand-300: #c197c4;
   --color-brand-400: #a06aaa;
@@ -20,7 +20,7 @@
   --color-brand-900: #32103f;
 
   /* Blush fields and secondary emphasis. */
-  --color-blush-50: #fbf5f3;
+  --color-blush-50: #fcf3ef;
   --color-blush-100: #ebdfdc;
   --color-blush-200: #e1cbc7;
   --color-blush-300: #d7b6b0;
@@ -31,29 +31,29 @@
   /* Brass is deliberately quiet. */
   --color-gold-100: #f3eadc;
   --color-gold-400: #d5bd8f;
-  --color-gold-500: #b69a42;
-  --color-gold-600: #806b2b;
+  --color-gold-500: #a48638;
+  --color-gold-600: #796323;
 
-  /* Ink has enough blue to stay crisp on porcelain. */
-  --color-ink-300: #bbb5bf;
-  --color-ink-400: #8b828d;
-  --color-ink-500: #68606b;
-  --color-ink-700: #38323c;
-  --color-ink-900: #17172e;
+  /* Aubergine/cocoa ink keeps hierarchy soft without sacrificing contrast. */
+  --color-ink-300: #7d6570;
+  --color-ink-400: #78606c;
+  --color-ink-500: #6f5966;
+  --color-ink-700: #553d4d;
+  --color-ink-900: #3d1d3d;
 
   /* ── Surfaces ── */
-  --color-canvas: #fbfaf9;
-  --color-surface: #fffefd;
-  --color-line: #e9e3df;
-  --color-line-strong: #d5ccc6;
+  --color-canvas: #f6ede7;
+  --color-surface: #fff8f3;
+  --color-line: #e5d8d1;
+  --color-line-strong: #d1c0b8;
 
   /* ── Semantic status ── */
-  --color-success: #059669;
-  --color-warning: #d97706;
-  --color-danger: #e11d48;
+  --color-success: #065f46;
+  --color-warning: #92400e;
+  --color-danger: #be123c;
 
   /* ── Typography ── */
-  --font-display: "Bodoni Moda", Georgia, serif;
+  --font-display: "Lora", Georgia, serif;
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 
   /* ── Radii ── */
@@ -62,9 +62,9 @@
   --radius-3xl: 16px;
 
   /* ── Elevation tiers ── */
-  --shadow-card: 0 8px 24px -16px rgb(23 23 46 / 0.2);
-  --shadow-float: 0 18px 40px -20px rgb(23 23 46 / 0.27);
-  --shadow-pop: 0 14px 36px -18px rgb(23 23 46 / 0.32);
+  --shadow-card: 0 8px 24px -16px rgb(61 29 61 / 0.2);
+  --shadow-float: 0 18px 40px -20px rgb(61 29 61 / 0.27);
+  --shadow-pop: 0 14px 36px -18px rgb(61 29 61 / 0.32);
 }
 
 /* ── Base ─────────────────────────────────────────────────────── */

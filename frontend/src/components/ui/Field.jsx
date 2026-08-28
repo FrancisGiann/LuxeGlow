@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 
 const controlBase =
-  'w-full rounded-xl border bg-white px-4 py-3 text-sm text-ink-900 placeholder:text-ink-300 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-400';
+  'w-full rounded-xl border bg-surface px-4 py-3 text-sm text-ink-900 placeholder:text-ink-300 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-400';
 
 function FieldWrap({ label, htmlFor, error, hint, required, children }) {
   return (

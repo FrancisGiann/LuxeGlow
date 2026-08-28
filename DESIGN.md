@@ -8,11 +8,13 @@ The product presents Astrid Nails & Beauty Bar as a calm, considered Lucena City
 
 ## Tokens and typography
 
-- Public ground is warm porcelain around `#FAF7F4`; app ground is `#FBFAF9`.
-- Ink is deep navy/ink; plum is the primary action family around `#4A146B` and `#6C147E`.
-- Blush fields are around `#EBDFDC`; brass is restrained around `#E2CEB1` / `#B69A42`.
-- Bodoni Moda is the high-contrast display face. Manrope is the workhorse sans. Both load through the existing Google Fonts link in `frontend/index.html`.
+- Canvas is warm parchment `#F6EDE7`; raised surfaces are warm ivory `#FFF8F3`, with blush fields around `#EBDFDC`.
+- Headings use aubergine `#3D1D3D`; cocoa-plum body ink uses `#553D4D` and `#6F5966` for secondary copy.
+- Plum is the primary action family around `#4A146B` and `#6C147E`; brass is restrained around `#D5BD8F`, `#A48638`, and readable brass text `#796323`.
+- Lora is the readable editorial serif for display, headings, and the salon wordmark. Manrope is the workhorse sans for body and operational text. Both load through the existing Google Fonts link in `frontend/index.html`.
 - Use 12–16px corners, generous whitespace, fine 1px rules, and either a border or a shallow shadow per surface. Pills are reserved for compact status/control treatments. Decorative gradients are not part of this system.
+
+Representative WCAG contrast ratios (calculated against the shipped solid tokens): `ink-900` is 12.62:1 on canvas / 13.86:1 on surface; `ink-700` is 8.42:1 / 9.24:1; `ink-500` is 5.52:1 / 6.06:1; and `ink-300` placeholder text is 4.58:1 / 5.03:1. White text on the primary `brand-800` action is 13.10:1. Status text is darkened for its 10% tinted fields: success is 5.72:1 on canvas tint, warning 5.31:1, and danger 4.61:1 (all at least WCAG AA for body text).
 
 ## Composition and navigation
 
