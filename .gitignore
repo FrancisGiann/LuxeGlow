@@ -1,3 +1,4 @@
 /vendor/
 .env
 config/mail.local.php
+.impeccable/questions/
