@@ -1,0 +1,47 @@
+{
+  "title": "Choose the dashboard composition",
+  "question": "Soft Luxury Salon is fixed. Choose how the customer and admin dashboards should organize daily work.",
+  "options": [
+    {
+      "id": "vanity-tray",
+      "label": "Vanity Tray Workspace",
+      "kicker": "THE ROLL",
+      "lineage": "a composed salon counter with purpose-built trays",
+      "thesis": "Every task receives a precise place, like tools arranged before a treatment.",
+      "palette": ["#F8F5F1", "#17172E", "#6C147E", "#E8649A", "#B69A42"],
+      "materials": ["porcelain fields", "smoked plum glass", "hairline brass"],
+      "viewport": "Customer: next visit and booking action anchor the largest tray. Admin: today's queue anchors the same system with status, customer, and service trays around it.",
+      "risk": "Needs disciplined hierarchy so the tray system does not become a generic card grid.",
+      "comp": ".impeccable/mocks/dashboard/vanity-tray.webp"
+    },
+    {
+      "id": "ritual-path",
+      "label": "Ritual Path",
+      "lineage": "a treatment journey from selection through completion",
+      "thesis": "The dashboard reads as one calm path: choose, confirm, arrive, complete, remember.",
+      "palette": ["#F8F5F1", "#17172E", "#6C147E", "#E8649A", "#B69A42"],
+      "materials": ["ivory paper", "blush status ribbon", "fine gold rules"],
+      "viewport": "Customer: the current appointment stage leads a horizontal ritual path. Admin: appointments group by stage with today's exceptions called forward.",
+      "risk": "A timeline can become slow for staff unless dense queues remain directly scannable.",
+      "comp": ".impeccable/mocks/dashboard/ritual-path.webp"
+    },
+    {
+      "id": "appointment-atelier",
+      "label": "Appointment Atelier",
+      "lineage": "a working studio bench with a dedicated inspector",
+      "thesis": "One central workspace holds the task while a quiet side inspector keeps context visible.",
+      "palette": ["#F8F5F1", "#17172E", "#6C147E", "#E8649A", "#B69A42"],
+      "materials": ["porcelain desktop", "deep-ink navigation rail", "rose status tabs"],
+      "viewport": "Customer: services and time selection occupy the workbench with a persistent booking summary. Admin: schedule and records occupy the workbench with appointment details in the inspector.",
+      "risk": "Its strong desktop structure needs careful stacking to stay graceful on phones.",
+      "comp": ".impeccable/mocks/dashboard/appointment-atelier.webp"
+    }
+  ],
+  "reroll": true,
+  "steer": true,
+  "buildPath": {
+    "value": "comp",
+    "toggle": true
+  },
+  "followup": true
+}

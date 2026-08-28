@@ -1,0 +1,8 @@
+Scope: Customer dashboard shell and all /dashboard routes, with BookingPage as the primary workbench. Mode: Operate.
+Audience/job/action: Signed-in customers book one to eight services, choose a Manila-time slot, confirm the request, and track Pending, Confirmed, Completed, or Cancelled appointments.
+Important states: Loading, no upcoming visit, no notifications, service selection, slot loading/unavailable, validation error, pending appointment, completed visit awaiting review, and print receipt.
+Constraints: Preserve every route, Supabase call, status, print flow, notification badge, profile action, keyboard path, responsive drawer, and customer-only permissions. No invented save-for-later, stylist selection, online payment, cancellation policy, or extra service.
+Direction: Soft Luxury Salon identity with the selected Appointment Atelier composition. Approved comp: .impeccable/mocks/dashboard/appointment-atelier.webp. Sampled ground #FBFAF9, plum #4A146B, blush field #EBDFDC, brass field #E2CEB1.
+Component grammar: 12–16px corners, either fine border or shallow shadow, serif page titles, sans controls, tabular numerals, hairline dividers. A slim navigation rail, central service/time workbench, and persistent booking summary inspector define desktop; mobile stacks inspector after the active task.
+Memorable moment: Selecting a service immediately updates the persistent summary without moving the customer away from the workbench.
+Unresolved: Generated fixture names/dates and “Save for later” in the comp are illustrative defects and must not ship.

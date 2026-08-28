@@ -1,0 +1,23 @@
+{
+  "title": "Appointment Atelier selected",
+  "question": "Your Soft Luxury dashboard composition is locked. Implementation is now underway.",
+  "options": [
+    {
+      "id": "appointment-atelier-confirmed",
+      "label": "Appointment Atelier",
+      "kicker": "SELECTED",
+      "lineage": "one central workbench with a persistent context inspector",
+      "thesis": "Customers book without losing their summary; staff update appointments without losing the queue.",
+      "palette": ["#FBFAF9", "#17172E", "#4A146B", "#EBDFDC", "#E2CEB1"],
+      "materials": ["porcelain desktop", "deep-ink navigation", "fine brass rules"],
+      "viewport": "Customer and admin surfaces share a slim rail, central workbench, and contextual inspector, adapted for each role.",
+      "risk": "Generated fixture details and unsupported controls in the comp will not be literalized.",
+      "comp": ".impeccable/mocks/dashboard/appointment-atelier.webp"
+    }
+  ],
+  "buildPath": {
+    "value": "comp",
+    "toggle": false
+  },
+  "followup": false
+}
