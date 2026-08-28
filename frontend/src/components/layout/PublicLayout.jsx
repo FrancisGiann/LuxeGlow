@@ -8,12 +8,20 @@ import { getInitials } from '../../utils/format';
 import { IconClock, IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
 
 const NAV_LINKS = [
-  ['Home', '#home'],
   ['Services', '#services'],
   ['Reviews', '#reviews'],
   ['About', '#about'],
   ['FAQs', '#faqs'],
 ];
+
+function SalonWordmark({ compact = false }) {
+  return (
+    <span className="flex flex-col text-left leading-[0.9]">
+      <span className={`${compact ? 'text-base' : 'text-lg'} font-display font-semibold tracking-[-0.03em] text-ink-900`}>Astrid Nails</span>
+      <span className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-ink-500">&amp; Beauty Bar</span>
+    </span>
+  );
+}
 
 function Navbar() {
   const { isAuthenticated, customer, openAuth, logout } = useAuth();
@@ -23,7 +31,7 @@ function Navbar() {
   const location = useLocation();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    const onScroll = () => setScrolled(window.scrollY > 10);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -36,89 +44,57 @@ function Navbar() {
     else document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const hrefFor = (hash) => (location.pathname === '/' ? hash : `/${hash}`);
+
   return (
-    <header className={`fixed inset-x-0 top-0 z-[900] transition-all duration-300 ${scrolled ? 'border-b border-line bg-canvas/90 shadow-card backdrop-blur-md' : 'bg-transparent'}`}>
-      <nav className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
-        <button onClick={goHome} className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-800 to-blush-600 font-display text-base font-bold text-white shadow-card">AN</span>
-          <span className="flex flex-col leading-tight text-left">
-            <span className="font-display text-lg font-bold text-ink-900">Astrid Nails</span>
-            <span className="text-xs font-medium uppercase tracking-widest text-ink-400">&amp; Beauty Bar</span>
-          </span>
+    <header className={`fixed inset-x-0 top-0 z-[900] border-b border-line bg-canvas/95 transition-shadow duration-300 ${scrolled ? 'shadow-card backdrop-blur-sm' : ''}`}>
+      <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between gap-6 px-5 sm:px-8 lg:px-14">
+        <button type="button" onClick={goHome} aria-label="Astrid Nails and Beauty Bar home" className="rounded-lg">
+          <SalonWordmark />
         </button>
 
-        <div className="hidden items-center gap-1 lg:flex">
+        <nav aria-label="Primary navigation" className="hidden items-center gap-7 lg:flex">
           {NAV_LINKS.map(([label, hash]) => (
-            <a
-              key={hash}
-              href={location.pathname === '/' ? hash : `/${hash}`}
-              className="rounded-lg px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-800"
-            >
+            <a key={hash} href={hrefFor(hash)} className="text-sm font-semibold text-ink-700 transition-colors hover:text-brand-800">
               {label}
             </a>
           ))}
-        </div>
+        </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
           {isAuthenticated ? (
             <>
-              <Link
-                to="/dashboard"
-                className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink-900 transition-all hover:border-brand-200 hover:bg-brand-50"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-800">
-                  {getInitials(customer?.first_name)}
-                </span>
-                My Dashboard
+              <Link to="/dashboard" className="flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink-900 hover:border-brand-300">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blush-100 text-[11px] font-bold text-brand-800">{getInitials(customer?.first_name, customer?.last_name)}</span>
+                My dashboard
               </Link>
-              <button onClick={logout} className="text-sm font-semibold text-ink-500 transition-colors hover:text-danger">
-                Logout
-              </button>
+              <button type="button" onClick={logout} className="px-1 text-sm font-semibold text-ink-500 hover:text-danger">Log out</button>
             </>
           ) : (
-            <>
-              <button onClick={() => openAuth('login')} className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink-900 transition-all hover:border-brand-200 hover:bg-brand-50">
-                Login / Register
-              </button>
-            </>
+            <button type="button" onClick={() => openAuth('login')} className="min-h-11 rounded-xl border border-line bg-surface px-4 text-sm font-semibold text-ink-900 hover:border-brand-300">Log in</button>
           )}
-          <button
-            onClick={isAuthenticated ? () => navigate('/dashboard/book') : () => openAuth('login')}
-            className="rounded-xl bg-brand-800 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition-all hover:-translate-y-px hover:bg-brand-900"
-          >
-            Book Now
-          </button>
+          <button type="button" onClick={isAuthenticated ? () => navigate('/dashboard/book') : () => openAuth('login')} className="min-h-11 rounded-xl bg-brand-800 px-5 text-sm font-bold text-white shadow-card hover:bg-brand-900">Book</button>
         </div>
 
-        <button
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 lg:hidden"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label="Toggle menu"
-        >
+        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 lg:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="Toggle menu" aria-expanded={menuOpen} aria-controls="mobile-navigation">
           {menuOpen ? <IconX /> : <IconMenu />}
         </button>
-      </nav>
+      </div>
 
-      {/* Mobile menu */}
       {menuOpen && (
-        <div className="border-t border-line bg-surface px-4 pb-6 pt-2 shadow-float lg:hidden">
-          {NAV_LINKS.map(([label, hash]) => (
-            <a key={hash} href={location.pathname === '/' ? hash : `/${hash}`} className="block rounded-lg px-3 py-3 text-sm font-semibold text-ink-700 hover:bg-brand-50">
-              {label}
-            </a>
-          ))}
-          <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+        <div id="mobile-navigation" className="border-t border-line bg-surface px-5 pb-5 pt-3 shadow-card lg:hidden">
+          <nav aria-label="Mobile navigation" className="flex flex-col">
+            <a href={location.pathname === '/' ? '#home' : '/'} className="border-b border-line py-3 text-sm font-semibold text-ink-700">Home</a>
+            {NAV_LINKS.map(([label, hash]) => <a key={hash} href={hrefFor(hash)} className="border-b border-line py-3 text-sm font-semibold text-ink-700">{label}</a>)}
+          </nav>
+          <div className="mt-4 flex flex-col gap-2">
             {isAuthenticated ? (
               <>
-                <Link to="/dashboard/book" className="rounded-xl bg-brand-800 px-4 py-3 text-center text-sm font-bold text-white shadow-card">
-                  Book Now
-                </Link>
-                <Link to="/dashboard" className="rounded-xl bg-brand-50 px-4 py-3 text-center text-sm font-bold text-brand-800">My Dashboard</Link>
-                <button onClick={logout} className="rounded-xl px-4 py-3 text-sm font-semibold text-danger">Logout</button>
+                <Link to="/dashboard/book" className="rounded-xl bg-brand-800 px-4 py-3 text-center text-sm font-bold text-white">Book an appointment</Link>
+                <Link to="/dashboard" className="rounded-xl border border-line px-4 py-3 text-center text-sm font-bold text-ink-900">My dashboard</Link>
+                <button type="button" onClick={logout} className="rounded-xl px-4 py-3 text-sm font-semibold text-danger">Log out</button>
               </>
-            ) : (
-              <button onClick={() => openAuth('login')} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Login / Register</button>
-            )}
+            ) : <button type="button" onClick={() => openAuth('login')} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Log in / Register</button>}
           </div>
         </div>
       )}
@@ -128,53 +104,34 @@ function Navbar() {
 
 function Footer() {
   const { data: about } = useFetch(getAbout);
-  const hours = (about?.business_hours || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const hours = (about?.business_hours || '').split('\n').map((line) => line.trim()).filter(Boolean);
+  const salonName = about?.salon_name || 'Astrid Nails & Beauty Bar';
 
   return (
     <footer id="contact" className="border-t border-line bg-surface">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
-        <div className="sm:col-span-2">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-800 to-blush-600 font-display text-base font-bold text-white">AN</span>
-            <div>
-              <p className="font-display text-lg font-bold">{about?.salon_name || 'Astrid Nails & Beauty Bar'}</p>
-              <p className="text-xs uppercase tracking-widest text-ink-400">LuxeGlow Experience</p>
-            </div>
-          </div>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-500">
-            {about?.description ||
-              'Your premier destination for beauty and wellness. Premium products, certified professionals, one relaxing space.'}
-          </p>
+      <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.3fr_0.7fr_1fr] lg:px-14">
+        <div>
+          <SalonWordmark />
+          <p className="mt-5 max-w-[38ch] text-sm leading-relaxed text-ink-500">{about?.description || 'A considered menu of nail, lash, and spa treatments in Lucena City.'}</p>
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-ink-400">LuxeGlow experience</p>
         </div>
         <div>
-          <h4 className="text-sm font-bold uppercase tracking-wider text-ink-900">Explore</h4>
-          <ul className="mt-4 flex flex-col gap-2.5 text-sm text-ink-500">
-            {NAV_LINKS.slice(1).map(([label, hash]) => (
-              <li key={hash}><a href={`/${hash}`} className="transition-colors hover:text-brand-800">{label}</a></li>
-            ))}
+          <h2 className="font-display text-lg font-semibold">Explore</h2>
+          <ul className="mt-4 flex flex-col gap-3 text-sm text-ink-500">
+            {NAV_LINKS.map(([label, hash]) => <li key={hash}><a href={`/${hash}`} className="hover:text-brand-800">{label}</a></li>)}
           </ul>
         </div>
         <div>
-          <h4 className="text-sm font-bold uppercase tracking-wider text-ink-900">Visit us</h4>
-          <ul className="mt-4 flex flex-col gap-2.5 text-sm text-ink-500">
-            {hours.map((line) => (
-              <li key={line} className="flex items-start gap-1.5"><span className="text-brand-800"><IconClock size={15} /></span>{line}</li>
-            ))}
-            {about?.address && (
-              <li className="flex items-start gap-1.5"><span className="shrink-0 pt-0.5 text-brand-800"><IconMapPin size={15} /></span>{about.address}</li>
-            )}
-            {about?.phone && (
-              <li className="flex items-start gap-1.5"><span className="pt-0.5 text-brand-800"><IconPhone size={15} /></span>{about.phone}</li>
-            )}
-            {about?.email && (
-              <li className="flex items-start gap-1.5"><span className="pt-0.5 text-brand-800"><IconMail size={15} /></span>{about.email}</li>
-            )}
+          <h2 className="font-display text-lg font-semibold">Visit</h2>
+          <ul className="mt-4 flex flex-col gap-3 text-sm text-ink-500">
+            {hours.map((line) => <li key={line} className="flex items-start gap-2"><IconClock size={15} className="mt-0.5 shrink-0 text-gold-500" />{line}</li>)}
+            {about?.address && <li className="flex items-start gap-2"><IconMapPin size={15} className="mt-0.5 shrink-0 text-gold-500" />{about.address}</li>}
+            {about?.phone && <li className="flex items-start gap-2"><IconPhone size={15} className="mt-0.5 shrink-0 text-gold-500" /><a href={`tel:${about.phone.replace(/\s/g, '')}`} className="hover:text-brand-800">{about.phone}</a></li>}
+            {about?.email && <li className="flex items-start gap-2"><IconMail size={15} className="mt-0.5 shrink-0 text-gold-500" /><a href={`mailto:${about.email}`} className="break-all hover:text-brand-800">{about.email}</a></li>}
           </ul>
         </div>
       </div>
-      <div className="border-t border-line py-5 text-center text-xs text-ink-400">
-        © {new Date().getFullYear()} {about?.salon_name || 'Astrid Nails & Beauty Bar'}. All rights reserved.
-      </div>
+      <div className="border-t border-line px-5 py-5 text-center text-xs text-ink-400">© {new Date().getFullYear()} {salonName}. All rights reserved.</div>
     </footer>
   );
 }
@@ -184,7 +141,6 @@ export function PublicLayout() {
   const navigate = useNavigate();
   const { openAuth } = useAuth();
 
-  /* Parity with legacy deep-links: index.php?openAuth=login opened the modal. */
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('openAuth') === 'login') {
@@ -192,17 +148,9 @@ export function PublicLayout() {
       params.delete('openAuth');
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
     }
+    // Auth deep-link behavior is intentionally one-shot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1 pt-20">
-        <Outlet />
-      </main>
-      <Footer />
-      <AuthModal />
-    </div>
-  );
+  return <div className="flex min-h-screen flex-col"><Navbar /><main className="flex-1 pt-20"><Outlet /></main><Footer /><AuthModal /></div>;
 }
