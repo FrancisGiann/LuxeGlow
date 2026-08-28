@@ -4,80 +4,10 @@ import { Card } from '../../components/ui/Card';
 import { EmptyState, SkeletonRows } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
 import { RateVisitModal, StarPicker } from '../../components/dashboard/RateVisitModal';
+import { IconStar } from '../../components/icons';
 
-function ReviewCard({ review }) {
-  return (
-    <Card hoverable className="flex flex-col gap-3 p-6">
-      <div className="flex items-center justify-between gap-3">
-        <StarPicker value={review.rating} onChange={() => {}} size={16} />
-        <span className="text-xs text-ink-300">{review.created_at}</span>
-      </div>
-      <p className="flex-1 text-sm leading-relaxed text-ink-700">
-        {review.review_text || 'Rated without a written review.'}
-      </p>
-      <div className="flex items-center justify-between border-t border-line pt-3">
-        <span className="truncate text-xs font-semibold uppercase tracking-wide text-ink-400">{review.service_names}</span>
-        <span className="text-xs font-bold text-brand-800">#{review.appointment_id}</span>
-      </div>
-    </Card>
-  );
-}
-
+function ReviewRow({ review }) { return <li className="grid gap-3 border-b border-line py-5 last:border-b-0 sm:grid-cols-[150px_1fr_auto] sm:items-start"><div><StarPicker value={review.rating} onChange={() => {}} size={16} /><p className="mt-2 text-xs text-ink-400">{review.created_at}</p></div><div><p className="text-sm leading-relaxed text-ink-700">{review.review_text || 'Rated without a written review.'}</p><p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-ink-500">{review.service_names}</p></div><span className="text-xs font-bold text-brand-800">{review.appointment_id}</span></li>; }
 export function ReviewsPage() {
-  const { reviews, loading } = useDashboard();
-  const [ratingOpen, setRatingOpen] = useState(false);
-
-  const average = useMemo(
-    () => (reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0),
-    [reviews]
-  );
-
-  return (
-    <div className="mx-auto max-w-6xl">
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="font-display text-2xl font-bold">Ratings &amp; Reviews</h2>
-          <p className="mt-1 text-sm text-ink-500">Rate your completed visits and revisit past feedback.</p>
-        </div>
-        <Button onClick={() => setRatingOpen(true)}>⭐ Rate a Visit</Button>
-      </div>
-
-      {/* Summary band */}
-      {!loading && reviews.length > 0 && (
-        <Card className="mb-6 flex flex-wrap items-center gap-x-10 gap-y-4 px-8 py-5">
-          <div className="flex items-baseline gap-2">
-            <span className="font-display text-4xl font-bold text-brand-800">{average.toFixed(1)}</span>
-            <span className="text-sm text-ink-400">your avg. rating</span>
-          </div>
-          <div className="h-8 w-px bg-line" />
-          <p className="text-sm text-ink-500">
-            <span className="font-bold text-ink-900">{reviews.length}</span> review{reviews.length > 1 ? 's' : ''} submitted
-          </p>
-        </Card>
-      )}
-
-      {/* Grid */}
-      {loading && <SkeletonRows rows={3} />}
-      {!loading && reviews.length === 0 && (
-        <Card className="border-dashed">
-          <EmptyState
-            icon="⭐"
-            title="No reviews yet"
-            description="After a completed visit, share your experience — it takes less than a minute."
-            action={<Button variant="soft" onClick={() => setRatingOpen(true)}>Rate your first visit</Button>}
-          />
-        </Card>
-      )}
-      {!loading && reviews.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {reviews.map((r) => (
-            <ReviewCard key={r.review_id} review={r} />
-          ))}
-        </div>
-      )}
-
-      {ratingOpen && <RateVisitModal onClose={() => setRatingOpen(false)} />}
-    </div>
-  );
+  const { reviews, loading } = useDashboard(); const [ratingOpen, setRatingOpen] = useState(false); const average = useMemo(() => reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0, [reviews]);
+  return <div className="mx-auto max-w-[1000px]"><div className="mb-7 flex flex-wrap items-end justify-between gap-5"><div><h2 className="font-display text-3xl font-medium text-ink-900">Ratings &amp; reviews</h2><p className="mt-2 text-sm text-ink-500">Share feedback about completed visits.</p></div><Button type="button" onClick={() => setRatingOpen(true)}><IconStar size={16} filled />Rate a visit</Button></div>{!loading && reviews.length > 0 && <div className="mb-5 flex items-center gap-6 border-y border-line py-5"><div><p className="font-display text-4xl font-semibold text-brand-800">{average.toFixed(1)}</p><p className="text-xs text-ink-500">Your average rating</p></div><div className="h-10 w-px bg-line" /><p className="text-sm text-ink-500">{reviews.length} review{reviews.length === 1 ? '' : 's'} submitted</p></div>}<Card className="p-5 sm:p-7">{loading && <SkeletonRows rows={3} />}{!loading && !reviews.length && <EmptyState icon={IconStar} title="No reviews yet" description="After a completed visit, share your experience." action={<Button type="button" variant="soft" onClick={() => setRatingOpen(true)}>Rate your first visit</Button>} />}{!loading && reviews.length > 0 && <ul>{reviews.map((review) => <ReviewRow key={review.review_id} review={review} />)}</ul>}</Card>{ratingOpen && <RateVisitModal onClose={() => setRatingOpen(false)} />}</div>;
 }

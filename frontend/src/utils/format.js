@@ -10,6 +10,8 @@ export const getInitials = (first = '', last = '') => {
   return (a + b).toUpperCase() || 'A';
 };
 
+export const getCurrentTimestamp = () => Date.now();
+
 /** Parse the salon's Asia/Manila wall-clock date/time as an instant. */
 export const toAppointmentDate = (rawDate, rawTime) =>
   new Date(`${rawDate}T${rawTime || '00:00:00'}+08:00`);

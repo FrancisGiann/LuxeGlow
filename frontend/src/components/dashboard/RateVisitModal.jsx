@@ -124,7 +124,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
             {loadError && <p className="rounded-xl bg-danger/10 px-4 py-3 text-sm font-medium text-danger">{loadError}</p>}
             {ratable?.length === 0 && (
               <p className="rounded-xl bg-brand-50 px-4 py-3 text-center text-sm font-medium text-ink-700">
-                Every completed visit already has a review. Book your next pampering session!
+                Every completed visit already has a review. Book your next appointment when you are ready.
               </p>
             )}
 

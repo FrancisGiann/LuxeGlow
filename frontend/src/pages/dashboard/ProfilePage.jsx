@@ -68,9 +68,9 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Card className="p-6 sm:p-8">
+      <Card className="p-5 sm:p-7">
         <CardHeader
-          title="My Profile & Account Settings"
+          title="My profile"
           subtitle="Update your personal details and account password."
         />
 
@@ -98,8 +98,8 @@ export function ProfilePage() {
 
             <Input id="prof-phone" type="tel" label="Phone number" value={form.phone} onChange={set('phone')} error={errors.phone} required />
 
-            <div className="rounded-2xl border border-line bg-canvas p-5">
-              <p className="mb-3 text-sm font-bold text-ink-900">Change password</p>
+            <div className="border-y border-line py-5">
+              <p className="mb-3 font-display text-lg font-medium text-ink-900">Change password</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input
                   id="prof-pass"

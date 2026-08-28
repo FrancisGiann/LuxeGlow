@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useDashboard } from '../../context/DashboardContext';
-import { IconBell, IconChevronDown } from '../icons';
+import { IconBell } from '../icons';
 
 /**
  * The ONLY notification surface in the top bar. It reads the exact same
@@ -12,8 +12,6 @@ export function NotificationBell() {
   const { notifications, summary, markRead, markAllRead } = useDashboard();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
-  const navigate = useNavigate();
-
   const unread = summary.unread_notifications;
 
   useEffect(() => {
@@ -33,9 +31,12 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={wrapRef}>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ''}`}
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 transition-colors hover:border-brand-200 hover:bg-brand-50"
+        aria-expanded={open}
+        aria-haspopup="true"
+        className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 transition-colors hover:border-brand-200 hover:bg-brand-50"
       >
         <IconBell size={19} />
         {unread > 0 && (
