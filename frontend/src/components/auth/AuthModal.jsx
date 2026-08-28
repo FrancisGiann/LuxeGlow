@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
+import { IconX } from '../icons';
 
 const VIEWS = {
   login: 'Customer Login',
@@ -17,8 +18,8 @@ const VIEWS = {
 function BrandMark() {
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-800 to-blush-600 font-display text-xl font-bold text-white shadow-card">
-        AN
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-semibold text-brand-800">
+        A
       </div>
     </div>
   );
@@ -43,24 +44,19 @@ export function AuthModal() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [verificationCode, setVerificationCode] = useState('');
   const [resetEmail, setResetEmail] = useState('');
-  const [resetCode, setResetCode] = useState(['', '', '', '', '', '']);
+  const [resetCode, setResetCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
   const [resendForEmail, setResendForEmail] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
-  const otpRefs = useRef([]);
-  const resetCodeRefs = useRef([]);
 
   useEffect(() => {
     setError('');
-    if (modalView === 'verify') {
-      setOtp(['', '', '', '', '', '']);
-    }
-    if (modalView === 'forgot-reset') setResetCode(['', '', '', '', '', '']);
+    setVerificationCode('');
+    setResetCode('');
     if (!modalView) {
       setResetEmail('');
-      setResetCode(['', '', '', '', '', '']);
     }
   }, [modalView]);
 
@@ -140,10 +136,11 @@ export function AuthModal() {
     }
   };
 
-  const handleVerify = async () => {
-    const code = otp.join('');
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    const code = verificationCode.trim();
     if (!/^\d{6}$/.test(code)) {
-      setError('Please enter the complete 6-digit code.');
+      setError('Enter all 6 digits, or use the verification link from your email.');
       return;
     }
     setError('');
@@ -153,7 +150,7 @@ export function AuthModal() {
       if (res.ok) {
         toast('Account verified. Welcome!');
         finishAndGoDashboard();
-      } else setError(res.error);
+      } else setError(res.error || 'That verification code is invalid or expired.');
     } catch {
       setError('Verification failed. Please try again.');
     } finally {
@@ -170,7 +167,7 @@ export function AuthModal() {
         setResendForEmail(resendKey);
         setResendIn(res.retryAfter);
       }
-      if (res.ok) toast('A new OTP has been sent.', 'info');
+      if (res.ok) toast('A new verification email has been sent.', 'info');
       else toast(res.error || 'Could not resend the code right now.', 'error');
     } catch {
       toast('Could not resend the code right now. Please try again.', 'error');
@@ -188,7 +185,7 @@ export function AuthModal() {
       const res = await requestPasswordReset(email);
       if (res.ok) {
         setResetEmail(email);
-        openAuth('login');
+        openAuth('forgot-reset');
         toast(res.message || 'Check your email for a secure password-reset link.', 'info');
       } else setError(res.error || 'Could not process that request right now.');
     } catch {
@@ -201,9 +198,14 @@ export function AuthModal() {
   const handleCompleteReset = async (e) => {
     e.preventDefault();
     const fields = Object.fromEntries(new FormData(e.currentTarget));
-    const code = resetCode.join('');
+    const code = resetCode.trim();
+    const email = resetEmail.trim();
     if (code && !/^\d{6}$/.test(code)) {
       setError('Enter all 6 digits, or use the secure reset link from your email.');
+      return;
+    }
+    if (code && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter the email address that received the recovery code.');
       return;
     }
     if (fields.password !== fields.confirm_password) {
@@ -214,7 +216,7 @@ export function AuthModal() {
     setBusy(true);
     try {
       const res = await completePasswordReset({
-        email: resetEmail,
+        email,
         code,
         password: fields.password,
         confirmPassword: fields.confirm_password,
@@ -230,27 +232,6 @@ export function AuthModal() {
     }
   };
 
-  const setOtpDigit = (i, val) => {
-    const digit = val.replace(/\D/g, '').slice(-1);
-    setOtp((prev) => prev.map((d, idx) => (idx === i ? digit : d)));
-    if (digit && i < 5) otpRefs.current[i + 1]?.focus();
-  };
-
-  const onOtpKeyDown = (i, e) => {
-    if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
-    if (e.key === 'Enter') handleVerify();
-  };
-
-  const setResetCodeDigit = (i, val) => {
-    const digit = val.replace(/\D/g, '').slice(-1);
-    setResetCode((prev) => prev.map((d, idx) => (idx === i ? digit : d)));
-    if (digit && i < 5) resetCodeRefs.current[i + 1]?.focus();
-  };
-
-  const onResetCodeKeyDown = (i, e) => {
-    if (e.key === 'Backspace' && !resetCode[i] && i > 0) resetCodeRefs.current[i - 1]?.focus();
-  };
-
   return (
     <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={closeAuth} aria-hidden="true" />
@@ -260,7 +241,7 @@ export function AuthModal() {
           aria-label="Close"
           className="absolute -top-2 right-0 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-500 shadow-card transition-colors hover:text-ink-900 sm:-right-2"
         >
-          ✕
+          <IconX size={17} />
         </button>
 
         <div className="rounded-3xl border border-line bg-surface p-8 shadow-float">
@@ -270,9 +251,9 @@ export function AuthModal() {
             {modalView === 'login' && 'Sign in to book and manage your appointments.'}
             {modalView === 'admin' && 'Restricted access for salon staff.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
-            {modalView === 'verify' && 'Enter the 6-digit code we emailed you.'}
+            {modalView === 'verify' && 'Use the link, or enter the code if your email provides one.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
-            {modalView === 'forgot-reset' && 'Use the secure link from your email, then choose a new password.'}
+            {modalView === 'forgot-reset' && 'Use the link, or enter the code if your email provides one.'}
           </p>
 
           {/* ── LOGIN ── */}
@@ -288,7 +269,7 @@ export function AuthModal() {
                   New here?{' '}
                   <button type="button" onClick={() => openAuth('register')} className="font-semibold text-brand-800 hover:text-brand-900">Create an account</button>
                 </span>
-                <button type="button" onClick={() => openAuth('admin')} className="font-semibold text-brand-800 hover:text-brand-900">🔐 Staff / Admin sign-in</button>
+                <button type="button" onClick={() => openAuth('admin')} className="font-semibold text-brand-800 hover:text-brand-900">Staff / Admin sign-in</button>
               </div>
             </form>
           )}
@@ -301,7 +282,7 @@ export function AuthModal() {
               <Button type="submit" block size="lg" loading={busy}>Email reset link</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Remembered your password?{' '}
-                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">← Back to login</button>
+                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
               </p>
             </form>
           )}
@@ -309,33 +290,39 @@ export function AuthModal() {
           {/* ── PASSWORD RESET COMPLETION ── */}
           {modalView === 'forgot-reset' && (
             <form onSubmit={handleCompleteReset} className="mt-6 flex flex-col gap-4" noValidate>
-              <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Code sent to</p>
+              {resetEmail ? <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Link sent to</p>
                 <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail}</p>
+              </div> : <Input
+                id="reset-email"
+                type="email"
+                label="Email address for a recovery code"
+                value={resetEmail}
+                onChange={(event) => setResetEmail(event.target.value)}
+                autoComplete="email"
+                required={Boolean(resetCode.trim())}
+                hint="Leave this blank when you opened the secure reset link."
+              />}
+              <div className="py-2 text-center">
+                <p className="text-sm font-semibold text-brand-800">Choose a new password.</p>
+                <p className="text-sm text-ink-500">Use the secure link, or enter the code if your email provides one.</p>
               </div>
-              <p className="text-center text-sm text-ink-500">A reset link creates a short-lived recovery session. If your email template is configured for OTPs, enter that 6-digit code below.</p>
-              <div className="flex justify-center gap-2">
-                {resetCode.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { resetCodeRefs.current[i] = el; }}
-                    value={digit}
-                    onChange={(e) => setResetCodeDigit(i, e.target.value)}
-                    onKeyDown={(e) => onResetCodeKeyDown(i, e)}
-                    onFocus={(e) => e.target.select()}
-                    inputMode="numeric"
-                    maxLength={1}
-                    aria-label={`Reset code digit ${i + 1}`}
-                    className="h-12 w-11 rounded-xl border border-line bg-white text-center font-display text-xl font-bold text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-                  />
-                ))}
-              </div>
+              <Input
+                id="reset-code"
+                label="Optional 6-digit recovery code"
+                value={resetCode}
+                onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                hint="Leave this blank when you opened the secure reset link."
+              />
               <Input id="reset-password" name="password" type="password" label="New password" placeholder="Minimum 8 characters" autoComplete="new-password" minLength={8} required />
               <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={8} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Reset password</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
-                Need another code?{' '}
+                Need another reset email?{' '}
                 <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
                 <span className="mx-1">·</span>
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
@@ -352,7 +339,7 @@ export function AuthModal() {
               <Button type="submit" block size="lg" loading={busy}>Log in as Staff</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Not staff?{' '}
-                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">← Customer login</button>
+                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Customer login</button>
               </p>
             </form>
           )}
@@ -379,29 +366,32 @@ export function AuthModal() {
 
           {/* ── VERIFY ── */}
           {modalView === 'verify' && (
-            <div className="mt-6 flex flex-col items-center gap-5">
+            <form onSubmit={handleVerify} className="mt-6 flex flex-col items-center gap-5" noValidate>
               <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Code sent to</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Link sent to</p>
                 <p className="mt-0.5 text-sm font-semibold text-brand-800">{verifyEmail}</p>
               </div>
-              <div className="flex gap-2">
-                {otp.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { otpRefs.current[i] = el; }}
-                    value={digit}
-                    onChange={(e) => setOtpDigit(i, e.target.value)}
-                    onKeyDown={(e) => onOtpKeyDown(i, e)}
-                    onFocus={(e) => e.target.select()}
-                    inputMode="numeric"
-                    maxLength={1}
-                    aria-label={`Digit ${i + 1}`}
-                    className="h-12 w-11 rounded-xl border border-line bg-white text-center font-display text-xl font-bold text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-                  />
-                ))}
+
+              <div className="py-4 text-center">
+                <h3 className="mb-2 text-lg font-bold text-ink-900">Check your inbox!</h3>
+                <p className="text-sm text-ink-500">We've sent a secure verification link to your email address. Click it to verify and log in, or enter the six-digit code below if your email provides one.</p>
               </div>
-              {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button block size="lg" loading={busy} onClick={handleVerify}>Verify code</Button>
+
+              <div className="w-full">
+                <Input
+                  id="verification-code"
+                  label="Optional 6-digit verification code"
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  hint="Leave this blank when you use the verification link."
+                />
+                {error && <p className="mt-2 text-sm font-medium text-danger" role="alert">{error}</p>}
+                <Button type="submit" block loading={busy} className="mt-4">Verify code</Button>
+              </div>
+
               <div className="text-center text-sm text-ink-500">
                 Didn't get it?{' '}
                 <button type="button" onClick={handleResend} disabled={resendRemaining > 0 || resendBusy} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
@@ -409,9 +399,9 @@ export function AuthModal() {
                 </button>
               </div>
               <p className="text-center text-xs text-ink-400">
-                This helps us prevent fraudulent bookings and protect your slot. Never share your code with anyone.
+                You can safely close this window once you click the link in your email.
               </p>
-            </div>
+            </form>
           )}
         </div>
       </div>
