@@ -1,27 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { StatusPill } from '../components/ui/StatusPill';
+import { AdminDialog } from '../components/admin/AdminDialog';
+import { assetUrl } from '../api/client';
 import { formatPeso } from '../utils/format';
+import { curateHomepageServices } from '../utils/services';
 import { deleteFaq, getAdminAbout, getCustomerHistory, inviteStaff, listAdminAppointments, listAdminFaqs, listAdminProfiles, listAdminServices, resetStaffPassword, rescheduleAppointment, saveFaq, saveService, setServiceActive, updateAdminAbout, updateAdminProfile, updateAppointmentStatus, uploadServiceImage } from '../api/admin';
-import { IconCalendar, IconCheckCircle, IconClock, IconGrid, IconSparkle, IconUser } from '../components/icons';
+import { IconCalendar, IconCheckCircle, IconClock, IconGrid, IconSearch, IconSparkle, IconUser } from '../components/icons';
 
-const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 const TERMINAL_APPOINTMENT_STATUSES = new Set(['Completed', 'Cancelled']);
+const APPOINTMENT_ACTIONS = {
+  Pending: [
+    { status: 'Confirmed', label: 'Confirm', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel', variant: 'danger' },
+  ],
+  Confirmed: [
+    { status: 'Completed', label: 'Mark completed', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel', variant: 'danger' },
+  ],
+};
 const TABS = [
+  ['overview', 'Overview', IconGrid],
   ['appointments', 'Appointments', IconCalendar],
   ['catalog', 'Services', IconSparkle],
   ['customers', 'Customers', IconUser],
   ['faqs', 'FAQs', IconCheckCircle],
   ['about', 'Business info', IconGrid],
 ];
+const SERVICE_PAGE_SIZE = 10;
+const CUSTOMER_PAGE_SIZE = 8;
+const HISTORY_PAGE_SIZE = 5;
 
 function AdminRail({ tab, setTab, isAdmin, onLogout }) {
   const items = isAdmin ? [...TABS, ['staff', 'Staff accounts', IconUser]] : TABS;
   return <aside className="hidden border-r border-line bg-surface lg:block"><div className="sticky top-0 flex h-screen w-[210px] flex-col"><div className="flex items-center gap-3 border-b border-line px-5 py-7"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-medium text-gold-600">A</span><span className="font-display text-sm font-semibold leading-[0.95] text-ink-900">Astrid Nails<br /><span className="font-sans text-[8px] font-bold uppercase tracking-[0.15em] text-ink-500">&amp; Beauty Bar</span></span></div><nav aria-label="Staff sections" className="flex flex-col gap-1 px-3 py-6">{items.map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setTab(key)} className={`relative flex min-h-12 items-center gap-3 rounded-lg px-3 text-left text-sm transition-colors ${tab === key ? 'bg-blush-100 font-bold text-brand-800 before:absolute before:inset-y-2 before:-left-3 before:w-1 before:bg-brand-800 before:content-[""]' : 'font-medium text-ink-600 hover:bg-canvas hover:text-ink-900'}`}><Icon size={18} />{label}</button>)}</nav><div className="mt-auto border-t border-line p-4"><p className="text-xs text-ink-500">Protected staff workspace</p><button type="button" onClick={onLogout} className="mt-3 flex min-h-11 w-full items-center rounded-lg px-3 text-sm font-semibold text-danger hover:bg-blush-50">Log out</button></div></div></aside>;
 }
-
 function MobileSectionNav({ tab, setTab, isAdmin }) {
   const items = isAdmin ? [...TABS, ['staff', 'Staff accounts', IconUser]] : TABS;
   return <label className="flex items-center gap-3 lg:hidden"><span className="sr-only">Staff section</span><select value={tab} onChange={(event) => setTab(event.target.value)} className="min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-900">{items.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>;
@@ -31,57 +46,416 @@ function isTerminalAppointment(appointment) {
   return TERMINAL_APPOINTMENT_STATUSES.has(appointment?.status);
 }
 
-function AppointmentRow({ appointment, selected, onSelect, onStatus, onReschedule }) {
-  const [busy, setBusy] = useState(false);
-  const customer = appointment.customer || {};
-  const terminal = isTerminalAppointment(appointment);
-  const change = async (event) => { event.stopPropagation(); if (terminal) return; setBusy(true); try { await onStatus(appointment.id, event.target.value); } finally { setBusy(false); } };
-  return <li><div className={`grid gap-3 border-b border-line px-3 py-4 transition-colors sm:grid-cols-[0.9fr_1.3fr_1fr_auto] sm:items-center ${selected ? 'bg-blush-50' : 'hover:bg-canvas'}`}><button type="button" onClick={() => onSelect(appointment)} className="contents text-left"><span><span className="block font-display text-base font-medium text-ink-900">{appointment.local_time?.slice(0, 5) || '—'}</span><span className="block text-xs text-ink-500">{appointment.local_date}</span></span><span className="min-w-0"><span className="block truncate text-sm font-bold text-ink-900">{customer.first_name} {customer.last_name}</span><span className="block truncate text-xs text-ink-500">{customer.email || 'No email'}</span></span><span className="truncate text-sm text-ink-600">{appointment.services.map((service) => service.service_name).join(', ') || 'No services'}</span></button><span className="hidden sm:inline">{terminal ? <StatusPill status={appointment.status} size="sm" /> : <select aria-label={`Update ${appointment.reference_no}`} value={appointment.status} disabled={busy} onChange={change} className="min-h-9 rounded-lg border border-line bg-surface px-2 text-xs font-bold text-ink-800">{STATUSES.map((status) => <option key={status}>{status}</option>)}</select>}</span></div><div className="flex items-center justify-between border-b border-line px-3 pb-3 sm:hidden"><StatusPill status={appointment.status} size="sm" />{!terminal && <Button type="button" size="sm" variant="soft" onClick={() => onReschedule(appointment)}>Reschedule</Button>}</div></li>;
+function appointmentActions(status) {
+  return APPOINTMENT_ACTIONS[status] || [];
 }
 
-function AppointmentInspector({ appointment, onStatus, onReschedule }) {
+function statusConfirmationCopy(status) {
+  if (status === 'Confirmed') return { title: 'Confirm appointment?', button: 'Confirm appointment' };
+  if (status === 'Completed') return { title: 'Mark appointment completed?', button: 'Mark completed' };
+  if (status === 'Cancelled') return { title: 'Cancel appointment?', button: 'Cancel appointment' };
+  return { title: 'Update appointment?', button: 'Update status' };
+}
+
+function serviceNames(appointment) {
+  return (appointment?.services || []).map((service) => service.service_name).filter(Boolean);
+}
+
+function manilaDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function localDateLabel(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return 'Date unavailable';
+  return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${date}T12:00:00+08:00`));
+}
+
+function localWeekday(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return '';
+  return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', weekday: 'short' }).format(new Date(`${date}T12:00:00+08:00`));
+}
+
+function appointmentSortKey(appointment) {
+  return `${appointment?.local_date || ''}T${appointment?.local_time || ''}`;
+}
+
+function recentBookingCompare(a, b) {
+  const aCreated = Date.parse(a?.created_at || '');
+  const bCreated = Date.parse(b?.created_at || '');
+  if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) return bCreated - aCreated;
+  if (Number.isFinite(aCreated) !== Number.isFinite(bCreated)) return Number.isFinite(bCreated) ? 1 : -1;
+  return appointmentSortKey(b).localeCompare(appointmentSortKey(a)) || String(b?.id || '').localeCompare(String(a?.id || ''));
+}
+
+function countedBooking(appointment) {
+  return appointment?.status !== 'Cancelled';
+}
+
+function PaginationControls({ page, pageCount, total, pageSize, label, onPageChange }) {
+  if (!total) return null;
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize + 1;
+  const end = Math.min(currentPage * pageSize, total);
+  return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4" aria-label={`${label} pages`}><p className="text-sm text-ink-500">Showing {start}–{end} of {total}</p><div className="flex items-center gap-2"><button type="button" className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-bold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45" onClick={() => onPageChange(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>Previous</button><span className="min-w-20 text-center text-sm font-semibold text-ink-600">Page {currentPage} of {pageCount}</span><button type="button" className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-bold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45" onClick={() => onPageChange(Math.min(pageCount, currentPage + 1))} disabled={currentPage >= pageCount}>Next</button></div></div>;
+}
+
+function AppointmentRow({ appointment, selected, onSelect }) {
+  const customer = appointment.customer || {};
+  return <li><button type="button" onClick={() => onSelect(appointment)} className={`grid w-full gap-3 border-b border-line px-3 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 sm:grid-cols-[0.9fr_1.3fr_minmax(0,1fr)_auto] sm:items-center sm:px-4 ${selected ? 'bg-blush-50' : 'hover:bg-canvas'}`}><span><span className="block font-display text-base font-medium text-ink-900">{appointment.local_time?.slice(0, 5) || '—'}</span><span className="block text-xs text-ink-500">{appointment.local_date || 'Date unavailable'}</span></span><span className="min-w-0"><span className="block truncate text-sm font-bold text-ink-900">{customer.first_name} {customer.last_name}</span><span className="block truncate text-xs text-ink-500">{customer.email || 'No email'}</span></span><span className="min-w-0 truncate text-sm text-ink-600">{serviceNames(appointment).join(', ') || 'No services'}</span><span className="justify-self-start sm:justify-self-end"><StatusPill status={appointment.status} size="sm" /></span></button></li>;
+}
+
+function AppointmentInspector({ appointment, onRequestStatus, onReschedule }) {
   if (!appointment) return <Card className="h-full p-6"><p className="text-sm leading-relaxed text-ink-500">Select an appointment to inspect its customer, services, status, or reschedule action.</p></Card>;
   const customer = appointment.customer || {};
   const terminal = isTerminalAppointment(appointment);
-  return <Card className="h-full p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Appointment details</p><h2 className="mt-2 font-display text-2xl font-medium text-ink-900">{appointment.reference_no}</h2></div><StatusPill status={appointment.status} /></div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Customer</h3><p className="mt-3 font-semibold text-ink-900">{customer.first_name} {customer.last_name}</p><p className="mt-1 break-all text-sm text-ink-600">{customer.email || 'No email'}</p>{customer.phone && <p className="mt-1 text-sm text-ink-600">{customer.phone}</p>}</div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">When</h3><p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink-900"><IconCalendar size={16} className="text-brand-600" />{appointment.local_date}</p><p className="mt-2 flex items-center gap-2 text-sm font-semibold text-ink-900"><IconClock size={16} className="text-brand-600" />{appointment.local_time?.slice(0, 5)} · {appointment.total_duration_minutes} min</p></div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Services</h3><ul className="mt-3 divide-y divide-line">{appointment.services.map((service) => <li key={`${appointment.id}-${service.service_name}`} className="flex justify-between gap-3 py-2 text-sm"><span className="text-ink-700">{service.service_name}</span><span className="font-semibold text-ink-900">{formatPeso(service.unit_price)}</span></li>)}</ul><p className="mt-3 flex justify-between border-t border-line pt-3 text-sm font-bold"><span>Total</span><span className="font-display text-lg text-brand-800">{formatPeso(appointment.total_price)}</span></p></div>{terminal ? <p className="mt-6 border-t border-line pt-5 text-sm leading-relaxed text-ink-500">Completed and cancelled appointments are read-only.</p> : <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5"><Button type="button" variant="soft" onClick={() => onReschedule(appointment)}>Reschedule</Button><label className="sr-only" htmlFor="inspector-status">Appointment status</label><select id="inspector-status" value={appointment.status} onChange={(event) => onStatus(appointment.id, event.target.value)} className="min-h-11 rounded-xl border border-line bg-surface px-3 text-sm font-bold text-ink-900">{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></div>}</Card>;
+  return <Card className="h-full p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Appointment details</p><h2 className="mt-2 break-all font-display text-2xl font-medium text-ink-900">{appointment.reference_no}</h2></div><StatusPill status={appointment.status} /></div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Customer</h3><p className="mt-3 font-semibold text-ink-900">{customer.first_name} {customer.last_name}</p><p className="mt-1 break-all text-sm text-ink-600">{customer.email || 'No email'}</p>{customer.phone && <p className="mt-1 text-sm text-ink-600">{customer.phone}</p>}</div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">When</h3><p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink-900"><IconCalendar size={16} className="text-brand-600" />{localDateLabel(appointment.local_date)}</p><p className="mt-2 flex items-center gap-2 text-sm font-semibold text-ink-900"><IconClock size={16} className="text-brand-600" />{appointment.local_time?.slice(0, 5) || 'Time unavailable'} · {appointment.total_duration_minutes || '—'} min</p></div><div className="mt-6 border-t border-line pt-5"><h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">Services</h3><ul className="mt-3 divide-y divide-line">{(appointment.services || []).map((service, index) => <li key={`${appointment.id}-${service.service_name}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span className="min-w-0 text-ink-700">{service.service_name || 'Unnamed service'}</span><span className="shrink-0 font-semibold text-ink-900">{formatPeso(service.unit_price)}</span></li>)}</ul><p className="mt-3 flex justify-between border-t border-line pt-3 text-sm font-bold"><span>Total</span><span className="font-display text-lg text-brand-800">{formatPeso(appointment.total_price)}</span></p></div>{terminal ? <p className="mt-6 border-t border-line pt-5 text-sm leading-relaxed text-ink-500">Completed and cancelled appointments are read-only.</p> : <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5"><Button type="button" size="sm" variant="soft" className="min-h-11" onClick={() => onReschedule(appointment)}>Reschedule</Button>{appointmentActions(appointment.status).map((action) => <Button key={action.status} type="button" size="sm" variant={action.variant} className="min-h-11" onClick={() => onRequestStatus(appointment, action.status)}>{action.label}</Button>)}</div>}</Card>;
 }
 
-function ServiceRow({ service, onSaved }) {
-  const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  const updateImage = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); setMessage(''); try { const result = await uploadServiceImage(service.id, file); if (!result.success) throw new Error(result.error); setMessage('Image saved.'); onSaved(); } catch (error) { setMessage(error.message); } finally { setBusy(false); event.target.value = ''; } };
-  const toggle = async () => { setBusy(true); setMessage(''); try { const result = await setServiceActive(service.id, !service.is_active); if (!result.success) throw new Error(result.error); onSaved(); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
-  return <li className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-4 last:border-b-0"><div className="min-w-0"><p className="font-display text-lg font-medium text-ink-900">{service.name}</p><p className="mt-1 text-xs text-ink-500">{service.category} · {formatPeso(service.price)} · {service.duration_minutes} min</p></div><div className="flex flex-wrap items-center gap-2"><label className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-line px-3 text-xs font-bold text-ink-700 hover:border-brand-300">{busy ? 'Saving…' : 'Upload image'}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={updateImage} /></label><Button type="button" size="sm" variant="soft" disabled={busy} onClick={toggle}>{service.is_active ? 'Deactivate' : 'Activate'}</Button></div>{message && <p className="basis-full text-xs font-semibold text-ink-500">{message}</p>}</li>;
+function serviceTypeLabel(service) {
+  if (service.item_type === 'package') return 'Package · fixed price';
+  if (service.item_type === 'add_on') return 'Add-on';
+  return 'Service';
+}
+
+function customerDisplayName(profile) {
+  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ')).trim();
+  return fullName || String(profile?.email || '').trim() || 'Customer details';
+}
+
+function ServiceRow({ service, onSaved, onEdit, editing, homepageCurated }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const updateImage = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await uploadServiceImage(service.id, file);
+      if (!result.success) throw new Error(result.error);
+      setMessage('Image saved.');
+      await onSaved();
+    } catch (uploadError) {
+      setMessage(uploadError.message);
+    } finally {
+      setBusy(false);
+      event.target.value = '';
+    }
+  };
+  const toggle = async () => {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await setServiceActive(service.id, !service.is_active);
+      if (!result.success) throw new Error(result.error);
+      await onSaved();
+    } catch (toggleError) {
+      setMessage(toggleError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <li className={`border-b border-line py-4 last:border-b-0 ${editing ? 'bg-blush-50/60' : ''}`}><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="flex min-w-0 items-start gap-3"><div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300">{service.image_path ? <img src={assetUrl(service.image_path)} alt="" className="h-full w-full object-cover" /> : <IconSparkle size={20} aria-hidden="true" />}</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-display text-lg font-medium text-ink-900">{service.name}</p>{homepageCurated && <span className="rounded-full border border-gold-500/50 bg-gold-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-gold-600">Homepage preview</span>}</div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-ink-500"><span>{service.category || 'Other'}</span><span aria-hidden="true">·</span><span>{service.subcategory || 'General'}</span><span aria-hidden="true">·</span><span>{serviceTypeLabel(service)}</span></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm"><span className="font-display font-semibold text-brand-800">{formatPeso(service.price)}</span><span className="text-ink-600">{service.duration_minutes ? `${service.duration_minutes} min` : 'Duration unavailable'}</span><span className={`font-semibold ${service.is_active ? 'text-success' : 'text-danger'}`}>{service.is_active ? 'Active' : 'Inactive'}</span></div></div><div className="flex shrink-0 flex-wrap items-center gap-2"><Button type="button" size="sm" variant="soft" className="min-h-11" disabled={busy} onClick={() => onEdit(service)}>Edit</Button><label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border border-line px-3.5 text-xs font-bold text-ink-700 transition-colors hover:border-brand-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-800">{busy ? 'Saving…' : service.image_path ? 'Replace image' : 'Upload image'}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={updateImage} /></label><Button type="button" size="sm" variant="soft" className="min-h-11" disabled={busy} onClick={toggle}>{service.is_active ? 'Deactivate' : 'Activate'}</Button></div></div></div>{message && <p className="mt-2 text-xs font-semibold text-ink-500" role="status">{message}</p>}</li>;
 }
 
 function FaqRow({ faq, onSaved }) {
-  const [form, setForm] = useState({ question: faq.question, answer: faq.answer, display_order: faq.display_order, is_published: faq.is_published }); const [busy, setBusy] = useState(false);
-  const save = async () => { setBusy(true); try { const result = await saveFaq({ id: faq.id, ...form }); if (!result.success) throw new Error(result.error); onSaved(); } catch (error) { onSaved(error.message); } finally { setBusy(false); } };
-  const remove = async () => { if (!window.confirm('Delete this FAQ?')) return; setBusy(true); try { const result = await deleteFaq(faq.id); if (!result.success) throw new Error(result.error); onSaved(); } catch (error) { onSaved(error.message); } finally { setBusy(false); } };
+  const [form, setForm] = useState({ question: faq.question, answer: faq.answer, display_order: faq.display_order, is_published: faq.is_published });
+  const [busy, setBusy] = useState(false);
+  const save = async () => { setBusy(true); try { const result = await saveFaq({ id: faq.id, ...form }); if (!result.success) throw new Error(result.error); onSaved(); } catch (saveError) { onSaved(saveError.message); } finally { setBusy(false); } };
+  const remove = async () => { if (!window.confirm('Delete this FAQ?')) return; setBusy(true); try { const result = await deleteFaq(faq.id); if (!result.success) throw new Error(result.error); onSaved(); } catch (removeError) { onSaved(removeError.message); } finally { setBusy(false); } };
   return <li className="grid gap-3 border-b border-line py-4 last:border-b-0 sm:grid-cols-[1fr_1.4fr_auto]"><input value={form.question} onChange={(event) => setForm((current) => ({ ...current, question: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 text-sm" aria-label="FAQ question" disabled={busy} /><textarea value={form.answer} onChange={(event) => setForm((current) => ({ ...current, answer: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm" aria-label="FAQ answer" disabled={busy} /><div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-stretch"><input type="number" min="0" value={form.display_order} onChange={(event) => setForm((current) => ({ ...current, display_order: event.target.value }))} className="min-h-10 w-20 rounded-lg border border-line px-2 text-sm" aria-label="FAQ order" disabled={busy} /><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={form.is_published} onChange={(event) => setForm((current) => ({ ...current, is_published: event.target.checked }))} disabled={busy} />Published</label><Button type="button" size="sm" onClick={save} disabled={busy}>Save</Button><Button type="button" size="sm" variant="soft" onClick={remove} disabled={busy}>Delete</Button></div></li>;
 }
 
 function ProfileRow({ profile, onChange, onReset }) {
-  const [busy, setBusy] = useState(false); const update = async (fields) => { setBusy(true); try { await onChange(profile.id, fields); } finally { setBusy(false); } };
+  const [busy, setBusy] = useState(false);
+  const update = async (fields) => { setBusy(true); try { await onChange(profile.id, fields); } finally { setBusy(false); } };
   return <li className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-4 last:border-b-0"><div className="min-w-0"><p className="font-semibold text-ink-900">{profile.first_name} {profile.last_name}</p><p className="truncate text-xs text-ink-500">{profile.email}</p></div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${profile.is_active ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>{profile.is_active ? 'Active' : 'Inactive'}</span><select value={profile.role} disabled={busy} onChange={(event) => update({ role: event.target.value })} className="min-h-9 rounded-lg border border-line bg-surface px-2 text-xs font-semibold"><option value="staff">Staff</option><option value="admin">Admin</option></select><Button type="button" size="sm" variant="soft" disabled={busy} onClick={() => update({ is_active: !profile.is_active })}>{profile.is_active ? 'Deactivate' : 'Activate'}</Button><Button type="button" size="sm" variant="soft" disabled={busy} onClick={() => onReset(profile)}>Reset password</Button></div></li>;
+}
+
+function AdminOverview({ appointments, onSelectAppointment }) {
+  const today = manilaDateKey();
+  const month = today.slice(0, 7);
+  const activeAppointments = appointments.filter(countedBooking);
+  const todayBookings = activeAppointments.filter((appointment) => appointment.local_date === today);
+  const pendingRequests = appointments.filter((appointment) => appointment.status === 'Pending');
+  const monthBookings = activeAppointments.filter((appointment) => String(appointment.local_date || '').startsWith(month));
+  const weekendBookings = monthBookings.filter((appointment) => ['Sat', 'Sun'].includes(localWeekday(appointment.local_date)));
+  const recentBookings = appointments.slice().sort(recentBookingCompare).slice(0, 5);
+  const popularServices = [...monthBookings.reduce((counts, appointment) => {
+    serviceNames(appointment).forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
+    return counts;
+  }, new Map())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5);
+  const metrics = [
+    ['Today’s bookings', todayBookings.length, 'Lucena City local date'],
+    ['Pending requests', pendingRequests.length, 'Awaiting staff action'],
+    ['Bookings this month', monthBookings.length, 'Cancelled excluded'],
+    ['Weekend bookings this month', weekendBookings.length, 'Saturday and Sunday'],
+  ];
+  return <div className="space-y-6"><div><p className="text-sm text-ink-500">A live operational view for {localDateLabel(today)}. Appointment totals are not payment or revenue figures.</p><dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, detail]) => <div key={label} className="rounded-xl border border-line bg-surface p-5"><dt className="text-sm font-semibold text-ink-600">{label}</dt><dd className="mt-3 font-display text-3xl font-medium text-brand-800">{value}</dd><p className="mt-1 text-xs text-ink-500">{detail}</p></div>)}</dl></div><div className="grid gap-6 xl:grid-cols-2"><Card className="p-5 sm:p-7"><CardHeader title="Recent bookings" subtitle="Latest appointment requests and their service snapshots." />{recentBookings.length ? <ul className="mt-2 divide-y divide-line">{recentBookings.map((appointment) => <li key={appointment.id}><button type="button" onClick={() => onSelectAppointment(appointment)} className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"><span className="min-w-0"><span className="block truncate text-sm font-bold text-ink-900">{appointment.reference_no}</span><span className="block truncate text-xs text-ink-500">{localDateLabel(appointment.local_date)} · {appointment.local_time?.slice(0, 5) || 'Time unavailable'} · {serviceNames(appointment).join(', ') || 'No services'}</span></span><StatusPill status={appointment.status} size="sm" /></button></li>)}</ul> : <p className="py-8 text-sm text-ink-500">No bookings yet.</p>}</Card><Card className="p-5 sm:p-7"><CardHeader title="Popular services this month" subtitle="Counted from appointment service snapshots; cancelled bookings excluded." />{popularServices.length ? <ol className="mt-2 divide-y divide-line">{popularServices.map(([name, count]) => <li key={name} className="flex items-center justify-between gap-4 py-3"><span className="min-w-0 truncate text-sm font-semibold text-ink-800">{name}</span><span className="shrink-0 text-sm font-bold text-brand-800">{count} booking{count === 1 ? '' : 's'}</span></li>)}</ol> : <p className="py-8 text-sm text-ink-500">No non-cancelled bookings this month.</p>}</Card></div></div>;
 }
 
 export function AdminPage() {
   const { customer, logout } = useAuth();
-  const [appointments, setAppointments] = useState([]); const [services, setServices] = useState([]); const [faqs, setFaqs] = useState([]); const [customers, setCustomers] = useState([]); const [staff, setStaff] = useState([]); const [customerHistory, setCustomerHistory] = useState([]); const [selectedAppointment, setSelectedAppointment] = useState(null); const [selectedCustomer, setSelectedCustomer] = useState(null); const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [loading, setLoading] = useState(true); const [serviceForm, setServiceForm] = useState({ id: '', name: '', category: '', price: '', duration_minutes: 60, description: '' }); const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', role: 'staff' }); const [aboutForm, setAboutForm] = useState({}); const [customerForm, setCustomerForm] = useState({ first_name: '', last_name: '', phone: '' }); const [newFaq, setNewFaq] = useState({ question: '', answer: '', display_order: 0 }); const [reschedule, setReschedule] = useState(null); const [tab, setTab] = useState('appointments');
-  const load = useCallback(async () => { setLoading(true); setError(''); try { const [nextAppointments, nextServices, nextFaqs, nextAbout, nextProfiles] = await Promise.all([listAdminAppointments(), listAdminServices(), listAdminFaqs(), getAdminAbout(), listAdminProfiles()]); setAppointments(nextAppointments); setServices(nextServices); setFaqs(nextFaqs); setAboutForm(nextAbout || {}); setCustomers(nextProfiles.filter((profile) => profile.role === 'customer')); setStaff(nextProfiles.filter((profile) => ['staff', 'admin'].includes(profile.role))); return nextAppointments; } catch (loadError) { setError(loadError.message || 'Could not load staff workspace.'); return []; } finally { setLoading(false); } }, []);
+  const [appointments, setAppointments] = useState([]);
+  const [services, setServices] = useState([]);
+  const [faqs, setFaqs] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [customerHistory, setCustomerHistory] = useState([]);
+  const [customerHistoryLoading, setCustomerHistoryLoading] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [serviceForm, setServiceForm] = useState({ id: '', name: '', category: '', price: '', duration_minutes: 60, description: '', is_active: true });
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState(null);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceCategory, setServiceCategory] = useState('All categories');
+  const [serviceVisibility, setServiceVisibility] = useState('active');
+  const [servicePage, setServicePage] = useState(1);
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', role: 'staff' });
+  const [aboutForm, setAboutForm] = useState({});
+  const [customerForm, setCustomerForm] = useState({ first_name: '', last_name: '', phone: '' });
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerHistoryPage, setCustomerHistoryPage] = useState(1);
+  const [newFaq, setNewFaq] = useState({ question: '', answer: '', display_order: 0 });
+  const [reschedule, setReschedule] = useState(null);
+  const [rescheduleBusy, setRescheduleBusy] = useState(false);
+  const [rescheduleDialogError, setRescheduleDialogError] = useState('');
+  const [statusConfirm, setStatusConfirm] = useState(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusDialogError, setStatusDialogError] = useState('');
+  const [customerDialogError, setCustomerDialogError] = useState('');
+  const [tab, setTab] = useState('overview');
+  const historyRequestRef = useRef(0);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [nextAppointments, nextServices, nextFaqs, nextAbout, nextProfiles] = await Promise.all([listAdminAppointments(), listAdminServices(), listAdminFaqs(), getAdminAbout(), listAdminProfiles()]);
+      setAppointments(nextAppointments);
+      setSelectedAppointment((current) => current ? nextAppointments.find((appointment) => appointment.id === current.id) || null : current);
+      setServices(nextServices);
+      setFaqs(nextFaqs);
+      setAboutForm(nextAbout || {});
+      setCustomers(nextProfiles.filter((profile) => profile.role === 'customer'));
+      setStaff(nextProfiles.filter((profile) => ['staff', 'admin'].includes(profile.role)));
+      return nextAppointments;
+    } catch (loadError) {
+      setError(loadError.message || 'Could not load staff workspace.');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
-  const status = async (id, nextStatus) => { const current = appointments.find((appointment) => appointment.id === id); if (isTerminalAppointment(current)) return; try { await updateAppointmentStatus(id, nextStatus); setNotice('Appointment status updated.'); const refreshed = await load(); setSelectedAppointment((selected) => selected?.id === id ? refreshed.find((item) => item.id === id) || null : selected); } catch (statusError) { setError(statusError.message); } };
-  const save = async (event) => { event.preventDefault(); setNotice(''); try { const result = await saveService(serviceForm); if (!result.success) throw new Error(result.error); setServiceForm({ id: '', name: '', category: '', price: '', duration_minutes: 60, description: '' }); setNotice('Service saved.'); await load(); } catch (saveError) { setError(saveError.message); } };
-  const invite = async (event) => { event.preventDefault(); setNotice(''); try { const result = await inviteStaff(inviteForm); if (!result.success) throw new Error(result.error); setInviteForm({ email: '', first_name: '', last_name: '', role: 'staff' }); setNotice('Invitation sent.'); await load(); } catch (inviteError) { setError(inviteError.message); } };
-  const selectCustomer = async (profile) => { setSelectedCustomer(profile); setCustomerForm({ first_name: profile.first_name || '', last_name: profile.last_name || '', phone: profile.phone || '' }); setCustomerHistory([]); try { setCustomerHistory(await getCustomerHistory(profile.id)); } catch (historyError) { setError(historyError.message); } };
-  const saveCustomer = async (event) => { event.preventDefault(); if (!selectedCustomer) return; try { await updateAdminProfile(selectedCustomer.id, customerForm); setNotice('Customer details saved.'); await load(); setSelectedCustomer((current) => ({ ...current, ...customerForm })); } catch (customerError) { setError(customerError.message); } };
+
+  const requestStatus = (appointment, nextStatus) => {
+    const current = appointments.find((item) => item.id === appointment?.id);
+    if (!current || isTerminalAppointment(current) || !appointmentActions(current.status).some((action) => action.status === nextStatus)) return;
+    setError('');
+    setStatusDialogError('');
+    setStatusConfirm({ id: current.id, reference: current.reference_no, from: current.status, to: nextStatus });
+  };
+
+  const closeStatusDialog = () => {
+    if (statusBusy) return;
+    setStatusConfirm(null);
+    setStatusDialogError('');
+  };
+
+  const confirmStatus = async () => {
+    if (!statusConfirm || statusBusy) return;
+    const current = appointments.find((item) => item.id === statusConfirm.id);
+    if (!current || isTerminalAppointment(current) || !appointmentActions(current.status).some((action) => action.status === statusConfirm.to)) {
+      setStatusConfirm(null);
+      setStatusDialogError('');
+      return;
+    }
+    setStatusBusy(true);
+    setError('');
+    setStatusDialogError('');
+    try {
+      await updateAppointmentStatus(current.id, statusConfirm.to);
+      const refreshed = await load();
+      setSelectedAppointment((selected) => selected?.id === current.id ? refreshed.find((item) => item.id === current.id) || null : selected);
+      setNotice(`Appointment ${current.reference_no} marked ${statusConfirm.to.toLowerCase()}.`);
+      setStatusDialogError('');
+      setStatusConfirm(null);
+    } catch (statusError) {
+      const message = statusError?.message || 'Could not update appointment status.';
+      setError(message);
+      setStatusDialogError(message);
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  const resetServiceForm = () => {
+    setServiceForm({ id: '', name: '', category: '', price: '', duration_minutes: 60, description: '', is_active: true });
+    setEditingServiceId(null);
+    setError('');
+    setNotice('');
+  };
+  const openNewService = () => { resetServiceForm(); setServiceDialogOpen(true); };
+  const editService = (service) => {
+    setEditingServiceId(service.id);
+    setServiceForm({ id: service.id, name: service.name || '', category: service.category || '', price: service.price ?? '', duration_minutes: service.duration_minutes || 60, description: service.description || '', is_active: service.is_active !== false });
+    setError('');
+    setNotice('');
+    setServiceDialogOpen(true);
+  };
+  const save = async (event) => {
+    event.preventDefault();
+    setNotice('');
+    try {
+      const result = await saveService(editingServiceId ? { ...serviceForm, id: editingServiceId } : serviceForm);
+      if (!result.success) throw new Error(result.error);
+      resetServiceForm();
+      setServiceDialogOpen(false);
+      setNotice('Service saved.');
+      await load();
+    } catch (saveError) {
+      setError(saveError.message);
+    }
+  };
+  const invite = async (event) => {
+    event.preventDefault();
+    setNotice('');
+    try {
+      const result = await inviteStaff(inviteForm);
+      if (!result.success) throw new Error(result.error);
+      setInviteForm({ email: '', first_name: '', last_name: '', role: 'staff' });
+      setNotice('Invitation sent.');
+      await load();
+    } catch (inviteError) {
+      setError(inviteError.message);
+    }
+  };
+  const selectCustomer = async (profile) => {
+    const requestId = historyRequestRef.current + 1;
+    historyRequestRef.current = requestId;
+    setSelectedCustomer(profile);
+    setCustomerForm({ first_name: profile.first_name || '', last_name: profile.last_name || '', phone: profile.phone || '' });
+    setCustomerHistory([]);
+    setCustomerHistoryPage(1);
+    setCustomerHistoryLoading(true);
+    setError('');
+    setCustomerDialogError('');
+    try {
+      const history = await getCustomerHistory(profile.id);
+      if (historyRequestRef.current === requestId) setCustomerHistory(history);
+    } catch (historyError) {
+      const message = historyError?.message || 'Could not load appointment history.';
+      if (historyRequestRef.current === requestId) {
+        setError(message);
+        setCustomerDialogError(message);
+      }
+    } finally {
+      if (historyRequestRef.current === requestId) setCustomerHistoryLoading(false);
+    }
+  };
+  const closeCustomer = () => { historyRequestRef.current += 1; setSelectedCustomer(null); setCustomerHistory([]); setCustomerDialogError(''); };
+  const saveCustomer = async (event) => {
+    event.preventDefault();
+    if (!selectedCustomer || customerBusy) return;
+    setCustomerBusy(true);
+    setError('');
+    setCustomerDialogError('');
+    try {
+      await updateAdminProfile(selectedCustomer.id, customerForm);
+      setCustomerDialogError('');
+      setNotice('Customer details saved.');
+      await load();
+      setSelectedCustomer((current) => current ? { ...current, ...customerForm } : current);
+    } catch (customerError) {
+      const message = customerError?.message || 'Could not save customer details.';
+      setError(message);
+      setCustomerDialogError(message);
+    } finally {
+      setCustomerBusy(false);
+    }
+  };
   const saveAbout = async (event) => { event.preventDefault(); try { await updateAdminAbout(aboutForm); setNotice('Business information saved.'); await load(); } catch (aboutError) { setError(aboutError.message); } };
   const addFaq = async (event) => { event.preventDefault(); try { const result = await saveFaq(newFaq); if (!result.success) throw new Error(result.error); setNewFaq({ question: '', answer: '', display_order: 0 }); setNotice('FAQ saved.'); await load(); } catch (faqError) { setError(faqError.message); } };
-  const saveReschedule = async (event) => { event.preventDefault(); if (!reschedule) return; const current = appointments.find((appointment) => appointment.id === reschedule.id); if (isTerminalAppointment(current)) { setReschedule(null); return; } try { const result = await rescheduleAppointment(reschedule.id, reschedule.date, reschedule.time); if (!result.success) throw new Error(result.error); setReschedule(null); setNotice('Appointment rescheduled.'); await load(); } catch (rescheduleError) { setError(rescheduleError.message); } };
+  const saveReschedule = async (event) => {
+    event.preventDefault();
+    if (!reschedule || rescheduleBusy) return;
+    const current = appointments.find((appointment) => appointment.id === reschedule.id);
+    if (isTerminalAppointment(current)) { setReschedule(null); setRescheduleDialogError(''); return; }
+    setRescheduleBusy(true);
+    setError('');
+    setRescheduleDialogError('');
+    try {
+      const result = await rescheduleAppointment(reschedule.id, reschedule.date, reschedule.time);
+      if (!result.success) throw new Error(result.error);
+      setRescheduleDialogError('');
+      setReschedule(null);
+      setNotice('Appointment rescheduled.');
+      await load();
+    } catch (rescheduleError) {
+      const message = rescheduleError?.message || 'Could not reschedule appointment.';
+      setError(message);
+      setRescheduleDialogError(message);
+    } finally {
+      setRescheduleBusy(false);
+    }
+  };
+  const openReschedule = (appointment) => {
+    setError('');
+    setRescheduleDialogError('');
+    setReschedule({ id: appointment.id, reference: appointment.reference_no, date: appointment.local_date, time: appointment.local_time?.slice(0, 5) });
+  };
+  const closeReschedule = () => {
+    if (rescheduleBusy) return;
+    setReschedule(null);
+    setRescheduleDialogError('');
+  };
   const updateProfile = async (id, fields) => { try { await updateAdminProfile(id, fields); setNotice('Account updated.'); await load(); } catch (profileError) { setError(profileError.message); } };
   const resetPassword = async (profile) => { try { const result = await resetStaffPassword(profile.id); if (!result.success) throw new Error(result.error); setNotice(`Password reset sent to ${profile.email}.`); } catch (resetError) { setError(resetError.message); } };
+
+  const serviceCategories = useMemo(() => ['All categories', ...new Set(services.map((service) => service.category || 'Other'))], [services]);
+  const filteredServices = useMemo(() => {
+    const term = serviceSearch.trim().toLocaleLowerCase();
+    return services.filter((service) => {
+      const categoryMatches = serviceCategory === 'All categories' || (service.category || 'Other') === serviceCategory;
+      const visibilityMatches = serviceVisibility === 'all' || (serviceVisibility === 'active' ? service.is_active : !service.is_active);
+      const searchable = [service.name, service.category, service.subcategory, service.item_type, service.description].filter(Boolean).join(' ').toLocaleLowerCase();
+      return categoryMatches && visibilityMatches && (!term || searchable.includes(term));
+    });
+  }, [services, serviceSearch, serviceCategory, serviceVisibility]);
+  const servicePageCount = Math.max(1, Math.ceil(filteredServices.length / SERVICE_PAGE_SIZE));
+  useEffect(() => { setServicePage(1); }, [serviceSearch, serviceCategory, serviceVisibility]);
+  useEffect(() => { setServicePage((current) => Math.min(current, servicePageCount)); }, [servicePageCount]);
+  const visibleServicePage = Math.min(servicePage, servicePageCount);
+  const visibleServices = filteredServices.slice((visibleServicePage - 1) * SERVICE_PAGE_SIZE, visibleServicePage * SERVICE_PAGE_SIZE);
+  const homepagePreviewIds = useMemo(() => new Set(curateHomepageServices(services, 6).map((service) => service.id)), [services]);
+
+  const filteredCustomers = useMemo(() => {
+    const term = customerSearch.trim().toLocaleLowerCase();
+    return customers.filter((profile) => [profile.first_name, profile.last_name, profile.email, profile.phone].filter(Boolean).join(' ').toLocaleLowerCase().includes(term));
+  }, [customers, customerSearch]);
+  const customerPageCount = Math.max(1, Math.ceil(filteredCustomers.length / CUSTOMER_PAGE_SIZE));
+  useEffect(() => { setCustomerPage(1); }, [customerSearch]);
+  useEffect(() => { setCustomerPage((current) => Math.min(current, customerPageCount)); }, [customerPageCount]);
+  const visibleCustomerPage = Math.min(customerPage, customerPageCount);
+  const visibleCustomers = filteredCustomers.slice((visibleCustomerPage - 1) * CUSTOMER_PAGE_SIZE, visibleCustomerPage * CUSTOMER_PAGE_SIZE);
+  const customerHistoryPageCount = Math.max(1, Math.ceil(customerHistory.length / HISTORY_PAGE_SIZE));
+  useEffect(() => { setCustomerHistoryPage((current) => Math.min(current, customerHistoryPageCount)); }, [customerHistoryPageCount]);
+  const visibleHistoryPage = Math.min(customerHistoryPage, customerHistoryPageCount);
+  const visibleHistory = customerHistory.slice((visibleHistoryPage - 1) * HISTORY_PAGE_SIZE, visibleHistoryPage * HISTORY_PAGE_SIZE);
   const appointmentCountLabel = useMemo(() => `${appointments.length} booking${appointments.length === 1 ? '' : 's'} · Lucena City local time`, [appointments.length]);
   const rescheduleTarget = reschedule ? appointments.find((appointment) => appointment.id === reschedule.id) : null;
+  const pageTitle = TABS.find(([key]) => key === tab)?.[1] || (tab === 'staff' ? 'Staff accounts' : 'Overview');
+  const statusCopy = statusConfirmationCopy(statusConfirm?.to);
 
-  return <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[210px_1fr]"><AdminRail tab={tab} setTab={setTab} isAdmin={customer?.role === 'admin'} onLogout={logout} /><main className="min-w-0"><header className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur-sm"><div className="mx-auto flex min-h-20 max-w-[1500px] items-center justify-between gap-5 px-4 sm:px-7 lg:px-10"><div><p className="hidden text-xs font-bold uppercase tracking-[0.16em] text-ink-400 sm:block">Staff workspace</p><h1 className="font-display text-2xl font-medium text-ink-900">{tab === 'catalog' ? 'Services' : tab === 'about' ? 'Business information' : tab === 'staff' ? 'Staff accounts' : TABS.find(([key]) => key === tab)?.[1] || 'Appointments'}</h1></div><div className="flex items-center gap-3"><span className="hidden text-sm text-ink-500 sm:block">{customer?.first_name || 'Staff'}</span><button type="button" onClick={logout} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300">Log out</button></div></div></header><div className="mx-auto max-w-[1500px] space-y-6 px-4 pb-16 pt-6 sm:px-7 lg:px-10"><MobileSectionNav tab={tab} setTab={setTab} isAdmin={customer?.role === 'admin'} />{error && <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{error}</p>}{notice && <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success" role="status">{notice}</p>}{loading ? <Card className="p-8"><div className="flex items-center gap-3 text-sm text-ink-500"><span className="h-4 w-4 animate-pulse rounded-full bg-brand-300" />Loading staff workspace…</div></Card> : tab === 'appointments' ? <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]"><Card className="overflow-hidden"><CardHeader title="Appointments" subtitle={appointmentCountLabel} /><div className="grid gap-2 border-b border-line bg-canvas px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ink-500 sm:grid-cols-[0.9fr_1.3fr_1fr_auto]"><span>Time</span><span>Customer</span><span>Services</span><span>Status</span></div><ul>{appointments.length ? appointments.map((appointment) => <AppointmentRow key={appointment.id} appointment={appointment} selected={selectedAppointment?.id === appointment.id} onSelect={setSelectedAppointment} onStatus={status} onReschedule={(item) => setReschedule({ id: item.id, reference: item.reference_no, date: item.local_date, time: item.local_time?.slice(0, 5) })} />) : <li className="px-5 py-12 text-center text-sm text-ink-500">No appointments yet.</li>}</ul></Card><div className="space-y-6"><AppointmentInspector appointment={selectedAppointment} onStatus={status} onReschedule={(item) => setReschedule({ id: item.id, reference: item.reference_no, date: item.local_date, time: item.local_time?.slice(0, 5) })} />{rescheduleTarget && !isTerminalAppointment(rescheduleTarget) && <Card className="p-6"><CardHeader title={`Reschedule ${reschedule.reference}`} subtitle="Choose a 30-minute slot in Lucena City." /><form onSubmit={saveReschedule} className="mt-5 grid gap-3"><label className="text-sm font-semibold text-ink-900">Date<input type="date" required value={reschedule.date} onChange={(event) => setReschedule((current) => ({ ...current, date: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><label className="text-sm font-semibold text-ink-900">Time<input type="time" required step="1800" value={reschedule.time} onChange={(event) => setReschedule((current) => ({ ...current, time: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><div className="flex gap-2"><Button type="submit">Save reschedule</Button><Button type="button" variant="soft" onClick={() => setReschedule(null)}>Close</Button></div></form></Card>}</div></div> : tab === 'catalog' ? <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]"><Card className="p-5 sm:p-7"><CardHeader title="Service menu" subtitle="Manage published treatments and their images." /><ul className="mt-2">{services.length ? services.map((service) => <ServiceRow key={service.id} service={service} onSaved={load} />) : <li className="py-10 text-center text-sm text-ink-500">No services found.</li>}</ul></Card><Card className="p-5 sm:p-7"><CardHeader title="Add or update service" subtitle="Use an existing service ID to update a treatment." /><form onSubmit={save} className="mt-5 grid gap-4">{[['id', 'Service ID'], ['name', 'Name'], ['category', 'Category'], ['price', 'Price'], ['duration_minutes', 'Minutes']].map(([key, label]) => <label key={key} className="text-sm font-semibold text-ink-900">{label}<input required value={serviceForm[key]} type={key === 'price' || key === 'duration_minutes' ? 'number' : 'text'} onChange={(event) => setServiceForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label>)}<label className="text-sm font-semibold text-ink-900">Description<textarea value={serviceForm.description} onChange={(event) => setServiceForm((form) => ({ ...form, description: event.target.value }))} className="mt-1 block min-h-24 w-full rounded-lg border border-line px-3 py-2 text-sm" /></label><Button type="submit">Save service</Button></form></Card></div> : tab === 'customers' ? <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)]"><Card className="p-5 sm:p-7"><CardHeader title="Customers" subtitle={`${customers.length} customer account${customers.length === 1 ? '' : 's'}`} /><ul className="mt-2">{customers.length ? customers.map((profile) => <li key={profile.id} className="border-b border-line last:border-b-0"><button type="button" onClick={() => selectCustomer(profile)} className={`w-full px-2 py-4 text-left ${selectedCustomer?.id === profile.id ? 'bg-blush-50' : 'hover:bg-canvas'}`}><p className="font-semibold text-ink-900">{profile.first_name} {profile.last_name}</p><p className="mt-1 truncate text-xs text-ink-500">{profile.email} · {profile.phone || 'No phone'}</p></button></li>) : <li className="py-10 text-center text-sm text-ink-500">No customer accounts yet.</li>}</ul></Card><Card className="p-5 sm:p-7">{selectedCustomer ? <><CardHeader title={`${selectedCustomer.first_name} ${selectedCustomer.last_name}`} subtitle="Contact details and appointment history" /><form onSubmit={saveCustomer} className="mt-5 grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-ink-900">First name<input required value={customerForm.first_name} onChange={(event) => setCustomerForm((form) => ({ ...form, first_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><label className="text-sm font-semibold text-ink-900">Last name<input value={customerForm.last_name} onChange={(event) => setCustomerForm((form) => ({ ...form, last_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><label className="text-sm font-semibold text-ink-900">Phone<input required value={customerForm.phone} onChange={(event) => setCustomerForm((form) => ({ ...form, phone: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><Button type="submit">Save contact</Button></form><div className="mt-7 border-t border-line pt-5"><h3 className="font-display text-lg font-medium text-ink-900">Appointment history</h3><ul className="mt-3 divide-y divide-line">{customerHistory.length ? customerHistory.map((row) => <li key={row.id} className="py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="font-semibold text-ink-900">{row.reference_no}</span><span className="font-semibold text-ink-700">{row.local_date} · {row.local_time?.slice(0, 5)}</span></div><p className="mt-1 text-xs text-ink-500">{row.services.map((service) => service.service_name).join(', ')} · {row.status} · {formatPeso(row.total_price)}</p></li>) : <li className="py-7 text-sm text-ink-500">No appointment history.</li>}</ul></div></> : <p className="py-10 text-sm text-ink-500">Select a customer to view contact details and history.</p>}</Card></div> : tab === 'faqs' ? <Card className="p-5 sm:p-7"><CardHeader title="FAQs" subtitle="Edit or remove the questions shown on the public site." /><ul className="mt-2">{faqs.map((faq) => <FaqRow key={faq.id} faq={faq} onSaved={(message) => { if (message) setError(message); else load(); }} />)}</ul><form onSubmit={addFaq} className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_1.4fr_auto]"><input required placeholder="Question" value={newFaq.question} onChange={(event) => setNewFaq((form) => ({ ...form, question: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 text-sm" /><textarea required placeholder="Answer" value={newFaq.answer} onChange={(event) => setNewFaq((form) => ({ ...form, answer: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm" /><Button type="submit">Add FAQ</Button></form></Card> : tab === 'about' ? <Card className="p-5 sm:p-7"><CardHeader title="Business information" subtitle="This content is visible on the public site." /><form onSubmit={saveAbout} className="mt-5 grid gap-4 sm:grid-cols-2">{[['business_name', 'Business name'], ['phone', 'Phone'], ['email', 'Email'], ['address', 'Address'], ['description', 'Description'], ['mission_statement', 'Mission statement'], ['business_hours', 'Business hours'], ['salon_policies', 'Salon policies']].map(([key, label]) => <label key={key} className="text-sm font-semibold text-ink-900">{label}{['description', 'mission_statement', 'business_hours', 'salon_policies'].includes(key) ? <textarea value={aboutForm[key] || ''} onChange={(event) => setAboutForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-24 w-full rounded-lg border border-line px-3 py-2 text-sm" /> : <input required={key === 'business_name'} type={key === 'email' ? 'email' : 'text'} value={aboutForm[key] || ''} onChange={(event) => setAboutForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" />}</label>)}<Button type="submit">Save business info</Button></form></Card> : <div className="grid gap-6 xl:grid-cols-2"><Card className="p-5 sm:p-7"><CardHeader title="Staff accounts" subtitle="Activate, deactivate, change roles, or send a recovery link." /><ul className="mt-2">{staff.map((profile) => <ProfileRow key={profile.id} profile={profile} onChange={updateProfile} onReset={resetPassword} />)}</ul></Card><Card className="p-5 sm:p-7"><CardHeader title="Invite staff" subtitle="Only administrators can provision staff accounts." /><form onSubmit={invite} className="mt-5 grid gap-4"><label className="text-sm font-semibold text-ink-900">Staff email<input required type="email" value={inviteForm.email} onChange={(event) => setInviteForm((form) => ({ ...form, email: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-ink-900">First name<input required value={inviteForm.first_name} onChange={(event) => setInviteForm((form) => ({ ...form, first_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><label className="text-sm font-semibold text-ink-900">Last name<input required value={inviteForm.last_name} onChange={(event) => setInviteForm((form) => ({ ...form, last_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label></div><label className="text-sm font-semibold text-ink-900">Role<select value={inviteForm.role} onChange={(event) => setInviteForm((form) => ({ ...form, role: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm"><option value="staff">Staff</option><option value="admin">Admin</option></select></label><Button type="submit">Send invitation</Button></form></Card></div>}</div></main></div>;
+  return <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[210px_1fr]"><AdminRail tab={tab} setTab={setTab} isAdmin={customer?.role === 'admin'} onLogout={logout} /><main className="min-w-0"><header className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur-sm"><div className="mx-auto flex min-h-20 max-w-[1500px] items-center justify-between gap-5 px-4 sm:px-7 lg:px-10"><div><p className="hidden text-xs font-bold uppercase tracking-[0.16em] text-ink-400 sm:block">Staff workspace</p><h1 className="font-display text-2xl font-medium text-ink-900">{pageTitle}</h1></div><div className="flex items-center gap-3"><span className="hidden text-sm text-ink-500 sm:block">{customer?.first_name || 'Staff'}</span><button type="button" onClick={logout} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300">Log out</button></div></div></header><div className="mx-auto max-w-[1500px] space-y-6 px-4 pb-16 pt-6 sm:px-7 lg:px-10"><MobileSectionNav tab={tab} setTab={setTab} isAdmin={customer?.role === 'admin'} />{error && <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{error}</p>}{notice && <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success" role="status">{notice}</p>}{loading ? <Card className="p-8"><div className="flex items-center gap-3 text-sm text-ink-500"><span className="h-4 w-4 animate-pulse rounded-full bg-brand-300" />Loading staff workspace…</div></Card> : tab === 'overview' ? <AdminOverview appointments={appointments} onSelectAppointment={(appointment) => { setSelectedAppointment(appointment); setTab('appointments'); }} /> : tab === 'appointments' ? <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]"><Card className="overflow-hidden"><CardHeader title="Appointments" subtitle={appointmentCountLabel} /><div className="grid gap-2 border-b border-line bg-canvas px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ink-500 sm:grid-cols-[0.9fr_1.3fr_1fr_auto]"><span>Time</span><span>Customer</span><span>Services</span><span>Status</span></div><ul>{appointments.length ? appointments.map((appointment) => <AppointmentRow key={appointment.id} appointment={appointment} selected={selectedAppointment?.id === appointment.id} onSelect={setSelectedAppointment} />) : <li className="px-5 py-12 text-center text-sm text-ink-500">No appointments yet.</li>}</ul></Card><AppointmentInspector appointment={selectedAppointment} onRequestStatus={requestStatus} onReschedule={openReschedule} /></div> : tab === 'catalog' ? <Card className="p-5 sm:p-7"><CardHeader title="Service menu" subtitle="Uploaded images feed the homepage and compact admin/booking previews; the full public menu stays compact and image-free." action={<Button type="button" size="sm" className="min-h-11" onClick={openNewService}>Add service</Button>} /><div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)_minmax(10rem,13rem)]"><label className="text-sm font-semibold text-ink-900"><span className="sr-only">Search services</span><span className="relative block"><IconSearch size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500" /><input type="search" value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} placeholder="Search services" className="min-h-11 w-full rounded-xl border border-line bg-surface px-4 pl-11 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></span></label><label className="text-sm font-semibold text-ink-900"><span className="sr-only">Filter by category</span><select value={serviceCategory} onChange={(event) => setServiceCategory(event.target.value)} className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100">{serviceCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label className="text-sm font-semibold text-ink-900"><span className="sr-only">Filter by service status</span><select value={serviceVisibility} onChange={(event) => setServiceVisibility(event.target.value)} className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"><option value="active">Active only</option><option value="inactive">Inactive only</option><option value="all">All statuses</option></select></label></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ink-500">{filteredServices.length} matching service{filteredServices.length === 1 ? '' : 's'}</p>{(serviceSearch || serviceCategory !== 'All categories' || serviceVisibility !== 'active') && <button type="button" className="min-h-11 rounded-lg px-3 text-sm font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900" onClick={() => { setServiceSearch(''); setServiceCategory('All categories'); setServiceVisibility('active'); }}>Clear filters</button>}</div><ul className="mt-2">{visibleServices.length ? visibleServices.map((service) => <ServiceRow key={service.id} service={service} onSaved={load} onEdit={editService} homepageCurated={homepagePreviewIds.has(service.id)} />) : <li className="py-10 text-center text-sm text-ink-500">No services match these filters.</li>}</ul><PaginationControls page={servicePage} pageCount={servicePageCount} total={filteredServices.length} pageSize={SERVICE_PAGE_SIZE} label="Service" onPageChange={setServicePage} /></Card> : tab === 'customers' ? <Card className="p-5 sm:p-7"><CardHeader title="Customers" subtitle={`${customers.length} customer account${customers.length === 1 ? '' : 's'}`} /><div className="mt-5"><label htmlFor="admin-customer-search" className="sr-only">Search customers</label><div className="relative"><IconSearch size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500" /><input id="admin-customer-search" type="search" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search by name, email, or phone" className="min-h-11 w-full rounded-xl border border-line bg-surface px-4 pl-11 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></div></div><ul className="mt-3">{visibleCustomers.length ? visibleCustomers.map((profile) => <li key={profile.id} className="border-b border-line last:border-b-0"><div className="flex flex-wrap items-center justify-between gap-3 py-4"><div className="min-w-0"><p className="truncate font-semibold text-ink-900">{customerDisplayName(profile)}</p><p className="truncate text-xs text-ink-500">{profile.email} · {profile.phone || 'No phone'}</p></div><Button type="button" size="sm" variant="soft" className="min-h-11 shrink-0" onClick={() => selectCustomer(profile)}>View / edit</Button></div></li>) : <li className="py-10 text-center text-sm text-ink-500">{customers.length ? 'No customers match this search.' : 'No customer accounts yet.'}</li>}</ul><PaginationControls page={customerPage} pageCount={customerPageCount} total={filteredCustomers.length} pageSize={CUSTOMER_PAGE_SIZE} label="Customer" onPageChange={setCustomerPage} /></Card> : tab === 'faqs' ? <Card className="p-5 sm:p-7"><CardHeader title="FAQs" subtitle="Edit or remove the questions shown on the public site." /><ul className="mt-2">{faqs.map((faq) => <FaqRow key={faq.id} faq={faq} onSaved={(message) => { if (message) setError(message); else load(); }} />)}</ul><form onSubmit={addFaq} className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_1.4fr_auto]"><input required placeholder="Question" value={newFaq.question} onChange={(event) => setNewFaq((form) => ({ ...form, question: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 text-sm" /><textarea required placeholder="Answer" value={newFaq.answer} onChange={(event) => setNewFaq((form) => ({ ...form, answer: event.target.value }))} className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm" /><Button type="submit">Add FAQ</Button></form></Card> : tab === 'about' ? <Card className="p-5 sm:p-7"><CardHeader title="Business information" subtitle="This content is visible on the public site." /><form onSubmit={saveAbout} className="mt-5 grid gap-4 sm:grid-cols-2">{[['business_name', 'Business name'], ['phone', 'Phone'], ['email', 'Email'], ['address', 'Address'], ['description', 'Description'], ['mission_statement', 'Mission statement'], ['business_hours', 'Business hours'], ['salon_policies', 'Salon policies']].map(([key, label]) => <label key={key} className="text-sm font-semibold text-ink-900">{label}{['description', 'mission_statement', 'business_hours', 'salon_policies'].includes(key) ? <textarea value={aboutForm[key] || ''} onChange={(event) => setAboutForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-24 w-full rounded-lg border border-line px-3 py-2 text-sm" /> : <input required={key === 'business_name'} type={key === 'email' ? 'email' : 'text'} value={aboutForm[key] || ''} onChange={(event) => setAboutForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" />}</label>)}<Button type="submit">Save business info</Button></form></Card> : tab === 'staff' ? <div className="grid gap-6 xl:grid-cols-2"><Card className="p-5 sm:p-7"><CardHeader title="Staff accounts" subtitle="Activate, deactivate, change roles, or send a recovery link." /><ul className="mt-2">{staff.map((profile) => <ProfileRow key={profile.id} profile={profile} onChange={updateProfile} onReset={resetPassword} />)}</ul></Card><Card className="p-5 sm:p-7"><CardHeader title="Invite staff" subtitle="Only administrators can provision staff accounts." /><form onSubmit={invite} className="mt-5 grid gap-4"><label className="text-sm font-semibold text-ink-900">Staff email<input required type="email" value={inviteForm.email} onChange={(event) => setInviteForm((form) => ({ ...form, email: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-ink-900">First name<input required value={inviteForm.first_name} onChange={(event) => setInviteForm((form) => ({ ...form, first_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label><label className="text-sm font-semibold text-ink-900">Last name<input required value={inviteForm.last_name} onChange={(event) => setInviteForm((form) => ({ ...form, last_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line px-3 text-sm" /></label></div><label className="text-sm font-semibold text-ink-900">Role<select value={inviteForm.role} onChange={(event) => setInviteForm((form) => ({ ...form, role: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm"><option value="staff">Staff</option><option value="admin">Admin</option></select></label><Button type="submit">Send invitation</Button></form></Card></div> : <AdminOverview appointments={appointments} onSelectAppointment={(appointment) => { setSelectedAppointment(appointment); setTab('appointments'); }} />}</div></main><AdminDialog open={!!statusConfirm} title={statusCopy.title} description={`${statusConfirm?.reference || 'This appointment'} will move from ${statusConfirm?.from || 'its current status'} to ${statusConfirm?.to || 'the next status'}.`} closeDisabled={statusBusy} onClose={closeStatusDialog}><p className="text-sm leading-relaxed text-ink-600">{statusConfirm?.to === 'Cancelled' ? 'The cancellation stays in the appointment history and cannot be reversed from this workspace.' : 'Confirm this transition after checking the appointment details.'}</p>{statusDialogError && <p className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">{statusDialogError}</p>}<div className="mt-6 flex flex-wrap justify-end gap-2"><Button type="button" variant="soft" className="min-h-11" disabled={statusBusy} onClick={closeStatusDialog}>Keep appointment</Button><Button type="button" variant={statusConfirm?.to === 'Cancelled' ? 'danger' : 'primary'} className="min-h-11" loading={statusBusy} onClick={confirmStatus}>{statusCopy.button}</Button></div></AdminDialog><AdminDialog open={!!rescheduleTarget && !isTerminalAppointment(rescheduleTarget)} title={`Reschedule ${reschedule?.reference || 'appointment'}`} description="Choose a 30-minute slot in Lucena City local time." closeDisabled={rescheduleBusy} onClose={closeReschedule}><form onSubmit={saveReschedule} className="grid gap-4">{rescheduleDialogError && <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">{rescheduleDialogError}</p>}<label className="text-sm font-semibold text-ink-900">Date<input type="date" required value={reschedule?.date || ''} onChange={(event) => setReschedule((current) => ({ ...current, date: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><label className="text-sm font-semibold text-ink-900">Time<input type="time" required step="1800" value={reschedule?.time || ''} onChange={(event) => setReschedule((current) => ({ ...current, time: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="soft" className="min-h-11" disabled={rescheduleBusy} onClick={closeReschedule}>Cancel</Button><Button type="submit" className="min-h-11" loading={rescheduleBusy}>Save reschedule</Button></div></form></AdminDialog><AdminDialog open={serviceDialogOpen} title={editingServiceId ? `Edit ${serviceForm.name || 'service'}` : 'Add service'} description="Keep the live menu details current. Existing catalog grouping metadata is preserved when you edit a service." closeDisabled={false} onClose={() => { resetServiceForm(); setServiceDialogOpen(false); }}><form onSubmit={save} className="grid gap-4">{[['id', 'Service ID'], ['name', 'Name'], ['category', 'Category'], ['price', 'Price'], ['duration_minutes', 'Minutes']].map(([key, label]) => <label key={key} className="text-sm font-semibold text-ink-900">{label}<input required value={serviceForm[key]} readOnly={key === 'id' && !!editingServiceId} type={key === 'price' || key === 'duration_minutes' ? 'number' : 'text'} min={key === 'price' ? '0' : key === 'duration_minutes' ? '5' : undefined} onChange={(event) => setServiceForm((form) => ({ ...form, [key]: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label>)}<label className="text-sm font-semibold text-ink-900">Description<textarea value={serviceForm.description} onChange={(event) => setServiceForm((form) => ({ ...form, description: event.target.value }))} className="mt-1 block min-h-24 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><label className="flex items-center gap-3 text-sm font-semibold text-ink-900"><input type="checkbox" checked={serviceForm.is_active} onChange={(event) => setServiceForm((form) => ({ ...form, is_active: event.target.checked }))} className="h-5 w-5 accent-brand-800" />Published in booking menu</label>{error && <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">{error}</p>}<div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="soft" className="min-h-11" onClick={() => { resetServiceForm(); setServiceDialogOpen(false); }}>Cancel</Button><Button type="submit" className="min-h-11">Save service</Button></div></form></AdminDialog><AdminDialog open={!!selectedCustomer} title={customerDisplayName(selectedCustomer)} description="Contact details and bounded appointment history." closeDisabled={customerBusy} onClose={closeCustomer}>{customerDialogError && <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">{customerDialogError}</p>}<form onSubmit={saveCustomer} className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-ink-900">First name<input required value={customerForm.first_name} onChange={(event) => setCustomerForm((form) => ({ ...form, first_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><label className="text-sm font-semibold text-ink-900">Last name<input value={customerForm.last_name} onChange={(event) => setCustomerForm((form) => ({ ...form, last_name: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><label className="text-sm font-semibold text-ink-900">Phone<input required value={customerForm.phone} onChange={(event) => setCustomerForm((form) => ({ ...form, phone: event.target.value }))} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" /></label><div className="flex flex-wrap justify-end gap-2 sm:col-span-3"><Button type="button" variant="soft" className="min-h-11" onClick={closeCustomer}>Close</Button><Button type="submit" className="min-h-11" loading={customerBusy}>Save contact</Button></div></form><div className="mt-7 border-t border-line pt-5"><div className="flex flex-wrap items-baseline justify-between gap-3"><h3 className="font-display text-lg font-medium text-ink-900">Appointment history</h3>{customerHistory.length > 0 && <span className="text-xs text-ink-500">{customerHistory.length} record{customerHistory.length === 1 ? '' : 's'}</span>}</div>{customerHistoryLoading ? <p className="py-7 text-sm text-ink-500">Loading appointment history…</p> : visibleHistory.length ? <ul className="mt-3 divide-y divide-line">{visibleHistory.map((row) => <li key={row.id} className="py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="font-semibold text-ink-900">{row.reference_no}</span><span className="font-semibold text-ink-700">{localDateLabel(row.local_date)} · {row.local_time?.slice(0, 5) || 'Time unavailable'}</span></div><p className="mt-1 break-words text-xs text-ink-500">{serviceNames(row).join(', ') || 'No services'} · {row.status} · {formatPeso(row.total_price)}</p></li>)}</ul> : <p className="py-7 text-sm text-ink-500">No appointment history.</p>}{!customerHistoryLoading && <PaginationControls page={customerHistoryPage} pageCount={customerHistoryPageCount} total={customerHistory.length} pageSize={HISTORY_PAGE_SIZE} label="Appointment history" onPageChange={setCustomerHistoryPage} />}</div></AdminDialog></div>;
 }
