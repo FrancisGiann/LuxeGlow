@@ -1,4 +1,5 @@
 import { publicServiceImage, requireSupabase } from '../lib/supabase';
+import { isMissingServiceCatalogMetadataError } from './endpoints';
 
 const STAFF_ROLES = ['staff', 'admin'];
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
@@ -32,7 +33,11 @@ export async function updateAppointmentStatus(appointmentId, status) {
 
 export async function listAdminServices() {
   const client = await assertStaff();
-  return throwIfError(await client.from('services').select('*').order('name'), 'Could not load services.') || [];
+  let result = await client.from('services').select('*').order('display_order').order('name');
+  if (result.error && isMissingServiceCatalogMetadataError(result.error)) {
+    result = await client.from('services').select('*').order('name');
+  }
+  return throwIfError(result, 'Could not load services.') || [];
 }
 
 export async function listAdminFaqs() {
