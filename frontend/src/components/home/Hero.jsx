@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { IconMapPin } from '../icons';
 
@@ -32,9 +32,9 @@ export function Hero() {
             <button type="button" onClick={book} className="min-h-14 rounded-xl bg-brand-800 px-8 text-base font-bold text-white shadow-card transition-transform hover:-translate-y-0.5 hover:bg-brand-900">
               Book an appointment
             </button>
-            <a href="#services" className="inline-flex min-h-14 items-center rounded-xl border border-blush-500 bg-transparent px-8 text-base font-bold text-blush-600 transition-colors hover:bg-blush-50">
+            <Link to="/services" className="inline-flex min-h-14 items-center rounded-xl border border-blush-500 bg-transparent px-8 text-base font-bold text-blush-600 transition-colors hover:bg-blush-50">
               Explore services
-            </a>
+            </Link>
           </div>
         </div>
 
