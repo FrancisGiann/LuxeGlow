@@ -17,18 +17,19 @@ export function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  /* Hydrate once the aggregated payload arrives */
+  /* Prefer the aggregate, but let the authenticated profile unblock the form. */
   useEffect(() => {
-    if (!loaded && dashCustomer) {
+    const profile = dashCustomer || authCustomer;
+    if (!loaded && profile) {
       setForm((f) => ({
         ...f,
-        firstName: dashCustomer.first_name || '',
-        lastName: dashCustomer.last_name || '',
-        phone: dashCustomer.phone || '',
+        firstName: profile.first_name || '',
+        lastName: profile.last_name || '',
+        phone: profile.phone || '',
       }));
       setLoaded(true);
     }
-  }, [dashCustomer, loaded]);
+  }, [dashCustomer, authCustomer, loaded]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
