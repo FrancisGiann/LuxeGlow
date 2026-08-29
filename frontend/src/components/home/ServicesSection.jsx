@@ -5,6 +5,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { Card, SectionHeading } from '../ui/Card';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSparkle, IconStar } from '../icons';
+import { curateHomepageServices } from '../../utils/services';
 
 const fallbackImages = {
   lash: 'lashes_hero.jpg',
@@ -18,21 +19,6 @@ function previewImage(service) {
   const category = String(service.category || '').toLocaleLowerCase();
   const fallback = Object.keys(fallbackImages).find((key) => category.includes(key));
   return `${import.meta.env.BASE_URL}${fallbackImages[fallback || 'nail']}`;
-}
-
-function curateServices(services) {
-  const curated = [];
-  const categories = new Set();
-  services.forEach((service) => {
-    if (curated.length < 6 && !categories.has(service.category)) {
-      curated.push(service);
-      categories.add(service.category);
-    }
-  });
-  services.forEach((service) => {
-    if (curated.length < 6 && !curated.includes(service)) curated.push(service);
-  });
-  return curated;
 }
 
 function ServiceCard({ service }) {
@@ -60,7 +46,7 @@ function ServiceCard({ service }) {
 
 export function ServicesSection() {
   const { data: services, loading, error, reload } = useFetch(getServices);
-  const curated = services ? curateServices(services) : [];
+  const curated = services ? curateHomepageServices(services, 6) : [];
 
   return (
     <section id="services" className="scroll-mt-20 bg-surface py-24 sm:py-28">

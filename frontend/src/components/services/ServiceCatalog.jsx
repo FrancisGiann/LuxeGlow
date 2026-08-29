@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSearch, IconSparkle } from '../icons';
+import { assetUrl } from '../../api/client';
 import { formatPeso } from '../../utils/format';
+import { sortServicesForDisplay } from '../../utils/services';
 
 const ALL_CATEGORY = 'All';
+const PAGE_SIZE = 10;
 
 function categoryName(service) {
   return String(service?.category || 'Other').trim() || 'Other';
@@ -35,7 +38,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
   if (selectable) {
     return (
       <label
-        className={`group grid min-h-[68px] grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-line px-2 py-3 transition-colors sm:gap-5 sm:px-3 ${
+        className={`group grid min-h-[68px] grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-line px-2 py-3 transition-colors sm:gap-5 sm:px-3 ${
           selected ? 'bg-brand-50' : 'bg-surface hover:bg-blush-50'
         } ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
       >
@@ -47,6 +50,13 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
           className="h-7 w-7 shrink-0 cursor-pointer rounded-md border-line-strong accent-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed"
           aria-label={`${selected ? 'Remove' : 'Select'} ${service.name}`}
         />
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300" aria-hidden="true">
+          {service.image_path ? (
+            <img src={assetUrl(service.image_path)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          ) : (
+            <IconSparkle size={19} />
+          )}
+        </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold text-ink-900">{service.name}</span>
           {typeLabel && <span className="mt-1 inline-flex rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gold-600">{typeLabel}</span>}
@@ -104,10 +114,8 @@ export function ServiceCatalog({
 }) {
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState('');
-  const normalizedServices = useMemo(() => (Array.isArray(services) ? [...services].sort((a, b) => {
-    const orderDifference = Number(a?.display_order || 0) - Number(b?.display_order || 0);
-    return orderDifference || String(a?.name || '').localeCompare(String(b?.name || ''));
-  }) : []), [services]);
+  const [page, setPage] = useState(1);
+  const normalizedServices = useMemo(() => sortServicesForDisplay(services), [services]);
   const categories = useMemo(() => {
     const unique = [];
     normalizedServices.forEach((service) => {
@@ -127,9 +135,18 @@ export function ServiceCatalog({
     }),
     [normalizedServices, searchTerm, selectedCategory],
   );
+  const pageCount = Math.max(1, Math.ceil(filteredServices.length / PAGE_SIZE));
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
+  const visiblePage = Math.min(page, pageCount);
+  const visibleServices = useMemo(
+    () => filteredServices.slice((visiblePage - 1) * PAGE_SIZE, visiblePage * PAGE_SIZE),
+    [filteredServices, visiblePage],
+  );
   const groupedServices = useMemo(() => {
     const groups = new Map();
-    filteredServices.forEach((service) => {
+    visibleServices.forEach((service) => {
       const category = categoryName(service);
       const subcategory = subcategoryName(service);
       const key = `${category}::${subcategory}`;
@@ -137,10 +154,11 @@ export function ServiceCatalog({
       groups.get(key).items.push(service);
     });
     return [...groups.entries()];
-  }, [filteredServices]);
+  }, [visibleServices]);
   const clearFilters = () => {
     setSearch('');
     setActiveCategory(ALL_CATEGORY);
+    setPage(1);
   };
 
   return (
@@ -154,7 +172,7 @@ export function ServiceCatalog({
               id="service-catalog-search"
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
               placeholder="Search by treatment or category"
               autoComplete="off"
               className="min-h-12 w-full rounded-xl border border-line bg-surface px-4 pl-11 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
@@ -197,7 +215,7 @@ export function ServiceCatalog({
                   role="tab"
                   aria-selected={selected}
                   aria-controls="service-catalog-results"
-                  onClick={() => setActiveCategory(category)}
+                  onClick={() => { setActiveCategory(category); setPage(1); }}
                   className={`min-h-11 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selected ? 'border-brand-800 bg-brand-800 text-white' : 'border-line bg-surface text-ink-700 hover:border-brand-400 hover:bg-blush-50'}`}
                 >
                   {category}
@@ -238,6 +256,14 @@ export function ServiceCatalog({
               })}
             </div>
           )}
+          {filteredServices.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4" aria-label="Treatment pages">
+            <p className="text-sm text-ink-500">Showing {(visiblePage - 1) * PAGE_SIZE + 1}–{Math.min(visiblePage * PAGE_SIZE, filteredServices.length)} of {filteredServices.length}</p>
+            <div className="flex items-center gap-2">
+              <button type="button" className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-bold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={visiblePage <= 1}>Previous</button>
+              <span className="min-w-20 text-center text-sm font-semibold text-ink-600">Page {visiblePage} of {pageCount}</span>
+              <button type="button" className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-bold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={visiblePage >= pageCount}>Next</button>
+            </div>
+          </div>}
         </>
       )}
     </div>
