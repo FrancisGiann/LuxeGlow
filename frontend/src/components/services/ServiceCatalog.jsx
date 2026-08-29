@@ -31,6 +31,18 @@ function serviceMatches(service, searchTerm) {
     .includes(searchTerm);
 }
 
+function ServiceThumbnail({ service }) {
+  return (
+    <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300" aria-hidden="true">
+      {service.image_path ? (
+        <img src={assetUrl(service.image_path)} alt="" loading="lazy" className="h-full w-full object-cover" />
+      ) : (
+        <IconSparkle size={19} />
+      )}
+    </span>
+  );
+}
+
 function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
   const category = categoryName(service);
   const typeLabel = itemTypeLabel(service);
@@ -50,13 +62,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
           className="h-7 w-7 shrink-0 cursor-pointer rounded-md border-line-strong accent-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed"
           aria-label={`${selected ? 'Remove' : 'Select'} ${service.name}`}
         />
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300" aria-hidden="true">
-          {service.image_path ? (
-            <img src={assetUrl(service.image_path)} alt="" loading="lazy" className="h-full w-full object-cover" />
-          ) : (
-            <IconSparkle size={19} />
-          )}
-        </span>
+        <ServiceThumbnail service={service} />
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold text-ink-900">{service.name}</span>
           {typeLabel && <span className="mt-1 inline-flex rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gold-600">{typeLabel}</span>}
@@ -79,17 +85,21 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
   }
 
   return (
-    <div className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-line px-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-5 sm:px-3">
-      <span className="col-span-2 min-w-0 sm:col-span-1">
+    <div className="grid min-h-[68px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-line px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-5 sm:px-3">
+      <ServiceThumbnail service={service} />
+      <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-ink-900">{service.name}</span>
         {typeLabel && <span className="mt-1 inline-flex rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gold-600">{typeLabel}</span>}
         {service.description && <span className={`${typeLabel ? 'mt-1' : 'mt-0.5'} block line-clamp-2 text-xs leading-relaxed text-ink-500`}>{service.description}</span>}
+        <span className="mt-1 block text-xs text-ink-500 sm:hidden">
+          {category} · {service.duration || 'Duration unavailable'}
+        </span>
       </span>
-      <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500">
+      <span className="order-3 hidden items-center gap-1.5 text-xs font-semibold text-ink-500 sm:order-3 sm:flex">
         <IconClock size={14} />
         <span className="whitespace-nowrap">{service.duration || '—'}</span>
       </span>
-      <span className="justify-self-end font-display text-base font-semibold tabular-nums text-brand-800">{formatPeso(service.price)}</span>
+      <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>
     </div>
   );
 }
