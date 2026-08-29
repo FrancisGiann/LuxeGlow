@@ -1,7 +1,23 @@
--- Optional canonical content seed for a new project. Run after migrations and
--- before importing MariaDB data; every statement is idempotent.
+-- Astrid Nails & Beauty Bar service catalog reconciliation.
+-- Operational note: duration_minutes are user-approved estimates based on
+-- comparable salon listings. Salon staff should confirm and edit them before
+-- relying on packages, extensions, lashes, or signature treatments for live
+-- scheduling.
+--
+-- Deployment order: apply the additive schema migration first, then this
+-- catalog data migration, then deploy the frontend. The old frontend remains
+-- compatible after the additive schema migration because it reads existing
+-- service columns and ignores the new metadata.
+--
+-- Rollback/recovery is forward-only: reactivate reviewed rows from a backup
+-- with a new migration if needed. Never delete historical service rows.
+
 begin;
-update public.services set is_active = false, updated_at = now();
+
+-- Deactivation is intentional: appointment_services retains service_id with
+-- ON DELETE RESTRICT, and its name/price/duration columns preserve history.
+update public.services
+   set is_active = false, updated_at = now();
 
 insert into public.services
   (id, name, category, subcategory, description, price, duration_minutes, rating, image_path, is_active, display_order, item_type)
@@ -79,22 +95,8 @@ declare
 begin
   select count(*) into active_count from public.services where is_active;
   if active_count <> 54 then
-    raise exception 'Canonical service seed expected 54 active rows, found %', active_count;
+    raise exception 'Service catalog reconciliation expected 54 active rows, found %', active_count;
   end if;
 end $$;
 
-insert into public.about_content(id, business_name, description, mission_statement, phone, email, address, business_hours, salon_policies)
-values (1, 'Astrid Nails & Beauty Bar', 'A luxury sanctuary dedicated to providing top-notch nail, lash, and spa services in a relaxing, hygienic environment.', 'Our mission is to elevate beauty and self-care by offering personalized, high-quality services that make every client feel refreshed, confident, and pampered.', '0917 000 1122', 'hello@astridnails.ph', '12 Mabini St, Lucena City, Quezon', 'Monday – Saturday: 10:00 AM – 8:00 PM\nSunday: 11:00 AM – 6:00 PM', 'Online bookings are held for 15 minutes past the scheduled time — late arrivals may be automatically cancelled.\nKindly cancel or reschedule at least 24 hours in advance by contacting us.\nWalk-ins are welcome subject to availability; online bookings receive priority scheduling.')
-on conflict (id) do update set business_name = excluded.business_name, description = excluded.description, mission_statement = excluded.mission_statement, phone = excluded.phone, email = excluded.email, address = excluded.address, business_hours = excluded.business_hours, salon_policies = excluded.salon_policies;
-
-insert into public.faqs(id, question, answer, display_order)
-values
-  (1, 'What are your operating hours?', 'We are open Monday to Saturday from 10:00 AM to 8:00 PM, and Sundays from 11:00 AM to 6:00 PM.', 1),
-  (2, 'What services do you offer?', 'Nail care, gel polish, nail extensions, nail add-ons, spa and massage treatments, brow and lash services, waxing, kiddie treatments, and packages.', 2),
-  (3, 'Are your products safe and hygienic?', 'Yes. All tools are sterilized after every client, single-use items are never reused, and we only use certified, cruelty-free products.', 3),
-  (4, 'Do I need to book an appointment?', 'Walk-ins are welcome when slots allow, but booking online guarantees your preferred stylist and time slot.', 4)
-on conflict (id) do update set question = excluded.question, answer = excluded.answer, display_order = excluded.display_order;
-
-select setval(pg_get_serial_sequence('public.about_content', 'id'), greatest(coalesce((select max(id) from public.about_content), 1), 1), true);
-select setval(pg_get_serial_sequence('public.faqs', 'id'), greatest(coalesce((select max(id) from public.faqs), 1), 1), true);
 commit;
