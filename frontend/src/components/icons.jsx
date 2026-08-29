@@ -108,6 +108,13 @@ export const IconSparkle = (p) => (
   </Svg>
 );
 
+export const IconSearch = (p) => (
+  <Svg {...p}>
+    <circle cx="10.8" cy="10.8" r="6.3" />
+    <path d="m16 16 4.2 4.2" />
+  </Svg>
+);
+
 export const IconPhone = (p) => (
   <Svg {...p}>
     <path d="M6.8 3.5H9l1.5 4-2 1.5a11.5 11.5 0 0 0 4.5 4.5l1.5-2 4 1.5v2.2a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4.8 5.7a2 2 0 0 1 2-2.2Z" />

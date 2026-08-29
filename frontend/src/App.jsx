@@ -6,6 +6,7 @@ import { PageLoader } from './components/ui/Spinner';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { HomePage } from './pages/HomePage';
+import { ServicesPage } from './pages/ServicesPage';
 import { BookingPage } from './pages/BookingPage';
 import { DashboardOverviewPage } from './pages/dashboard/DashboardOverviewPage';
 import { MyAppointmentsPage } from './pages/dashboard/MyAppointmentsPage';
@@ -49,6 +50,7 @@ export default function App() {
             {/* Marketing site */}
             <Route element={<PublicLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/services" element={<ServicesPage />} />
               <Route path="/reset-password" element={<HomePage />} />
             </Route>
 

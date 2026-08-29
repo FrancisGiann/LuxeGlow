@@ -12,6 +12,16 @@ const unwrap = ({ data, error }, fallback) => {
   return data;
 };
 
+export const isMissingServiceCatalogMetadataError = (error) => {
+  if (!error) return false;
+  const code = String(error.code || '').toUpperCase();
+  const message = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLocaleLowerCase();
+  const referencesCatalogColumn = /\b(display_order|subcategory|item_type)\b/.test(message);
+  const knownMissingColumnCode = code === '42703' || code === 'PGRST204';
+  const schemaCacheMessage = /schema cache|column .* does not exist|could not find .*column/.test(message);
+  return referencesCatalogColumn && (knownMissingColumnCode || schemaCacheMessage);
+};
+
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const manilaInstant = (date, time = '00:00:00') => new Date(`${date}T${time}+08:00`);
 const manilaDateLabel = (date, time) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }).format(manilaInstant(date, time));
@@ -145,9 +155,15 @@ export async function logoutCustomer() {
 
 /* ── Public content ───────────────────────────────────────────── */
 export async function getServices() {
-  const data = unwrap(await requireSupabase().from('services').select('*').eq('is_active', true).order('name'), 'Could not load services.');
+  const client = requireSupabase();
+  let result = await client.from('services').select('*').eq('is_active', true).order('display_order').order('name');
+  if (result.error && isMissingServiceCatalogMetadataError(result.error)) {
+    result = await client.from('services').select('*').eq('is_active', true).order('name');
+  }
+  const data = unwrap(result, 'Could not load services.');
   return (data || []).map((row) => ({
-    id: row.id, name: row.name, category: row.category, description: row.description,
+    id: row.id, name: row.name, category: row.category, subcategory: row.subcategory, item_type: row.item_type,
+    display_order: Number(row.display_order || 0), description: row.description,
     price: Number(row.price), duration: formatDuration(row.duration_minutes), minutes: Number(row.duration_minutes),
     rating: Number(row.rating || 0), image_path: row.image_path ? publicServiceImage(row.image_path) : '',
   }));
