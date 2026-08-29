@@ -12,8 +12,9 @@ npm run build
 npm run lint
 ```
 
-The client-side `src/api` modules only issue RLS-protected PostgREST queries,
-Storage operations, and the `book_appointment` RPC. Service-role operations
-such as staff invitations and notification email delivery run in Supabase
-Edge Functions. See [`../database/supabase/README.md`](../database/supabase/README.md)
-for deployment and migration instructions.
+The client-side `src/api` modules only issue RLS-protected PostgREST queries
+and the `book_appointment` RPC. Staff service-image uploads, invitations, and
+notification email delivery run in authenticated Supabase Edge Functions;
+Cloudinary credentials stay server-side. See
+[`../database/supabase/README.md`](../database/supabase/README.md) for
+deployment and migration instructions.

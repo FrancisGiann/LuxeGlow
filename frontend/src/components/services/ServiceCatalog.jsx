@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSearch, IconSparkle } from '../icons';
-import { assetUrl } from '../../api/client';
 import { formatPeso } from '../../utils/format';
 import { sortServicesForDisplay } from '../../utils/services';
+import { serviceImageUrl } from '../../utils/serviceImages';
 
 const ALL_CATEGORY = 'All';
 const PAGE_SIZE = 10;
@@ -32,10 +32,11 @@ function serviceMatches(service, searchTerm) {
 }
 
 function ServiceThumbnail({ service }) {
+  const imageUrl = serviceImageUrl(service);
   return (
     <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300" aria-hidden="true">
-      {service.image_path ? (
-        <img src={assetUrl(service.image_path)} alt="" loading="lazy" className="h-full w-full object-cover" />
+      {imageUrl ? (
+        <img src={imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
       ) : (
         <IconSparkle size={19} />
       )}

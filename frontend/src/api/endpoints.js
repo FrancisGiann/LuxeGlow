@@ -1,4 +1,5 @@
 import { publicServiceImage, requireSupabase } from '../lib/supabase';
+import { serviceImageUrl } from '../utils/serviceImages';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -190,11 +191,12 @@ export async function getAbout() {
 const dashboardAppointment = (row) => {
   const services = row.appointment_services || [];
   const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews;
+  const firstService = services.find((service) => service?.services) || services[0];
   return {
     id: row.id, appointment_id: row.id, reference_no: row.reference_no,
     date: manilaDateLabel(row.local_date, row.local_time),
     time: manilaTimeLabel(row.local_date, row.local_time), raw_date: row.local_date, raw_time: row.local_time,
-    service: services.map((s) => s.service_name).join(', ') || 'N/A', service_image: services.find((s) => s.services?.image_path)?.services?.image_path ? publicServiceImage(services.find((s) => s.services?.image_path).services.image_path) : '',
+    service: services.map((s) => s.service_name).join(', ') || 'N/A', service_image: serviceImageUrl(firstService?.services),
     price: Number(row.total_price), total_price: Number(row.total_price), status: row.status, created_at: row.created_at,
     has_rating: !!review, rating_given: review?.rating ? Number(review.rating) : null, review_text: review?.review_text || '',
   };
@@ -204,16 +206,22 @@ export async function getDashboard() {
   const client = requireSupabase();
   const session = await checkSession();
   if (!session.loggedIn) throw Object.assign(new Error('Not logged in'), { status: 401 });
-  const [profileResult, appointmentsResult, notificationsResult, reviewsResult] = await Promise.all([
+  const [profileResult, appointmentsResult, notificationsResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
-    client.from('appointments').select('id,reference_no,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path)),reviews(id,rating,review_text)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
+    client.from('appointments').select('id,reference_no,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
     client.from('user_notifications').select('id,appointment_id,type,title,message,is_read,created_at').eq('customer_id', session.user.id).order('created_at', { ascending: false }).limit(30),
-    client.from('reviews').select('id,appointment_id,rating,review_text,created_at,appointment_services(service_name)').eq('customer_id', session.user.id).order('created_at', { ascending: false }),
   ]);
   const profile = unwrap(profileResult, 'Could not load your profile.');
-  const appointments = (unwrap(appointmentsResult, 'Could not load appointments.') || []).map(dashboardAppointment);
+  const appointmentRows = unwrap(appointmentsResult, 'Could not load appointments.') || [];
+  const appointments = appointmentRows.map(dashboardAppointment);
   const notifications = (unwrap(notificationsResult, 'Could not load notifications.') || []).map((row) => ({ ...row, id: Number(row.id), is_read: !!row.is_read, created_at: new Date(row.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }));
-  const reviews = (unwrap(reviewsResult, 'Could not load reviews.') || []).map((row) => ({ review_id: Number(row.id), appointment_id: row.appointment_id, rating: Number(row.rating), review_text: row.review_text || '', service_names: (row.appointment_services || []).map((s) => s.service_name).join(', ') || 'Beauty Service', created_at: new Date(row.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
+  const reviews = appointmentRows
+    .flatMap((row) => {
+      const nestedReviews = Array.isArray(row.reviews) ? row.reviews : row.reviews ? [row.reviews] : [];
+      return nestedReviews.map((review) => ({ review, appointment: row }));
+    })
+    .sort((a, b) => Date.parse(b.review.created_at || '') - Date.parse(a.review.created_at || ''))
+    .map(({ review, appointment }) => ({ review_id: Number(review.id), appointment_id: appointment.id, rating: Number(review.rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((s) => s.service_name).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
   const summary = { pending_count: 0, confirmed_count: 0, completed_count: 0, cancelled_count: 0, unread_notifications: notifications.filter((n) => !n.is_read).length };
   appointments.forEach((row) => { const key = `${row.status.toLowerCase()}_count`; if (key in summary) summary[key] += 1; });
   return { success: true, customer: profilePayload(profile, session.user), summary, appointments, notifications, reviews };

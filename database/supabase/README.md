@@ -21,9 +21,14 @@ you are migrating an existing salon database.
   Auth user, reads current service prices, locks the Manila-local date, and
   relies on a PostgreSQL exclusion constraint for race-safe interval booking.
   The browser cannot supply status, duration, or price.
-- `service-images` is a public-read, staff-write Storage bucket. The browser
-  validates JPEG/PNG/WebP and 5 MB limits; the bucket also enforces MIME/size
-  limits. No service-role key is present in Vite variables.
+- New staff service-image uploads go through the authenticated
+  `upload-service-image` Edge Function to Cloudinary. The function validates
+  JPEG/PNG/WebP bytes and a 5 MB limit, stores Cloudinary's `secure_url` in
+  `services.image_path` plus its managed `public_id` in
+  `services.image_public_id`, and performs replacement cleanup with
+  invalidation. The legacy `service-images` bucket and policies remain in
+  place so existing relative paths continue rendering. No service-role or
+  Cloudinary secret is present in Vite variables.
 - Appointment status triggers create in-app notifications and an email outbox.
   `supabase/functions/process-notifications` is a service-role-only worker.
   Configure a Supabase Scheduled Edge Function or an external scheduler to
@@ -80,6 +85,8 @@ retain the salon value for display; `start_at` and the generated range are
    API (not the filesystem), using the service ID as the first path segment.
    Update `services.image_path` only after each upload succeeds. Validate MIME,
    byte size and image decoding; never trust the original filename or extension.
+   Existing relative Storage paths must remain unchanged during the Cloudinary
+   cutover.
 6. Compare exporter manifest counts with Supabase counts, sample every status,
    verify orphan/reference counts, test a new booking and test a status change
    before opening writes. Keep the MariaDB backup read-only until reconciliation
@@ -108,8 +115,23 @@ and [password reset flow](https://supabase.com/docs/reference/javascript/auth-re
 Browser variables are `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and the
 hosting base path. Server/Edge variables are `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `RESEND_API_KEY`, mail sender
-settings, and a random `CRON_SECRET_TOKEN`. Only the service-role database
-connection may run import SQL or claim outbox jobs.
+settings, a random `CRON_SECRET_TOKEN`, `ALLOWED_ORIGIN`,
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+Set the Cloudinary values only with the Supabase secrets manager:
+
+```sh
+supabase secrets set CLOUDINARY_CLOUD_NAME=... CLOUDINARY_API_KEY=... \
+  CLOUDINARY_API_SECRET=... ALLOWED_ORIGIN=https://your-site.example
+supabase functions deploy upload-service-image --no-verify-jwt
+```
+
+Apply the mirrored canonical migration before deploying the function:
+`supabase db push`. Only the service-role database connection may run import
+SQL or claim outbox jobs; the browser must never receive the service role or
+Cloudinary API secret. Verify the function's numeric request-size guard with an
+oversized `Content-Length` request (expect JSON `413`) and verify replacement
+compare-and-swap behavior by issuing two simultaneous uploads for one service
+(expect one `200` and one `409`, with the row matching only the winner).
 
 The classic PHP pages and `/includes` endpoints are retained in this repository
 as a pre-cutover archive for audit/rollback only; they are no longer called by

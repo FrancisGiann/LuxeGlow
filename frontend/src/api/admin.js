@@ -1,4 +1,4 @@
-import { publicServiceImage, requireSupabase } from '../lib/supabase';
+import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
 
 const STAFF_ROLES = ['staff', 'admin'];
@@ -8,6 +8,20 @@ const throwIfError = (result, fallback) => {
   if (result.error) throw new Error(result.error.message || fallback);
   return result.data;
 };
+
+async function functionErrorMessage(error, fallback) {
+  const response = error?.context;
+  if (response && typeof response.json === 'function') {
+    try {
+      const payload = await response.json();
+      if (payload?.error) return String(payload.error);
+    } catch {
+      // FunctionsHttpError responses are not always JSON (for example, on a
+      // gateway failure), so fall through to the SDK message below.
+    }
+  }
+  return String(error?.message || fallback);
+}
 
 async function assertStaff() {
   const client = requireSupabase();
@@ -125,19 +139,16 @@ export async function saveService(fields) {
 }
 
 export async function uploadServiceImage(serviceId, file) {
-  if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) return { success: false, error: 'Use a JPEG, PNG, or WebP image up to 5 MB.' };
+  if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type) || !Number.isFinite(file.size) || file.size <= 0 || file.size > 5 * 1024 * 1024) return { success: false, error: 'Use a JPEG, PNG, or WebP image up to 5 MB.' };
   if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(serviceId))) return { success: false, error: 'Invalid service ID.' };
   const client = await assertStaff();
-  const ext = file.type.split('/')[1].replace('jpeg', 'jpg');
-  const path = `${serviceId}/${crypto.randomUUID()}.${ext}`;
-  const upload = await client.storage.from('service-images').upload(path, file, { contentType: file.type, cacheControl: '3600', upsert: false });
-  if (upload.error) throw new Error(upload.error.message || 'Could not upload service image.');
-  const update = await client.from('services').update({ image_path: path }).eq('id', serviceId);
-  if (update.error) {
-    await client.storage.from('service-images').remove([path]);
-    throw new Error(update.error.message || 'Could not attach service image.');
-  }
-  return { success: true, image_url: publicServiceImage(path), image_path: path };
+  const body = new FormData();
+  body.append('service_id', String(serviceId));
+  body.append('image', file, file.name || 'service-image');
+  const { data, error } = await client.functions.invoke('upload-service-image', { body });
+  if (error) throw new Error(await functionErrorMessage(error, 'Could not upload service image.'));
+  if (!data?.success || !data.image_url) return { success: false, error: String(data?.error || 'Could not upload service image.') };
+  return { success: true, image_url: data.image_url, image_path: data.image_url, image_public_id: data.image_public_id || null };
 }
 
 export async function setServiceActive(serviceId, isActive) {

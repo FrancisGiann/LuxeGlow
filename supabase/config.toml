@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.reset-staff-password]
 verify_jwt = false
+
+[functions.upload-service-image]
+verify_jwt = false

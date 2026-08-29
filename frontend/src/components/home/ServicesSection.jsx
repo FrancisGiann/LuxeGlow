@@ -1,32 +1,23 @@
 import { Link } from 'react-router-dom';
 import { getServices } from '../../api/endpoints';
-import { assetUrl } from '../../api/client';
 import { useFetch } from '../../hooks/useFetch';
 import { Card, SectionHeading } from '../ui/Card';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSparkle, IconStar } from '../icons';
 import { curateHomepageServices } from '../../utils/services';
-
-const fallbackImages = {
-  lash: 'lashes_hero.jpg',
-  spa: 'homepage_hero.jpg',
-  massage: 'homepage_hero.jpg',
-  nail: 'nails_hero.jpg',
-};
+import { serviceImageUrl } from '../../utils/serviceImages';
 
 function previewImage(service) {
-  if (service.image_path) return assetUrl(service.image_path);
-  const category = String(service.category || '').toLocaleLowerCase();
-  const fallback = Object.keys(fallbackImages).find((key) => category.includes(key));
-  return `${import.meta.env.BASE_URL}${fallbackImages[fallback || 'nail']}`;
+  return serviceImageUrl(service);
 }
 
 function ServiceCard({ service }) {
+  const image = previewImage(service);
   return (
     <Card as="article" hoverable className="overflow-hidden rounded-2xl">
       <div className="grid min-h-[190px] grid-cols-[0.85fr_1.15fr]">
         <div className="relative overflow-hidden bg-blush-100">
-          <img src={previewImage(service)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          {image ? <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-brand-300" aria-hidden="true"><IconSparkle size={26} /></div>}
         </div>
         <div className="flex flex-col justify-center p-5">
           <div className="flex items-start justify-between gap-3">
