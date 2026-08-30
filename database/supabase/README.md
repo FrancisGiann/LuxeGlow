@@ -29,6 +29,15 @@ you are migrating an existing salon database.
   invalidation. The legacy `service-images` bucket and policies remain in
   place so existing relative paths continue rendering. No service-role or
   Cloudinary secret is present in Vite variables.
+- Staff can persist up to six homepage preview services with
+  `services.is_homepage_featured`. The curation migration seeds the previous
+  category-balanced preview, clears the flag when a service is deactivated,
+  and serializes additions so a concurrent seventh selection is rejected.
+- Login throttling uses the service-role-only RPCs in the mirrored
+  `20260830010000_login_rate_limits.sql` migration. The app-side function
+  stores only hashed email+IP identity and separate IP keys; deploy and secret
+  setup are documented in `supabase/functions/README.md`. Login rows older than
+  24 hours are cleaned opportunistically in bounded batches of 100.
 - Appointment status triggers create in-app notifications and an email outbox.
   `supabase/functions/process-notifications` is a service-role-only worker.
   Configure a Supabase Scheduled Edge Function or an external scheduler to
@@ -125,8 +134,10 @@ supabase secrets set CLOUDINARY_CLOUD_NAME=... CLOUDINARY_API_KEY=... \
 supabase functions deploy upload-service-image --no-verify-jwt
 ```
 
-Apply the mirrored canonical migration before deploying the function:
-`supabase db push`. Only the service-role database connection may run import
+Apply the mirrored canonical migrations before deploying the functions:
+`supabase db push` (including `20260829005000_homepage_service_curation.sql`
+and `20260830010000_login_rate_limits.sql`).
+Only the service-role database connection may run import
 SQL or claim outbox jobs; the browser must never receive the service role or
 Cloudinary API secret. Verify the function's numeric request-size guard with an
 oversized `Content-Length` request (expect JSON `413`) and verify replacement

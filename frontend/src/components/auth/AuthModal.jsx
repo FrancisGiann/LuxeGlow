@@ -38,6 +38,7 @@ export function AuthModal() {
     resend,
     requestPasswordReset,
     completePasswordReset,
+    sessionNotice,
   } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -255,6 +256,7 @@ export function AuthModal() {
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
             {modalView === 'forgot-reset' && 'Use the link, or enter the code if your email provides one.'}
           </p>
+          {sessionNotice && <p className="mt-4 rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center text-sm font-semibold text-brand-800" role="status">{sessionNotice}</p>}
 
           {/* ── LOGIN ── */}
           {modalView === 'login' && (

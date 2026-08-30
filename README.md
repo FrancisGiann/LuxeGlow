@@ -52,8 +52,13 @@ never use a `VITE_` prefix.
   view notifications/reviews, upload no privileged data, and book appointments
   through the `book_appointment` RPC.
 - Staff/admin users sign in with Supabase Auth and use the `/admin` workspace
-  for appointment status, services and Cloudinary image management. Admins can
+  for appointment status, services, homepage curation and Cloudinary image management. Admins can
   invite additional staff through the protected Edge Function.
+- Login requests pass through a hashed-key app-side rate-limit function before
+  Supabase Auth; deploy it with `LOGIN_RATE_LIMIT_SECRET` and the server-only
+  `AUTH_PROXY_SECRET_KEY` as documented in [`supabase/functions/README.md`](supabase/functions/README.md).
+  This is an additional boundary and does not replace GoTrue/provider
+  throttling for direct callers.
 - Postgres triggers create notification rows/outbox jobs. The scheduled worker
   sends transactional mail and performs late pending cancellation/reminders.
 

@@ -140,6 +140,23 @@
   border-radius: 9999px;
 }
 
+/* The catalog editor uses an explicit wide dialog and a named form grid so
+   changes to the form order do not silently break its responsive layout. */
+@media (min-width: 640px) {
+  .admin-service-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .admin-service-form__classification,
+  .admin-service-form__description,
+  .admin-service-form__published,
+  .admin-service-form__error,
+  .admin-service-form__actions {
+    grid-column: 1 / -1;
+  }
+}
+
 /* ── Receipt printing ────────────────────────────────────────── */
 @media print {
   @page {

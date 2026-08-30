@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { IconX } from '../icons';
 
-export function AdminDialog({ open, title, description, onClose, closeDisabled = false, children }) {
+export function AdminDialog({ open, title, description, onClose, closeDisabled = false, size = 'default', children }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
@@ -48,6 +48,8 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
 
   if (!open) return null;
 
+  const widthClass = size === 'wide' ? 'max-w-2xl' : 'max-w-lg';
+
   return (
     <div
       className="fixed inset-0 z-[1150] flex items-start justify-center overflow-y-auto overscroll-contain bg-ink-900/65 px-4 py-6 sm:items-center sm:px-6 sm:py-8"
@@ -62,7 +64,7 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className="my-auto flex max-h-[calc(100dvh-3rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop sm:max-h-[calc(100dvh-4rem)]"
+        className={`my-auto flex max-h-[calc(100dvh-3rem)] w-full ${widthClass} flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop sm:max-h-[calc(100dvh-4rem)]`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
@@ -81,7 +83,7 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
             <IconX size={19} />
           </button>
         </div>
-        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">{children}</div>
+        <div className="admin-dialog-body min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">{children}</div>
       </div>
     </div>
   );

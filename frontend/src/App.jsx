@@ -16,16 +16,20 @@ import { ProfilePage } from './pages/dashboard/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 
 function RequireAuth({ children }) {
-  const { status } = useAuth();
+  const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
+  if (['staff', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  if (customer?.role !== 'customer') return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
 
 function RequireStaff({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
-  if (status === 'guest' || !['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
+  if (status === 'guest') return <Navigate to="/?openAuth=admin" replace />;
+  if (customer?.role === 'customer') return <Navigate to="/dashboard/overview" replace />;
+  if (!['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=admin" replace />;
   return children;
 }
 

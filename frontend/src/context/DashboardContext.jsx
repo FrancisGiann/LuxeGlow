@@ -24,7 +24,8 @@ const EMPTY = {
 const DashboardContext = createContext(null);
 
 export function DashboardProvider({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, customer } = useAuth();
+  const isCustomer = isAuthenticated && customer?.role === 'customer';
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,7 +52,7 @@ export function DashboardProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isCustomer) {
       setData(EMPTY);
       setLoading(false);
       setError(null);
@@ -62,7 +63,7 @@ export function DashboardProvider({ children }) {
     refresh();
     pollRef.current = setInterval(refresh, POLL_MS);
     return () => clearInterval(pollRef.current);
-  }, [isAuthenticated, refresh]);
+  }, [isCustomer, refresh]);
 
   const markRead = useCallback(async (notificationId) => {
     setData((d) => ({

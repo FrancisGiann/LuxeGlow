@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.upload-service-image]
 verify_jwt = false
+
+[functions.login-rate-limit]
+verify_jwt = false

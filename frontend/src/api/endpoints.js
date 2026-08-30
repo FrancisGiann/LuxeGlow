@@ -24,6 +24,37 @@ export const isMissingServiceCatalogMetadataError = (error) => {
 };
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const LOGIN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGIN_EMAIL_MAX_LENGTH = 320;
+
+function retryAfterFromError(error) {
+  const headers = error?.context?.headers;
+  const value = typeof headers?.get === 'function' ? headers.get('Retry-After') : headers?.['Retry-After'] || headers?.['retry-after'];
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 0;
+}
+
+async function loginThroughGateway(mode, email, password) {
+  const client = requireSupabase();
+  try {
+    const { data, error } = await client.functions.invoke('login-rate-limit', { body: { mode, email, password } });
+    if (!error && data?.success && data.session?.access_token && data.session?.refresh_token && data.session.user?.id) {
+      const { error: sessionError } = await client.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      if (!sessionError) return { success: true, user: data.session.user };
+      await client.auth.signOut().catch(() => {});
+      return { success: false, error: 'Unable to sign in right now. Please try again later.' };
+    }
+    const status = Number(error?.context?.status || error?.status || 0);
+    if (status === 429) return { success: false, rate_limited: true, retry_after: retryAfterFromError(error), error: 'Too many sign-in attempts. Please try again later.' };
+    if (status === 401) return { success: false, error: 'Invalid email or password.' };
+    return { success: false, error: 'Unable to sign in right now. Please try again later.' };
+  } catch {
+    return { success: false, error: 'Unable to sign in right now. Please try again later.' };
+  }
+}
 const manilaInstant = (date, time = '00:00:00') => new Date(`${date}T${time}+08:00`);
 const manilaDateLabel = (date, time) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }).format(manilaInstant(date, time));
 const manilaTimeLabel = (date, time) => new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true }).format(manilaInstant(date, time));
@@ -47,7 +78,7 @@ const profilePayload = (profile, user) => {
     full_name: `${firstName} ${lastName}`.trim(),
     email: profile?.email || user?.email || '',
     phone: profile?.phone || meta.phone || '',
-    role: profile?.role || 'customer',
+    role: profile?.role || null,
     is_active: profile?.is_active !== false,
     joined_at: profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' }) : '',
   };
@@ -62,35 +93,48 @@ export async function checkSession() {
   if (!user) return { loggedIn: false, customer: null };
   const { data: profile, error } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error) throw asError(error, 'Could not load your profile.');
+  if (!profile || !['customer', 'staff', 'admin'].includes(profile.role) || profile.is_active !== true) {
+    await client.auth.signOut().catch(() => {});
+    return { loggedIn: false, customer: null };
+  }
   return { loggedIn: true, customer: profilePayload(profile, user), user };
 }
 
 export async function loginCustomer(email, password) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) return { success: false, error: 'Invalid email or password.' };
   const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email: normalizeEmail(email), password: String(password || '') });
-  if (error) {
-    const needsVerification = /email not confirmed|confirm your email/i.test(error.message || '');
-    if (needsVerification) return { success: false, needs_verification: true, error: 'Please verify your email before signing in.' };
-    return { success: false, error: 'Invalid email or password.' };
+  const gateway = await loginThroughGateway('customer', normalizedEmail, password);
+  if (!gateway.success) return gateway;
+  const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', gateway.user.id).maybeSingle();
+  if (profileError || !profile || profile.is_active !== true || !['customer', 'staff', 'admin'].includes(profile.role)) {
+    await client.auth.signOut().catch(() => {});
+    return { success: false, error: 'Unable to sign in right now. Please try again later.' };
   }
-  const { data: profile } = await client.from('profiles').select('role,is_active').eq('id', data.user.id).maybeSingle();
-  if (!profile || profile.role !== 'customer' || !profile.is_active) {
-    await client.auth.signOut();
-    return { success: false, error: 'Use the staff sign-in for this account.' };
+  if (profile.role !== 'customer') {
+    await client.auth.signOut().catch(() => {});
+    return { success: false, error: 'This is a staff account. Use Staff Login.' };
   }
-  return { success: true, user: data.user };
+  return { success: true, user: gateway.user };
 }
 
 export async function loginStaff(identifier, password) {
   const email = normalizeEmail(identifier);
-  if (!email.includes('@')) return { success: false, error: 'Staff sign-in uses the staff email address.' };
+  if (!LOGIN_EMAIL_PATTERN.test(email) || email.length > LOGIN_EMAIL_MAX_LENGTH) return { success: false, error: 'Staff sign-in uses the staff email address.' };
   const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email, password: String(password || '') });
-  if (error) return { success: false, error: 'Invalid staff credentials.' };
-  const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', data.user.id).maybeSingle();
-  if (profileError || !profile || !profile.is_active || !['staff', 'admin'].includes(profile.role)) {
-    await client.auth.signOut();
+  const gateway = await loginThroughGateway('staff', email, password);
+  if (!gateway.success) {
+    if (gateway.rate_limited) return gateway;
+    return { ...gateway, error: gateway.error === 'Invalid email or password.' ? 'Invalid staff credentials.' : gateway.error };
+  }
+  const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', gateway.user.id).maybeSingle();
+  if (profileError || !profile || profile.is_active !== true || !['customer', 'staff', 'admin'].includes(profile.role)) {
+    await client.auth.signOut().catch(() => {});
     return { success: false, error: 'This account is not authorized for staff access.' };
+  }
+  if (profile.role === 'customer') {
+    await client.auth.signOut().catch(() => {});
+    return { success: false, error: 'This is a customer account. Use Customer Login.' };
   }
   return { success: true, redirect: '/admin' };
 }
@@ -162,12 +206,18 @@ export async function getServices() {
     result = await client.from('services').select('*').eq('is_active', true).order('name');
   }
   const data = unwrap(result, 'Could not load services.');
-  return (data || []).map((row) => ({
-    id: row.id, name: row.name, category: row.category, subcategory: row.subcategory, item_type: row.item_type,
-    display_order: Number(row.display_order || 0), description: row.description,
-    price: Number(row.price), duration: formatDuration(row.duration_minutes), minutes: Number(row.duration_minutes),
-    rating: Number(row.rating || 0), image_path: row.image_path ? publicServiceImage(row.image_path) : '',
-  }));
+  const rows = data || [];
+  const hasHomepageCurationColumn = rows.some((row) => Object.prototype.hasOwnProperty.call(row, 'is_homepage_featured'));
+  return rows.map((row) => {
+    const service = {
+      id: row.id, name: row.name, category: row.category, subcategory: row.subcategory, item_type: row.item_type,
+      display_order: Number(row.display_order || 0), description: row.description,
+      price: Number(row.price), duration: formatDuration(row.duration_minutes), minutes: Number(row.duration_minutes),
+      rating: Number(row.rating || 0), image_path: row.image_path ? publicServiceImage(row.image_path) : '',
+    };
+    if (hasHomepageCurationColumn) service.is_homepage_featured = row.is_homepage_featured === true;
+    return service;
+  });
 }
 
 export async function getReviews() {
@@ -206,6 +256,7 @@ export async function getDashboard() {
   const client = requireSupabase();
   const session = await checkSession();
   if (!session.loggedIn) throw Object.assign(new Error('Not logged in'), { status: 401 });
+  if (session.customer?.role !== 'customer') throw Object.assign(new Error('Customer dashboard access required'), { status: 403 });
   const [profileResult, appointmentsResult, notificationsResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
     client.from('appointments').select('id,reference_no,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),

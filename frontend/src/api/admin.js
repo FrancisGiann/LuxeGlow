@@ -1,8 +1,16 @@
 import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
+import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
 
 const STAFF_ROLES = ['staff', 'admin'];
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+
+function isMissingHomepageCurationError(error) {
+  if (!error) return false;
+  const code = String(error.code || '').toUpperCase();
+  const message = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLocaleLowerCase();
+  return /\bis_homepage_featured\b/.test(message) && (code === '42703' || code === 'PGRST204' || /schema cache|column .* does not exist|could not find .*column/.test(message));
+}
 
 const throwIfError = (result, fallback) => {
   if (result.error) throw new Error(result.error.message || fallback);
@@ -126,15 +134,22 @@ export async function resetStaffPassword(userId) {
   return data;
 }
 
-export async function saveService(fields) {
-  const id = String(fields.id || '').trim();
-  const name = String(fields.name || '').trim();
-  const category = String(fields.category || '').trim();
-  const price = Number(fields.price);
-  const duration = Number(fields.duration_minutes);
-  if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id) || !name || name.length > 255 || !category || category.length > 100 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check service ID, name, category, price, and duration.' };
+export async function saveService(fields = {}) {
+  const input = fields && typeof fields === 'object' ? fields : {};
+  const id = String(input.id || '').trim();
+  const name = String(input.name || '').trim();
+  const category = String(input.category || '').trim();
+  const subcategory = String(input.subcategory || '').trim();
+  const itemType = String(input.item_type || '').trim();
+  const price = Number(input.price);
+  const duration = Number(input.duration_minutes);
+  if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id) || !name || name.length > 255 || category.length > 100 || subcategory.length > 100 || itemType.length > 30 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check service ID, name, type, category, subcategory, price, and duration.' };
   const client = await assertStaff();
-  throwIfError(await client.from('services').upsert({ id, name, category, description: String(fields.description || '').slice(0, 5000) || null, price, duration_minutes: duration, is_active: fields.is_active !== false }).select().single(), 'Could not save service.');
+  const existing = throwIfError(await client.from('services').select('id,category,subcategory,item_type').eq('id', id).maybeSingle(), 'Could not verify the existing service.');
+  const canonicalMetadata = isCanonicalServiceMetadata({ item_type: itemType, category, subcategory });
+  const preservesLegacyMetadata = existing && String(existing.category || '') === category && String(existing.subcategory || '') === subcategory && String(existing.item_type || '') === itemType;
+  if (!canonicalMetadata && !preservesLegacyMetadata) return { success: false, error: 'Choose a supported type, category, and subcategory combination.' };
+  throwIfError(await client.from('services').upsert({ id, name, category: category || null, subcategory: subcategory || null, item_type: itemType || null, description: String(input.description || '').slice(0, 5000) || null, price, duration_minutes: duration, is_active: input.is_active !== false }).select().single(), 'Could not save service.');
   return { success: true };
 }
 
@@ -155,6 +170,29 @@ export async function setServiceActive(serviceId, isActive) {
   const client = await assertStaff();
   throwIfError(await client.from('services').update({ is_active: !!isActive }).eq('id', serviceId), 'Could not update service.');
   return { success: true };
+}
+
+export async function setServiceHomepageFeatured(serviceId, isFeatured) {
+  if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(serviceId))) return { success: false, error: 'Invalid service ID.' };
+  const client = await assertStaff();
+  const result = await client.from('services').update({ is_homepage_featured: !!isFeatured }).eq('id', String(serviceId)).select('id,is_homepage_featured').maybeSingle();
+  if (result.error) {
+    if (isMissingHomepageCurationError(result.error)) return { success: false, error: 'Homepage selection needs the latest database migration.' };
+    if (String(result.error.code || '') === '23514' || /at most 6 services/i.test(result.error.message || '')) return { success: false, error: 'The homepage already has 6 featured services. Remove one before adding another.' };
+    throw new Error(result.error.message || 'Could not update homepage selection.');
+  }
+  if (!result.data) return { success: false, error: 'Service not found.' };
+  const requestedState = !!isFeatured;
+  const actualState = result.data.is_homepage_featured === true;
+  if (actualState !== requestedState) {
+    return {
+      success: false,
+      error: requestedState
+        ? 'This service became inactive before it could be added to the homepage. Refresh and try again.'
+        : 'The homepage selection changed before it could be removed. Refresh and try again.',
+    };
+  }
+  return { success: true, is_homepage_featured: actualState };
 }
 
 export async function getAdminAbout() {

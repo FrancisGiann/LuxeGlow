@@ -16,14 +16,23 @@ function categoryName(service) {
   return String(service?.category || 'Other').trim() || 'Other';
 }
 
+function hasOwnProperty(value, key) {
+  return value != null && Object.prototype.hasOwnProperty.call(value, key);
+}
+
 /**
  * Select a small photo-led homepage preview from the active live menu.
- * One service per category is preferred, with uploaded images winning within
- * each category. Remaining slots use the next ordered active services.
+ *
+ * New deployments use the persisted homepage selection. Before the curation
+ * migration is present, the old category-balanced selection remains a safe
+ * read-only fallback so the public homepage does not go blank.
  */
 export function curateHomepageServices(services, limit = 6) {
   const ordered = sortServicesForDisplay(services).filter((service) => service?.is_active !== false);
   const maxItems = Math.max(0, Number(limit) || 0);
+  const hasPersistedSelection = (Array.isArray(services) ? services : []).some((service) => hasOwnProperty(service, 'is_homepage_featured'));
+  if (hasPersistedSelection) return ordered.filter((service) => service?.is_homepage_featured === true).slice(0, maxItems);
+
   const selected = [];
   const categories = new Map();
 
@@ -43,4 +52,8 @@ export function curateHomepageServices(services, limit = 6) {
   });
 
   return selected;
+}
+
+export function supportsHomepageCuration(services) {
+  return (Array.isArray(services) ? services : []).some((service) => hasOwnProperty(service, 'is_homepage_featured'));
 }
