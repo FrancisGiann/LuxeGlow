@@ -29,7 +29,7 @@ Deno.serve(async (request) => {
   if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || firstName.length > 100 || lastName.length > 100) return json({ error: 'Valid email and name are required' }, 400);
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) } });
   if (inviteError || !invited.user) return json({ error: inviteError?.message || 'Could not invite staff member' }, 400);
-  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role, is_active: true, updated_at: new Date().toISOString() }).eq('id', invited.user.id);
+  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role, is_active: true, accepts_appointments: role === 'staff', updated_at: new Date().toISOString() }).eq('id', invited.user.id);
   if (profileError) {
     // The Auth invite and profile role update are separate APIs. Remove the
     // just-created invite on a profile failure so a partial privileged account

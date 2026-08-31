@@ -108,6 +108,7 @@ const normalizeReceipt = (receipt = {}) => {
     services,
     appointmentDate: source.appointmentDate ?? source.raw_date ?? source.date,
     appointmentTime: source.appointmentTime ?? source.raw_time ?? source.time,
+    staffName: textValue(source.staffName || source.staff_name) || (source.staff_id ? 'Assigned team member' : 'Unassigned'),
     dateLabel: source.dateLabel,
     serviceTotal: explicitTotal ?? (services.length && services.some((service) => service.price !== null) ? servicesTotal : null),
     status: textValue(source.status || source.bookingStatus),
@@ -236,6 +237,7 @@ export function BookingReceiptModal({ receipt, onClose }) {
                 <ReceiptRow label="Booking reference">{normalized.reference || '—'}</ReceiptRow>
                 <ReceiptRow label="Appointment date">{appointmentDate}</ReceiptRow>
                 <ReceiptRow label="Appointment time">{appointmentTime}</ReceiptRow>
+                <ReceiptRow label="Team member">{normalized.staffName}</ReceiptRow>
                 <ReceiptRow label="Booking status">{normalized.status || '—'}</ReceiptRow>
               </dl>
             </section>

@@ -247,6 +247,7 @@ const dashboardAppointment = (row) => {
     date: manilaDateLabel(row.local_date, row.local_time),
     time: manilaTimeLabel(row.local_date, row.local_time), raw_date: row.local_date, raw_time: row.local_time,
     service: services.map((s) => s.service_name).join(', ') || 'N/A', service_image: serviceImageUrl(firstService?.services),
+    staff_id: row.staff_id || null, staff_name: row.staff_name || (row.staff_id ? 'Assigned team member' : 'Unassigned'),
     price: Number(row.total_price), total_price: Number(row.total_price), status: row.status, created_at: row.created_at,
     has_rating: !!review, rating_given: review?.rating ? Number(review.rating) : null, review_text: review?.review_text || '',
   };
@@ -257,13 +258,17 @@ export async function getDashboard() {
   const session = await checkSession();
   if (!session.loggedIn) throw Object.assign(new Error('Not logged in'), { status: 401 });
   if (session.customer?.role !== 'customer') throw Object.assign(new Error('Customer dashboard access required'), { status: 403 });
-  const [profileResult, appointmentsResult, notificationsResult] = await Promise.all([
+  const [profileResult, appointmentsResult, notificationsResult, appointmentStaffResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
-    client.from('appointments').select('id,reference_no,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
     client.from('user_notifications').select('id,appointment_id,type,title,message,is_read,created_at').eq('customer_id', session.user.id).order('created_at', { ascending: false }).limit(30),
+    client.rpc('get_my_appointment_staff'),
   ]);
   const profile = unwrap(profileResult, 'Could not load your profile.');
   const appointmentRows = unwrap(appointmentsResult, 'Could not load appointments.') || [];
+  const appointmentStaff = unwrap(appointmentStaffResult, 'Could not load appointment staff.') || [];
+  const staffNames = new Map(appointmentStaff.map((row) => [row.appointment_id, row.display_name || (row.staff_id ? 'Assigned team member' : 'Unassigned')]));
+  appointmentRows.forEach((row) => { row.staff_name = staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'); });
   const appointments = appointmentRows.map(dashboardAppointment);
   const notifications = (unwrap(notificationsResult, 'Could not load notifications.') || []).map((row) => ({ ...row, id: Number(row.id), is_read: !!row.is_read, created_at: new Date(row.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }));
   const reviews = appointmentRows
@@ -324,19 +329,25 @@ export async function updateCustomerProfile({ firstName, lastName, phone, newPas
 }
 
 /* ── Race-safe booking ───────────────────────────────────────── */
-export async function getAvailableSlots(date, durationMinutes) {
-  const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
-  return (data || []).map((row) => ({ time: row.time, available: !!row.available }));
+export async function getBookableStaff() {
+  const data = unwrap(await requireSupabase().rpc('get_bookable_staff'), 'Could not load team members.');
+  return (data || []).map((row) => ({ id: row.id || row.staff_id, name: row.display_name || 'Team member' })).filter((row) => /^[0-9a-f-]{36}$/i.test(String(row.id)));
 }
 
-export async function createAppointment({ serviceIds, date, time }) {
+export async function getAvailableSlots(date, durationMinutes, staffId) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(staffId))) throw new Error('Choose an available team member.');
+  const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_staff_id: staffId, p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
+  return (data || []).map((row) => ({ time: row.time || row.slot_time, available: !!row.available }));
+}
+
+export async function createAppointment({ serviceIds, staffId, date, time }) {
   const cleanIds = [...new Set((serviceIds || []).map(String))].filter((id) => /^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id));
-  if (!cleanIds.length || cleanIds.length > 8 || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
+  if (!cleanIds.length || cleanIds.length > 8 || !/^[0-9a-f-]{36}$/i.test(String(staffId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
   try {
-    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_date: date, p_time: time }), 'Could not place the booking.');
+    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: staffId, p_date: date, p_time: time }), 'Could not place the booking.');
     const row = rows?.[0];
     if (!row) return { success: false, error: 'Could not place the booking.' };
-    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
+    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, staff_id: staffId, total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
   } catch (error) {
     return { success: false, error: /no longer available|exclusion|overlap/i.test(error.message) ? 'That slot is no longer available.' : error.message };
   }

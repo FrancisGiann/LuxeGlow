@@ -42,8 +42,11 @@ async function assertStaff() {
 
 export async function listAdminAppointments() {
   const client = await assertStaff();
-  const rows = throwIfError(await client.from('appointments').select('id,reference_no,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),appointment_services(service_name,unit_price)').order('local_date', { ascending: true }).order('local_time', { ascending: true }), 'Could not load appointments.');
-  return (rows || []).map((row) => ({ ...row, total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] }));
+  const rows = throwIfError(await client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('local_date', { ascending: true }).order('local_time', { ascending: true }), 'Could not load appointments.');
+  return (rows || []).map((row) => {
+    const staffName = row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : row.staff_id ? 'Assigned team member' : 'Unassigned';
+    return { ...row, staff_name: staffName || 'Assigned team member', total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] };
+  });
 }
 
 export async function updateAppointmentStatus(appointmentId, status) {
@@ -89,7 +92,7 @@ export async function deleteFaq(id) {
 
 export async function listAdminProfiles(role) {
   const client = await assertStaff();
-  let query = client.from('profiles').select('id,email,first_name,last_name,phone,username,role,is_active,created_at,legacy_customer_id,legacy_staff_id').order('last_name').order('first_name');
+  let query = client.from('profiles').select('id,email,first_name,last_name,phone,username,role,is_active,accepts_appointments,created_at,legacy_customer_id,legacy_staff_id').order('last_name').order('first_name');
   if (role) query = query.eq('role', role);
   return throwIfError(await query, 'Could not load accounts.') || [];
 }
@@ -97,8 +100,11 @@ export async function listAdminProfiles(role) {
 export async function getCustomerHistory(id) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id))) throw new Error('Invalid customer account.');
   const client = await assertStaff();
-  const rows = throwIfError(await client.from('appointments').select('id,reference_no,local_date,local_time,total_price,total_duration_minutes,status,created_at,appointment_services(service_name)').eq('customer_id', id).order('local_date', { ascending: false }).order('local_time', { ascending: false }), 'Could not load customer history.');
-  return (rows || []).map((row) => ({ ...row, total_price: Number(row.total_price), services: row.appointment_services || [] }));
+  const rows = throwIfError(await client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,total_duration_minutes,status,created_at,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name)').eq('customer_id', id).order('local_date', { ascending: false }).order('local_time', { ascending: false }), 'Could not load customer history.');
+  return (rows || []).map((row) => {
+    const staffName = row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : row.staff_id ? 'Assigned team member' : 'Unassigned';
+    return { ...row, staff_name: staffName || 'Assigned team member', total_price: Number(row.total_price), services: [{ service_name: `Team member: ${staffName || 'Assigned team member'}` }, ...(row.appointment_services || [])] };
+  });
 }
 
 export async function updateAdminProfile(id, fields) {
@@ -112,6 +118,7 @@ export async function updateAdminProfile(id, fields) {
     patch.role = fields.role;
   }
   if (fields.is_active !== undefined) patch.is_active = !!fields.is_active;
+  if (fields.accepts_appointments !== undefined) patch.accepts_appointments = !!fields.accepts_appointments;
   if (!Object.keys(patch).length) return { success: false, error: 'No account changes supplied.' };
   const client = await assertStaff();
   throwIfError(await client.from('profiles').update(patch).eq('id', id), 'Could not update account.');
