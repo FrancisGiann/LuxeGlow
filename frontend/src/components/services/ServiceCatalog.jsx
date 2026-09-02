@@ -121,11 +121,12 @@ export function ServiceCatalog({
   selectable = false,
   selectedIds = [],
   onToggle = () => {},
-  selectionLimit = 8,
+  selectionLimit = null,
 }) {
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const hasSelectionLimit = Number.isInteger(selectionLimit) && selectionLimit > 0;
   const normalizedServices = useMemo(() => sortServicesForDisplay(services), [services]);
   const categories = useMemo(() => {
     const unique = [];
@@ -191,7 +192,7 @@ export function ServiceCatalog({
           </div>
         </div>
         <p className="text-sm leading-relaxed text-ink-500">
-          {selectable ? `Select up to ${selectionLimit} treatments for this visit.` : 'Prices and durations stay in view as you browse.'}
+          {selectable ? hasSelectionLimit ? `Select up to ${selectionLimit} treatments for this visit.` : 'Select the treatments you want for this visit.' : 'Prices and durations stay in view as you browse.'}
         </p>
       </div>
 
@@ -240,7 +241,7 @@ export function ServiceCatalog({
             <p className="text-sm text-ink-500">{filteredServices.length} of {normalizedServices.length} treatment{normalizedServices.length === 1 ? '' : 's'}</p>
           </div>
 
-          {selectable && <p className="text-xs font-semibold text-ink-500" aria-live="polite">{selectedIds.length} of {selectionLimit} selected</p>}
+          {selectable && <p className="text-xs font-semibold text-ink-500" aria-live="polite">{hasSelectionLimit ? `${selectedIds.length} of ${selectionLimit} selected` : `${selectedIds.length} selected`}</p>}
 
           {!filteredServices.length ? (
             <div className="rounded-xl border border-line bg-surface">
@@ -259,7 +260,7 @@ export function ServiceCatalog({
                     </div>
                     {group.items.map((service) => {
                       const selected = selectedIds.includes(service.id);
-                      const disabled = selectable && !selected && selectedIds.length >= selectionLimit;
+                      const disabled = selectable && hasSelectionLimit && !selected && selectedIds.length >= selectionLimit;
                       return <ServiceRow key={service.id} service={service} selectable={selectable} selected={selected} disabled={disabled} onToggle={onToggle} />;
                     })}
                   </section>

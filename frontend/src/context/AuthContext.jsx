@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 
 /**
  * Owns the Supabase Auth session and the auth modal (login / staff login /
- * register / OTP verify / password reset). Authorization is enforced again by
+ * register / email verification / password reset). Authorization is enforced again by
  * profiles RLS and server-side RPCs; UI state is never trusted for access.
  */
 const AuthContext = createContext(null);
@@ -173,7 +173,7 @@ export function AuthProvider({ children }) {
     return { ok: false, error: data.error || 'Invalid staff credentials.' };
   }, [refreshSession, closeAuth]);
 
-  /** Returns { ok, error }. On success the session enters "pending verify". */
+  /** Returns { ok, error }. On success the session enters "pending email verification". */
   const register = useCallback(async (fields) => {
     const data = await api.registerCustomer(fields);
     if (data.success) {
@@ -189,16 +189,8 @@ export function AuthProvider({ children }) {
     return { ok: false, error: data.error || 'Registration failed.' };
   }, [refreshSession, closeAuth]);
 
-  const verify = useCallback(async (otp) => {
-    const data = await api.verifyOtp(otp, verifyEmail);
-    if (!data.success) return { ok: false, error: data.error || 'Invalid code.' };
-    await refreshSession();
-    closeAuth();
-    return { ok: true };
-  }, [verifyEmail, refreshSession, closeAuth]);
-
   const resend = useCallback(async () => {
-    const data = await api.resendOtp(verifyEmail);
+    const data = await api.resendVerificationEmail(verifyEmail);
     const retryAfter = Number(data.retry_after ?? data.remaining ?? 0);
     return {
       ok: !!data.success,
@@ -266,7 +258,6 @@ export function AuthProvider({ children }) {
       login,
       loginStaff,
       register,
-      verify,
       resend,
       requestPasswordReset,
       completePasswordReset,
@@ -274,7 +265,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       sessionNotice,
     }),
-    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, verify, resend, requestPasswordReset, completePasswordReset, logout, refreshSession, sessionNotice]
+    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, resend, requestPasswordReset, completePasswordReset, logout, refreshSession, sessionNotice]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

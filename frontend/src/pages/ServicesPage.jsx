@@ -34,7 +34,7 @@ export function ServicesPage() {
 
         {!loading && !error && services?.length > 0 && (
           <div className="flex flex-col gap-4 border-t border-line pt-7 sm:flex-row sm:items-center sm:justify-between">
-            <p className="max-w-[52ch] text-sm leading-relaxed text-ink-500">Ready to choose a time? Select one to eight treatments when you start your appointment request.</p>
+            <p className="max-w-[52ch] text-sm leading-relaxed text-ink-500">Ready to choose a time? Select the treatments you want when you start your appointment request.</p>
             <Button type="button" variant="soft" size="lg" onClick={book}>Continue to booking</Button>
           </div>
         )}

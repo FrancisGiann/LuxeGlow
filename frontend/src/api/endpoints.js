@@ -160,15 +160,9 @@ export async function registerCustomer(fields) {
   return { success: true, needs_verification: !data.session, user: data.user };
 }
 
-export async function verifyOtp(otp, email) {
-  const { data, error } = await requireSupabase().auth.verifyOtp({ email: normalizeEmail(email), token: String(otp || ''), type: 'signup' });
-  if (error) return { success: false, error: 'That verification code is invalid or expired.' };
-  return { success: true, user: data.user };
-}
-
-export async function resendOtp(email) {
+export async function resendVerificationEmail(email) {
   const { error } = await requireSupabase().auth.resend({ type: 'signup', email: normalizeEmail(email) });
-  if (error) return { success: false, error: error.message || 'Could not resend the code.' };
+  if (error) return { success: false, error: error.message || 'Could not resend the verification email.' };
   return { success: true, retry_after: 60 };
 }
 
@@ -357,7 +351,7 @@ export async function getAvailableSlots(date, durationMinutes, staffId) {
 
 export async function createAppointment({ serviceIds, staffId, date, time }) {
   const cleanIds = [...new Set((serviceIds || []).map(String))].filter((id) => /^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id));
-  if (!cleanIds.length || cleanIds.length > 8 || !/^[0-9a-f-]{36}$/i.test(String(staffId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
+  if (!cleanIds.length || !/^[0-9a-f-]{36}$/i.test(String(staffId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
   try {
     const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: staffId, p_date: date, p_time: time }), 'Could not place the booking.');
     const row = rows?.[0];

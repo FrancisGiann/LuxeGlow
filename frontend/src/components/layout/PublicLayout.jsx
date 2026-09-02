@@ -24,7 +24,7 @@ function SalonWordmark({ compact = false }) {
 }
 
 function Navbar() {
-  const { isAuthenticated, customer, openAuth, logout } = useAuth();
+  const { isAuthenticated, customer, openAuth } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
@@ -69,7 +69,6 @@ function Navbar() {
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blush-100 text-[11px] font-bold text-brand-800">{getInitials(customer?.first_name, customer?.last_name)}</span>
                 {isStaff ? 'Admin dashboard' : 'My dashboard'}
               </Link>
-              <button type="button" onClick={logout} className="px-1 text-sm font-semibold text-ink-500 hover:text-danger">Log out</button>
             </>
           ) : (
             <button type="button" onClick={() => openAuth('login')} className="min-h-11 rounded-xl border border-line bg-surface px-4 text-sm font-semibold text-ink-900 hover:border-brand-300">Log in</button>
@@ -93,7 +92,6 @@ function Navbar() {
               <>
                 {!isStaff && <Link to="/dashboard/book" className="rounded-xl bg-brand-800 px-4 py-3 text-center text-sm font-bold text-white">Book an appointment</Link>}
                 <Link to={isStaff ? '/admin' : '/dashboard'} className="rounded-xl border border-line px-4 py-3 text-center text-sm font-bold text-ink-900">{isStaff ? 'Admin dashboard' : 'My dashboard'}</Link>
-                <button type="button" onClick={logout} className="rounded-xl px-4 py-3 text-sm font-semibold text-danger">Log out</button>
               </>
             ) : <button type="button" onClick={() => openAuth('login')} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Log in / Register</button>}
           </div>

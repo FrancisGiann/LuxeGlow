@@ -35,7 +35,6 @@ export function AuthModal() {
     login,
     loginStaff,
     register,
-    verify,
     resend,
     requestPasswordReset,
     completePasswordReset,
@@ -46,7 +45,6 @@ export function AuthModal() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
@@ -55,7 +53,6 @@ export function AuthModal() {
 
   useEffect(() => {
     setError('');
-    setVerificationCode('');
     setResetCode('');
     if (!modalView) {
       setResetEmail('');
@@ -147,28 +144,6 @@ export function AuthModal() {
     }
   };
 
-  const handleVerify = async (e) => {
-    e.preventDefault();
-    const code = verificationCode.trim();
-    if (!/^\d{6}$/.test(code)) {
-      setError('Enter all 6 digits, or use the verification link from your email.');
-      return;
-    }
-    setError('');
-    setBusy(true);
-    try {
-      const res = await verify(code);
-      if (res.ok) {
-        toast('Account verified. Welcome!');
-        finishAndGoDashboard();
-      } else setError(res.error || 'That verification code is invalid or expired.');
-    } catch {
-      setError('Verification failed. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleResend = async () => {
     if (resendRemaining > 0 || resendBusy) return;
     setResendBusy(true);
@@ -179,9 +154,9 @@ export function AuthModal() {
         setResendIn(res.retryAfter);
       }
       if (res.ok) toast('A new verification email has been sent.', 'info');
-      else toast(res.error || 'Could not resend the code right now.', 'error');
+      else toast(res.error || 'Could not resend the verification email right now.', 'error');
     } catch {
-      toast('Could not resend the code right now. Please try again.', 'error');
+      toast('Could not resend the verification email right now. Please try again.', 'error');
     } finally {
       setResendBusy(false);
     }
@@ -267,7 +242,7 @@ export function AuthModal() {
             {modalView === 'login' && 'Sign in to book and manage your appointments.'}
             {modalView === 'admin' && 'Restricted access for salon staff.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
-            {modalView === 'verify' && 'Use the link, or enter the code if your email provides one.'}
+            {modalView === 'verify' && 'Check your inbox for a verification email.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
             {modalView === 'forgot-reset' && 'Use the link, or enter the code if your email provides one.'}
           </p>
@@ -383,30 +358,15 @@ export function AuthModal() {
 
           {/* ── VERIFY ── */}
           {modalView === 'verify' && (
-            <form onSubmit={handleVerify} className="mt-6 flex flex-col items-center gap-5" noValidate>
+            <div className="mt-6 flex flex-col items-center gap-5">
               <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Link sent to</p>
                 <p className="mt-0.5 text-sm font-semibold text-brand-800">{verifyEmail}</p>
               </div>
 
               <div className="py-4 text-center">
-                <h3 className="mb-2 text-lg font-bold text-ink-900">Check your inbox!</h3>
-                <p className="text-sm text-ink-500">We've sent a secure verification link to your email address. Click it to verify and log in, or enter the six-digit code below if your email provides one.</p>
-              </div>
-
-              <div className="w-full">
-                <Input
-                  id="verification-code"
-                  label="Optional 6-digit verification code"
-                  value={verificationCode}
-                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  hint="Leave this blank when you use the verification link."
-                />
-                {error && <p className="mt-2 text-sm font-medium text-danger" role="alert">{error}</p>}
-                <Button type="submit" block loading={busy} className="mt-4">Verify code</Button>
+                <h3 className="mb-2 text-lg font-bold text-ink-900">Click the link to continue.</h3>
+                <p className="text-sm text-ink-500">It verifies your address and signs you in.</p>
               </div>
 
               <div className="text-center text-sm text-ink-500">
@@ -418,7 +378,7 @@ export function AuthModal() {
               <p className="text-center text-xs text-ink-400">
                 You can safely close this window once you click the link in your email.
               </p>
-            </form>
+            </div>
           )}
         </div>
       </div>

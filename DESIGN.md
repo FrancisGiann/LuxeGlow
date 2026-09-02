@@ -26,7 +26,7 @@ Admin remains a protected one-active-tab workspace: Appointments, Services, Cust
 
 ## Supported states and behavior
 
-Loading, empty, error, success, toast, modal, receipt/print, validation, and mobile states are explicit. Auth remains role-aware: email links are primary, optional six-digit signup/recovery codes are accepted when an email template provides them, and a blank recovery code preserves the secure `PASSWORD_RECOVERY` session flow. Existing Supabase/RLS-backed APIs, routes, role boundaries, timezone behavior, and backend data are unchanged.
+Loading, empty, error, success, toast, modal, receipt/print, validation, and mobile states are explicit. Auth remains role-aware: signup email verification is link-only, while optional six-digit recovery codes remain accepted when a password-reset email template provides one; a blank recovery code preserves the secure `PASSWORD_RECOVERY` session flow. Existing Supabase/RLS-backed APIs, routes, role boundaries, timezone behavior, and backend data are unchanged.
 
 ## Image provenance and review artifacts
 

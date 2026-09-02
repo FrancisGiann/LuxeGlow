@@ -26,10 +26,22 @@ Build with `npm run build`. Deploy the resulting `frontend/dist` directory to
 your chosen static host and configure its SPA fallback. `VITE_ASSET_BASE` and
 `VITE_ROUTER_BASE` must match the host sub-path when one is used.
 
+### Windows one-click development
+
+On a Windows 10/11 machine, copy the whole repository folder and double-click
+[`Start-LuxeGlow.bat`](Start-LuxeGlow.bat). It installs only the official
+Node.js LTS (when Node.js 22.12+ is not already available), runs `npm ci` in
+`frontend` to recreate `frontend/node_modules` from the lockfile, and starts
+Vite at http://localhost:5173/. An internet connection and the configured
+Supabase project are required. Approve the official Node.js installer if
+Windows asks, keep the launcher window open while using the app, and press
+Ctrl+C in that window to stop the server. This path does not install or use
+PHP, XAMPP, MySQL, Git, Composer, the Supabase CLI, or global npm packages.
+
 ## Supabase setup
 
-1. Create a Supabase project and configure email Auth (SMTP/provider and OTP or
-   recovery templates) plus the production redirect URL.
+1. Create a Supabase project and configure email Auth (SMTP/provider, signup
+   confirmation link, and recovery templates) plus the production redirect URL.
 2. Install the Supabase CLI, link the project, and run
    `supabase db push`. The canonical schema and RLS policies are in
    [`database/supabase/`](database/supabase/README.md).
