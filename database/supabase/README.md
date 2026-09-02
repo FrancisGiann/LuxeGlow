@@ -38,6 +38,10 @@ you are migrating an existing salon database.
   stores only hashed email+IP identity and separate IP keys; deploy and secret
   setup are documented in `supabase/functions/README.md`. Login rows older than
   24 hours are cleaned opportunistically in bounded batches of 100.
+- Invite and staff-recovery links use the server-side `APP_ROUTER_BASE` setting:
+  `/` for local Vite development and `/luxeglow` for the production SPA path.
+  Register both exact `/reset-password` URLs in Supabase Authentication → URL
+  Configuration; do not use a wildcard redirect.
 - Appointment status triggers create in-app notifications and an email outbox.
   `supabase/functions/process-notifications` is a service-role-only worker.
   Configure a Supabase Scheduled Edge Function or an external scheduler to
@@ -113,9 +117,9 @@ legacy hashes, and each user completes a Supabase recovery flow before access
 is enabled. If a staging proof establishes exact hash compatibility, an
 operator may use `auth.admin.createUser({ password_hash, email_confirm })` in a
 separate audited script while retaining the same identity map and rollback
-steps. The active UI follows Supabase's documented recovery-link/`PASSWORD_RECOVERY`
+steps. The active UI follows Supabase's documented invitation/recovery-link
 flow and accepts a recovery OTP only when the project's email template is
-configured for one. Keep legacy hashes offline for the retention period, then
+configured for one; invitation setup is link-only. Keep legacy hashes offline for the retention period, then
 destroy them under the project's data-retention policy. See the official [Auth migration guide](https://supabase.com/docs/guides/platform/migrating-to-supabase/auth0)
 and [password reset flow](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail).
 
@@ -124,7 +128,7 @@ and [password reset flow](https://supabase.com/docs/reference/javascript/auth-re
 Browser variables are `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and the
 hosting base path. Server/Edge variables are `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `RESEND_API_KEY`, mail sender
-settings, a random `CRON_SECRET_TOKEN`, `ALLOWED_ORIGIN`,
+settings, a random `CRON_SECRET_TOKEN`, `ALLOWED_ORIGIN`, `APP_ROUTER_BASE`,
 `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 Set the Cloudinary values only with the Supabase secrets manager:
 

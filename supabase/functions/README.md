@@ -11,6 +11,7 @@ supabase functions deploy login-rate-limit --no-verify-jwt
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... RESEND_API_KEY=... \
   MAIL_FROM_ADDRESS=... MAIL_FROM_NAME="Astrid Nails & Beauty Bar" \
   CRON_SECRET_TOKEN=... ALLOWED_ORIGIN=https://your-site.example \
+  APP_ROUTER_BASE=/ \
   CLOUDINARY_CLOUD_NAME=... CLOUDINARY_API_KEY=... CLOUDINARY_API_SECRET=... \
   LOGIN_RATE_LIMIT_SECRET=... AUTH_PROXY_SECRET_KEY=sb_secret_...
 ```
@@ -21,9 +22,41 @@ Before deploying the image function, apply the canonical migrations (including
 `CLOUDINARY_*` values are server-only Upload API credentials: set them with
 `supabase secrets set`, never add them to a `VITE_` variable, and never expose
 the API secret to the browser. `ALLOWED_ORIGIN` must be the exact origin of the
-deployed SPA (for example `https://your-site.example` without a trailing path);
-the function handles its own bearer-token verification, so keep
-`--no-verify-jwt` enabled.
+SPA making the request (for example `https://your-site.example` or
+`http://localhost:5173`, without a trailing path). It is a single-origin
+allowlist value; the functions do not dynamically accept browser origins, and
+`*` is not supported. For local Vite development, temporarily set the
+Supabase secret to the local origin before testing the browser flow, then
+restore the deployed SPA origin before production use:
+
+```sh
+supabase secrets set ALLOWED_ORIGIN=http://localhost:5173
+```
+
+After changing this secret or the CORS code, redeploy the affected function(s)
+with `--no-verify-jwt` as shown above. The function handles its own bearer-token
+verification, so keep `--no-verify-jwt` enabled.
+
+`APP_ROUTER_BASE` is the SPA path used by invite and staff-recovery links: use
+`/` for local Vite development and `/luxeglow` when the production build is
+served at `https://your-site.example/luxeglow`. In Supabase Dashboard →
+Authentication → URL Configuration, set the Site URL to the deployed app URL
+and add these exact Redirect URLs (plus any other explicitly supported host):
+
+```text
+http://localhost:5173/reset-password
+https://your-site.example/luxeglow/reset-password
+```
+
+The URLs must match the configured `ALLOWED_ORIGIN` and `APP_ROUTER_BASE`.
+Supabase falls back to the Site URL when a requested redirect is not on the
+allowlist, so do not rely on an unregistered path or a broad wildcard.
+In Supabase Authentication → Email Templates, keep both Invite User and Reset
+Password templates pointed at `{{ .ConfirmationURL }}` (or construct the
+equivalent link with the supplied `.RedirectTo` value). Do not replace the
+template redirect with a hardcoded Site URL: the token must reach the exact
+registered `/reset-password` URL above. The staff recovery function sends its
+own generated `action_link`, which follows the same redirect configuration.
 
 `process-notifications` deliberately authenticates its own random
 `x-cron-token`, because a scheduler does not have a customer JWT. Schedule a
@@ -38,8 +71,13 @@ curl -fsS -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/process-noti
 Do not place the service key or cron secret in the browser. `invite-staff`
 requires a caller bearer token and checks the caller's `profiles.role = admin`
 using the service client before calling `auth.admin.inviteUserByEmail`.
+Invite links intentionally create passwordless users; the recipient is sent to
+the configured `/reset-password` route to choose a password. New staff accounts
+remain unavailable for appointments until an administrator enables them after
+the recipient accepts the invitation.
 `reset-staff-password` uses the same admin check, sends a one-time Auth recovery
-link through Resend, and never returns a password or reset token to the browser.
+link through Resend for confirmed accounts (or an invitation link for an
+unconfirmed account), and never returns a password or reset token to the browser.
 `upload-service-image` requires an active staff/admin profile, accepts only
 JPEG/PNG/WebP multipart uploads up to 5 MB, uploads to Cloudinary under the
 `luxeglow/services/{service_id}/` prefix, then stores Cloudinary's `secure_url`

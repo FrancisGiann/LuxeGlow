@@ -105,6 +105,39 @@ function Get-NpmPath {
     return $npmCommand.Source
 }
 
+function Test-NodeJsonFiles {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$NodePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Paths
+    )
+
+    # Windows PowerShell 5.1 cannot represent package-lock's empty-string
+    # package key as a PSCustomObject property. Node's JSON parser is the
+    # authoritative parser for the files npm will consume instead.
+    $validationScript = @'
+const fs = require('fs');
+const path = require('path');
+let failed = false;
+for (const filename of process.argv.slice(1)) {
+  try {
+    JSON.parse(fs.readFileSync(filename, 'utf8'));
+  } catch (error) {
+    console.error(`${path.basename(filename)}: ${error.message}`);
+    failed = true;
+  }
+}
+process.exitCode = failed ? 1 : 0;
+'@
+
+    & $NodePath -e $validationScript -- $Paths
+    $nodeValidationExitCode = $LASTEXITCODE
+    if ($nodeValidationExitCode -ne 0) {
+        throw 'Node could not parse frontend/package.json or frontend/package-lock.json. See the parser error above and restore the affected file(s).'
+    }
+}
+
 $devProcess = $null
 $scriptExitCode = 0
 
@@ -116,14 +149,6 @@ try {
         if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
             throw "Required frontend file is missing: $requiredFile"
         }
-    }
-
-    try {
-        $null = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
-        $null = Get-Content -LiteralPath $packageLockPath -Raw | ConvertFrom-Json
-    }
-    catch {
-        throw "frontend/package.json or frontend/package-lock.json is not valid JSON. Restore the repository files and try again."
     }
 
     $nodeInfo = Get-NodeInfo
@@ -143,6 +168,8 @@ try {
     if ($null -eq $nodeInfo -or $nodeInfo.Version -lt $minimumNodeVersion) {
         throw "Node.js 22.12 or newer could not be found after installation. Install the official Node.js LTS from $nodeDownloadUrl, restart Windows if the installer requested it, and run Start-LuxeGlow.bat again."
     }
+
+    Test-NodeJsonFiles -NodePath $nodeInfo.Path -Paths @($packageJsonPath, $packageLockPath)
 
     $npmPath = Get-NpmPath
     if ($null -eq $npmPath) {
@@ -167,7 +194,7 @@ try {
     }
 
     if ($npmCiExitCode -ne 0) {
-        throw "npm ci failed (exit code $npmCiExitCode). Check your internet connection and the npm output above, then run Start-LuxeGlow.bat again."
+        throw "npm ci failed (exit code $npmCiExitCode). npm's detailed error is shown above; check frontend/package.json and frontend/package-lock.json or your internet connection, then run Start-LuxeGlow.bat again."
     }
 
     Write-Host 'Starting the Vite development server. Its logs will remain visible in this window.' -ForegroundColor Cyan

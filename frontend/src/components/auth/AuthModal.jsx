@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
-import { IconX } from '../icons';
+import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 
 const VIEWS = {
@@ -14,6 +14,7 @@ const VIEWS = {
   verify: 'Verify Your Email',
   'forgot-request': 'Reset Your Password',
   'forgot-reset': 'Choose a New Password',
+  'password-success': 'Password update complete',
 };
 
 function BrandMark() {
@@ -38,6 +39,8 @@ export function AuthModal() {
     resend,
     requestPasswordReset,
     completePasswordReset,
+    passwordSetup,
+    passwordCompletion,
     sessionNotice,
   } = useAuth();
   const toast = useToast();
@@ -52,12 +55,12 @@ export function AuthModal() {
   const [resendBusy, setResendBusy] = useState(false);
 
   useEffect(() => {
-    setError('');
+    setError(passwordSetup?.error || '');
     setResetCode('');
     if (!modalView) {
       setResetEmail('');
     }
-  }, [modalView]);
+  }, [modalView, passwordSetup?.error, passwordSetup?.type, passwordSetup?.userId]);
 
   useEffect(() => {
     if (resendIn <= 0) return undefined;
@@ -185,7 +188,13 @@ export function AuthModal() {
     e.preventDefault();
     const fields = Object.fromEntries(new FormData(e.currentTarget));
     const code = resetCode.trim();
-    const email = resetEmail.trim();
+    const email = (resetEmail || passwordSetup?.email || '').trim();
+    const codeCanEstablishRecoverySession = passwordSetup?.type === 'recovery' && Boolean(code);
+    if (passwordSetup?.error || (!passwordSetup?.ready && !codeCanEstablishRecoverySession)) return;
+    if (code && passwordSetup?.type !== 'recovery') {
+      setError('Recovery codes are only valid for password-reset emails. Open the invitation link to set a staff password.');
+      return;
+    }
     if (code && !/^\d{6}$/.test(code)) {
       setError('Enter all 6 digits, or use the secure reset link from your email.');
       return;
@@ -212,10 +221,7 @@ export function AuthModal() {
         password: fields.password,
         confirmPassword: fields.confirm_password,
       });
-      if (res.ok) {
-        openAuth('login');
-        toast('Password reset successful. You can now log in.', 'success');
-      } else setError(res.error || 'That code is invalid or expired.');
+      if (!res.ok) setError(res.error || 'That code is invalid or expired.');
     } catch {
       setError('Could not reset your password right now. Please try again.');
     } finally {
@@ -223,8 +229,12 @@ export function AuthModal() {
     }
   };
 
+  const codeCanEstablishRecoverySession = passwordSetup?.type === 'recovery' && Boolean(resetCode.trim());
+  const passwordSetupBlocked = Boolean(passwordSetup?.error) || !(passwordSetup?.ready || codeCanEstablishRecoverySession);
+  const inviteCompletion = passwordCompletion?.type === 'invite';
+
   return (
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
       <div className="absolute inset-0" onClick={closeAuth} aria-hidden="true" />
       <div className="relative my-auto w-full max-w-md">
         <button
@@ -237,14 +247,15 @@ export function AuthModal() {
 
         <div className="rounded-3xl border border-line bg-surface p-8 shadow-float">
           <BrandMark />
-          <h2 className="mt-4 text-center font-display text-2xl font-bold">{VIEWS[modalView]}</h2>
+          <h2 id="auth-modal-title" className="mt-4 text-center font-display text-2xl font-bold">{VIEWS[modalView]}</h2>
           <p className="mt-1 text-center text-sm text-ink-500">
             {modalView === 'login' && 'Sign in to book and manage your appointments.'}
             {modalView === 'admin' && 'Restricted access for salon staff.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Check your inbox for a verification email.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
-            {modalView === 'forgot-reset' && 'Use the link, or enter the code if your email provides one.'}
+            {modalView === 'forgot-reset' && (passwordSetup?.ready ? 'Use the secure link, or enter the code if your email provides one.' : passwordSetup?.type === 'recovery' ? 'Open the reset link, or enter the recovery code from that email.' : 'Open the invitation or reset link from your email before choosing a password.')}
+            {modalView === 'password-success' && (inviteCompletion ? 'Your staff account is ready for secure sign-in.' : 'Choose where to sign in next.')}
           </p>
           {sessionNotice && <p className="mt-4 rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center text-sm font-semibold text-brand-800" role="status">{sessionNotice}</p>}
 
@@ -282,9 +293,9 @@ export function AuthModal() {
           {/* ── PASSWORD RESET COMPLETION ── */}
           {modalView === 'forgot-reset' && (
             <form onSubmit={handleCompleteReset} className="mt-6 flex flex-col gap-4" noValidate>
-              {resetEmail ? <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Link sent to</p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail}</p>
+              {(resetEmail || passwordSetup?.email) ? <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Account</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail || passwordSetup?.email}</p>
               </div> : <Input
                 id="reset-email"
                 type="email"
@@ -297,22 +308,22 @@ export function AuthModal() {
               />}
               <div className="py-2 text-center">
                 <p className="text-sm font-semibold text-brand-800">Choose a new password.</p>
-                <p className="text-sm text-ink-500">Use the secure link, or enter the code if your email provides one.</p>
+                <p className="text-sm text-ink-500">{passwordSetup?.type === 'invite' ? 'Use the invitation link to confirm your email and set your password.' : 'Use the secure link, or enter the recovery code if your email provides one.'}</p>
               </div>
-              <Input
-                id="reset-code"
-                label="Optional 6-digit recovery code"
-                value={resetCode}
-                onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                hint="Leave this blank when you opened the secure reset link."
-              />
+              {passwordSetup?.type !== 'invite' && <Input
+                  id="reset-code"
+                  label="Optional 6-digit recovery code"
+                  value={resetCode}
+                  onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  hint="Leave this blank when you opened the secure reset link."
+                />}
               <Input id="reset-password" name="password" type="password" label="New password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
               <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy}>Reset password</Button>
+              <Button type="submit" block size="lg" loading={busy} disabled={passwordSetupBlocked}>{passwordSetup?.type === 'invite' ? 'Set password' : 'Reset password'}</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Need another reset email?{' '}
                 <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
@@ -320,6 +331,33 @@ export function AuthModal() {
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
               </p>
             </form>
+          )}
+
+          {/* ── PASSWORD UPDATE SUCCESS ── */}
+          {modalView === 'password-success' && (
+            <div className="mt-6 flex flex-col items-center gap-5 text-center" role="status" aria-live="polite">
+              <IconCheckCircle size={42} className="text-success" />
+              {inviteCompletion ? (
+                <>
+                  <div>
+                    <h3 className="font-display text-xl font-medium text-ink-900">Staff account verified</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-600">Your account email is verified and your password was created successfully.</p>
+                  </div>
+                  <Button type="button" block size="lg" onClick={() => openAuth('admin')}>Staff Login</Button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="font-display text-xl font-medium text-ink-900">Password changed successfully</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-600">Your password was changed successfully. Choose where to sign in next.</p>
+                  </div>
+                  <div className="flex w-full flex-col gap-3">
+                    <Button type="button" block size="lg" onClick={() => openAuth('login')}>Customer Login</Button>
+                    <Button type="button" block size="lg" variant="soft" onClick={() => openAuth('admin')}>Staff / Admin Login</Button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* ── STAFF ── */}

@@ -22,7 +22,7 @@ The public first viewport uses a familiar, restrained header and a split editori
 
 Customer routes remain separate one-active-workspace views: Overview, Book Appointment, My Appointments, Notifications, Ratings & Reviews, and My Profile. The shell uses a slim rail on wide screens and a drawer on small screens. Booking keeps real service selection (one to eight), date/slot loading, validation, booking RPC, errors, summary, receipt, and the in-salon payment note.
 
-Admin remains a protected one-active-tab workspace: Appointments, Services, Customers, FAQs, Business info, and admin-only Staff accounts. The active tab keeps its list/work area and contextual inspector together; selecting an appointment or customer does not discard queue context. Completed and Cancelled appointments remain readable but are read-only. Small screens replace the rail with a usable section select and stack inspector content without page overflow.
+Admin remains a protected one-active-tab workspace: Appointments, Services, Customers, FAQs, Business info, and admin-only Staff accounts. The active tab keeps its list/work area and contextual inspector together; selecting an appointment or customer does not discard queue context. Completed and Cancelled appointments remain readable but are read-only. Small screens replace the rail with an off-canvas staff navigation drawer: a hamburger trigger exposes the same role-gated sections, keeps the current section visible, closes on backdrop, Escape, or navigation, locks body scroll while open, and returns focus to the trigger. The drawer is capped at 320px so the work area remains usable without page overflow.
 
 ## Supported states and behavior
 

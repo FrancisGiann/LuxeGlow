@@ -1,12 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const origin = Deno.env.get('ALLOWED_ORIGIN') || 'null';
+const routerBase = String(Deno.env.get('APP_ROUTER_BASE') || '/').replace(/^\/+|\/+$/g, '');
+const passwordSetupRedirect = `${origin === 'null' ? 'http://localhost:5173' : origin}${routerBase ? `/${routerBase}` : ''}/reset-password`;
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': origin,
+  'Access-Control-Allow-Headers': 'apikey, authorization, content-type, x-client-info',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'null', 'Access-Control-Allow-Headers': 'authorization, content-type' },
+  headers,
 });
 
 Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'null', 'Access-Control-Allow-Headers': 'authorization, content-type' } });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const url = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -27,9 +37,9 @@ Deno.serve(async (request) => {
   const lastName = String(input.last_name || '').trim();
   const role = input.role === 'admin' ? 'admin' : 'staff';
   if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || firstName.length > 100 || lastName.length > 100) return json({ error: 'Valid email and name are required' }, 400);
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) } });
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) }, redirectTo: passwordSetupRedirect });
   if (inviteError || !invited.user) return json({ error: inviteError?.message || 'Could not invite staff member' }, 400);
-  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role, is_active: true, accepts_appointments: role === 'staff', updated_at: new Date().toISOString() }).eq('id', invited.user.id);
+  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role, is_active: true, accepts_appointments: false, updated_at: new Date().toISOString() }).eq('id', invited.user.id);
   if (profileError) {
     // The Auth invite and profile role update are separate APIs. Remove the
     // just-created invite on a profile failure so a partial privileged account

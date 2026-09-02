@@ -1,7 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const origin = Deno.env.get('ALLOWED_ORIGIN') || 'null';
-const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+const routerBase = String(Deno.env.get('APP_ROUTER_BASE') || '/').replace(/^\/+|\/+$/g, '');
+const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'apikey, authorization, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
 
 Deno.serve(async (request) => {
@@ -26,17 +27,25 @@ Deno.serve(async (request) => {
   if (!/^[0-9a-f-]{36}$/i.test(userId)) return json({ error: 'Invalid staff account' }, 400);
   const { data: target } = await admin.from('profiles').select('email,first_name,role,is_active').eq('id', userId).single();
   if (!target || !['staff', 'admin'].includes(target.role)) return json({ error: 'Staff account not found' }, 404);
-  const redirectTo = `${origin === 'null' ? 'http://localhost:5173' : origin}/reset-password`;
-  const { data: link, error: linkError } = await admin.auth.admin.generateLink({ type: 'recovery', email: target.email, options: { redirectTo } });
+  const { data: authTarget, error: authTargetError } = await admin.auth.admin.getUserById(userId);
+  if (authTargetError || !authTarget?.user) return json({ error: 'Staff account not found' }, 404);
+  const targetEmail = String(authTarget.user.email || target.email || '').trim().toLowerCase();
+  if (!targetEmail) return json({ error: 'Staff account not found' }, 404);
+  const linkType = authTarget.user.email_confirmed_at || authTarget.user.confirmed_at ? 'recovery' : 'invite';
+  const redirectTo = `${origin === 'null' ? 'http://localhost:5173' : origin}${routerBase ? `/${routerBase}` : ''}/reset-password`;
+  const { data: link, error: linkError } = await admin.auth.admin.generateLink({ type: linkType, email: targetEmail, options: { redirectTo } });
   if (linkError || !link?.properties?.action_link) return json({ error: 'Could not create password reset link' }, 500);
+  const isInvite = linkType === 'invite';
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: `${fromName} <${from}>`,
-      to: [target.email],
-      subject: 'Your Astrid Nails staff password reset',
-      text: `Hi ${target.first_name || 'there'},\n\nAn administrator requested a password reset for your staff account. Use this one-time link to choose a new password:\n\n${link.properties.action_link}\n\nIf you did not expect this, contact the salon administrator.`,
+      to: [targetEmail],
+      subject: isInvite ? 'Complete your Astrid Nails staff invitation' : 'Your Astrid Nails staff password reset',
+      text: isInvite
+        ? `Hi ${target.first_name || 'there'},\n\nAn administrator invited you to join the Astrid Nails staff. Use this one-time link to confirm your email and choose a password:\n\n${link.properties.action_link}\n\nIf you did not expect this, contact the salon administrator.`
+        : `Hi ${target.first_name || 'there'},\n\nAn administrator requested a password reset for your staff account. Use this one-time link to choose a new password:\n\n${link.properties.action_link}\n\nIf you did not expect this, contact the salon administrator.`,
     }),
   });
   if (!response.ok) return json({ error: 'Password reset email could not be sent' }, 502);

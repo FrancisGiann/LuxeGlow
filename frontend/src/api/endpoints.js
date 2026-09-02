@@ -1,6 +1,7 @@
 import { publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
+import { passwordResetPath } from '../utils/authRedirect';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -167,16 +168,15 @@ export async function resendVerificationEmail(email) {
 }
 
 export async function requestPasswordReset(email) {
-  const routerBase = String(import.meta.env.VITE_ROUTER_BASE || '/').replace(/\/+$/, '');
   const { error } = await requireSupabase().auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: `${window.location.origin}${routerBase}/reset-password`,
+    redirectTo: `${window.location.origin}${passwordResetPath(import.meta.env.VITE_ROUTER_BASE || '/')}`,
   });
   if (error) return { success: false, error: error.message || 'Could not process that request.' };
   return { success: true, message: 'If an account exists, a password reset email has been sent.' };
 }
 
 export async function completePasswordReset(fields = {}) {
-  const { email, code, password, confirmPassword } = fields && typeof fields === 'object' ? fields : {};
+  const { email, code, password, confirmPassword, expectedUserId, flowType } = fields && typeof fields === 'object' ? fields : {};
   const passwordValue = typeof password === 'string' ? password : '';
   const confirmPasswordValue = typeof confirmPassword === 'string' ? confirmPassword : '';
   const passwordError = getPasswordPolicyError(passwordValue);
@@ -184,16 +184,21 @@ export async function completePasswordReset(fields = {}) {
   if (passwordValue !== confirmPasswordValue) return { success: false, error: 'Passwords do not match.' };
   const client = requireSupabase();
   if (String(code || '').trim()) {
-    const { error: verifyError } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: String(code), type: 'recovery' });
-    if (verifyError) return { success: false, error: 'That reset code is invalid or expired.' };
+    if (String(flowType || '') !== 'recovery') return { success: false, error: 'Invitation links must be opened from the invitation email.' };
+    const { data: verification, error: verifyError } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: String(code), type: 'recovery' });
+    if (verifyError || !verification?.session) return { success: false, error: 'That reset code is invalid or expired.' };
+    if (expectedUserId && verification.session.user?.id !== expectedUserId) return { success: false, error: 'That reset link belongs to a different account.' };
   } else {
-    const { data: session } = await client.auth.getSession();
-    if (!session.session) return { success: false, error: 'Open the password-reset link from your email first.' };
+    const { data: sessionData, error: sessionError } = await client.auth.getSession();
+    if (sessionError || !sessionData.session || !['invite', 'recovery'].includes(String(flowType || '')) || !expectedUserId) return { success: false, error: 'Open the password-reset link from your email first.' };
+    if (expectedUserId && sessionData.session.user?.id !== expectedUserId) return { success: false, error: 'That reset link belongs to a different account.' };
   }
   const { error } = await client.auth.updateUser({ password: passwordValue });
   if (error) return { success: false, error: error.message || 'Could not update the password.' };
-  await client.auth.signOut();
-  return { success: true, message: 'Password reset successful.' };
+  // Revoke every refresh token after a password change. The callback session
+  // must not remain usable in another tab or on another device.
+  await client.auth.signOut({ scope: 'global' }).catch(() => {});
+  return { success: true, message: 'Password updated successfully.' };
 }
 
 export async function logoutCustomer() {

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../api/endpoints';
-import { supabase } from '../lib/supabase';
+import { authRedirect, supabase } from '../lib/supabase';
+import { passwordSetupError } from '../utils/authRedirect';
 
 /**
  * Owns the Supabase Auth session and the auth modal (login / staff login /
@@ -29,18 +30,37 @@ function createAuthSourceId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function initialPasswordSetup() {
+  if (!authRedirect.isPasswordSetup && !authRedirect.isResetPath) return null;
+  return {
+    // A bare /reset-password visit is allowed to show the form, but it is not
+    // trusted as proof that a recovery callback was completed.
+    type: authRedirect.isPasswordSetup ? authRedirect.type : '',
+    userId: null,
+    email: '',
+    ready: false,
+    callbackObserved: false,
+    error: authRedirect.hasError ? passwordSetupError() : '',
+  };
+}
+
 export function AuthProvider({ children }) {
+  const initialSetup = initialPasswordSetup();
   const [status, setStatus] = useState('loading'); // loading | authenticated | guest
   const [customer, setCustomer] = useState(null);
-  const [modalView, setModalView] = useState(null); // null | login | admin | register | verify
+  const [modalView, setModalView] = useState(initialSetup ? 'forgot-reset' : null); // null | login | admin | register | verify | forgot-reset | password-success
   const [verifyEmail, setVerifyEmail] = useState('');
   const [sessionNotice, setSessionNotice] = useState('');
+  const [passwordSetup, setPasswordSetup] = useState(initialSetup);
+  const [passwordCompletion, setPasswordCompletion] = useState(null); // null | { type: invite | recovery }
   const idleTimerRef = useRef(null);
   const lastActivityRef = useRef(0);
   const lastActivityBroadcastRef = useRef(0);
   const activityResetRef = useRef(() => {});
   const channelRef = useRef(null);
   const sourceRef = useRef(null);
+  const authCallbackHandledRef = useRef(false);
+  const passwordRecoveryObservedRef = useRef(false);
 
   useEffect(() => {
     sourceRef.current = createAuthSourceId();
@@ -68,11 +88,42 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!supabase) return undefined;
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setModalView('forgot-reset');
+    const acceptPasswordSetup = (callbackType, session) => {
+      if (!['invite', 'recovery'].includes(callbackType) || !session?.user?.id || authCallbackHandledRef.current) return false;
+      authCallbackHandledRef.current = true;
+      setPasswordSetup({ type: callbackType, userId: session.user.id, email: session.user.email || '', ready: true, callbackObserved: true, error: authRedirect.hasError ? passwordSetupError() : '' });
+      setModalView('forgot-reset');
+      return true;
+    };
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') passwordRecoveryObservedRef.current = true;
+      const hasCallbackLocation = authRedirect.isResetPath && authRedirect.hasCallbackCredentials;
+      if (event === 'INITIAL_SESSION') {
+        if (!hasCallbackLocation || !session?.user?.id || authCallbackHandledRef.current) {
+          setTimeout(refreshSession, 0);
+          return;
+        }
+        // INITIAL_SESSION can be the only event observed when the client
+        // consumed the URL before this subscription was registered. Give a
+        // queued PASSWORD_RECOVERY event precedence over the PKCE/no-type
+        // invite fallback before accepting the session once.
+        setTimeout(() => {
+          if (!authRedirect.type && passwordRecoveryObservedRef.current) {
+            setTimeout(refreshSession, 0);
+            return;
+          }
+          const initialType = authRedirect.type || 'invite';
+          if (!acceptPasswordSetup(initialType, session)) setTimeout(refreshSession, 0);
+        }, 0);
         return;
       }
+      const callbackType = event === 'PASSWORD_RECOVERY' && hasCallbackLocation
+        ? 'recovery'
+        : event === 'SIGNED_IN' && hasCallbackLocation && authRedirect.isPasswordSetup
+          ? authRedirect.type
+          : '';
+      if (acceptPasswordSetup(callbackType, session)) return;
+      if (event === 'SIGNED_OUT') setPasswordSetup(null);
       // Defer the profile query until the auth callback has returned; this
       // avoids re-entering the Supabase client from inside its event loop.
       setTimeout(refreshSession, 0);
@@ -80,11 +131,18 @@ export function AuthProvider({ children }) {
     return () => data.subscription.unsubscribe();
   }, [refreshSession]);
 
-  const openAuth = useCallback((view = 'login') => setModalView(view), []);
+  const openAuth = useCallback((view = 'login') => {
+    if (view !== 'forgot-reset') {
+      setPasswordSetup(null);
+      setPasswordCompletion(null);
+    }
+    setModalView(view);
+  }, []);
   const closeAuth = useCallback(() => {
     setModalView(null);
     setVerifyEmail('');
     setSessionNotice('');
+    setPasswordCompletion(null);
   }, []);
 
   const broadcast = useCallback((payload) => {
@@ -201,13 +259,36 @@ export function AuthProvider({ children }) {
 
   const requestPasswordReset = useCallback(async (email) => {
     const data = await api.requestPasswordReset(email);
+    if (data.success) {
+      setPasswordSetup({
+        type: 'recovery',
+        userId: null,
+        email: String(email || '').trim().toLowerCase(),
+        ready: false,
+        callbackObserved: false,
+        error: '',
+      });
+    }
     return { ok: !!data.success, error: data.error, message: data.message };
   }, []);
 
   const completePasswordReset = useCallback(async (fields) => {
-    const data = await api.completePasswordReset(fields);
+    // Capture the verified callback type before the API globally signs out and
+    // the auth event clears passwordSetup. Completion copy must reflect the
+    // flow that actually succeeded, not whichever login is opened next.
+    const flowType = passwordSetup?.type || '';
+    const data = await api.completePasswordReset({
+      ...(fields && typeof fields === 'object' ? fields : {}),
+      expectedUserId: passwordSetup?.userId || '',
+      flowType,
+    });
+    if (data.success && ['invite', 'recovery'].includes(flowType)) {
+      setPasswordSetup(null);
+      setPasswordCompletion({ type: flowType });
+      setModalView('password-success');
+    }
     return { ok: !!data.success, error: data.error, message: data.message };
-  }, []);
+  }, [passwordSetup]);
 
   const logout = useCallback(() => performSignOut(), [performSignOut]);
 
@@ -261,11 +342,13 @@ export function AuthProvider({ children }) {
       resend,
       requestPasswordReset,
       completePasswordReset,
+      passwordSetup,
+      passwordCompletion,
       logout,
       refreshSession,
       sessionNotice,
     }),
-    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, resend, requestPasswordReset, completePasswordReset, logout, refreshSession, sessionNotice]
+    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, resend, requestPasswordReset, completePasswordReset, passwordSetup, passwordCompletion, logout, refreshSession, sessionNotice]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
