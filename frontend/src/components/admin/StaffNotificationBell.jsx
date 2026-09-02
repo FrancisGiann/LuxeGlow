@@ -5,7 +5,7 @@ import { useStaffNotifications } from '../../hooks/useStaffNotifications';
 const NOTIFICATION_PANEL_ID = 'staff-notifications-panel';
 const NOTIFICATION_HEADING_ID = 'staff-notifications-heading';
 
-export function StaffNotificationBell({ onOpenAppointments }) {
+export function StaffNotificationBell({ onOpenAppointments, onOpenAppointment }) {
   const { notifications, unreadCount, loading, error, markRead, markAllRead } = useStaffNotifications();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -29,6 +29,12 @@ export function StaffNotificationBell({ onOpenAppointments }) {
   const openAppointments = () => {
     setOpen(false);
     onOpenAppointments?.();
+  };
+
+  const openNotification = (notification) => {
+    if (!notification.is_read) void markRead(notification.id);
+    setOpen(false);
+    (onOpenAppointment || onOpenAppointments)?.(notification);
   };
 
   return (
@@ -60,16 +66,15 @@ export function StaffNotificationBell({ onOpenAppointments }) {
             {!loading && error && <div className="px-4 py-6 text-sm text-danger" role="alert"><p>{error}</p><button type="button" onClick={openAppointments} className="mt-3 min-h-11 rounded-lg px-2 font-bold text-brand-800 underline underline-offset-4">Open appointments</button></div>}
             {!loading && !error && !notifications.length && <p className="px-4 py-8 text-center text-sm text-ink-500">No new booking requests yet.</p>}
             {!loading && !error && notifications.slice(0, 6).map((notification) => (
-              <div key={notification.id} className={`border-b border-line px-4 py-3 last:border-b-0 ${notification.is_read ? 'bg-surface' : 'bg-brand-50/70'}`}>
-                <div className="flex items-start gap-3">
+              <div key={notification.id} className={`border-b border-line last:border-b-0 ${notification.is_read ? 'bg-surface' : 'bg-brand-50/70'}`}>
+                <button type="button" onClick={() => openNotification(notification)} aria-label={`${notification.title}. Open appointment details`} className="flex min-h-20 w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800">
                   <span className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${notification.is_read ? 'bg-line-strong' : 'bg-blush-600'}`} aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink-900">{notification.title}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{notification.message}</p>
-                    <p className="mt-1 text-[11px] text-ink-400">{notification.created_at}</p>
-                  </div>
-                  {!notification.is_read && <button type="button" onClick={() => markRead(notification.id)} aria-label={`Mark ${notification.title} as read`} className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:bg-brand-50">Mark read</button>}
-                </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink-900">{notification.title}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-ink-500">{notification.message}</span>
+                    <span className="mt-1 block text-[11px] text-ink-400">{notification.created_at}</span>
+                  </span>
+                </button>
               </div>
             ))}
           </div>
