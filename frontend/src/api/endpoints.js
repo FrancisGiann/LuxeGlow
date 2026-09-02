@@ -1,5 +1,6 @@
 import { publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
+import { getPasswordPolicyError } from '../utils/passwordPolicy';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -140,15 +141,19 @@ export async function loginStaff(identifier, password) {
 }
 
 export async function registerCustomer(fields) {
-  const firstName = String(fields.first_name || '').trim();
-  const lastName = String(fields.last_name || '').trim();
-  const email = normalizeEmail(fields.email);
-  const phone = String(fields.phone || '').trim();
-  const password = String(fields.password || '');
-  if (!firstName || !lastName || !phone || !/^\S+@\S+\.\S+$/.test(email) || password.length < 8) {
+  const input = fields && typeof fields === 'object' ? fields : {};
+  const firstName = String(input.first_name || '').trim();
+  const lastName = String(input.last_name || '').trim();
+  const email = normalizeEmail(input.email);
+  const phone = String(input.phone || '').trim();
+  const password = typeof input.password === 'string' ? input.password : '';
+  const confirmPassword = typeof input.confirm_password === 'string' ? input.confirm_password : '';
+  if (!firstName || !lastName || !phone || !/^\S+@\S+\.\S+$/.test(email)) {
     return { success: false, error: 'Enter a valid name, email, phone number, and password of at least 8 characters.' };
   }
-  if (password !== String(fields.confirm_password || '')) return { success: false, error: 'Passwords do not match.' };
+  const passwordError = getPasswordPolicyError(password);
+  if (passwordError) return { success: false, error: passwordError };
+  if (password !== confirmPassword) return { success: false, error: 'Passwords do not match.' };
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, phone } } });
   if (error) return { success: false, error: error.message || 'Registration failed.' };
@@ -176,8 +181,13 @@ export async function requestPasswordReset(email) {
   return { success: true, message: 'If an account exists, a password reset email has been sent.' };
 }
 
-export async function completePasswordReset({ email, code, password, confirmPassword }) {
-  if (String(password || '').length < 8 || password !== confirmPassword) return { success: false, error: 'Use a matching password of at least 8 characters.' };
+export async function completePasswordReset(fields = {}) {
+  const { email, code, password, confirmPassword } = fields && typeof fields === 'object' ? fields : {};
+  const passwordValue = typeof password === 'string' ? password : '';
+  const confirmPasswordValue = typeof confirmPassword === 'string' ? confirmPassword : '';
+  const passwordError = getPasswordPolicyError(passwordValue);
+  if (passwordError) return { success: false, error: passwordError };
+  if (passwordValue !== confirmPasswordValue) return { success: false, error: 'Passwords do not match.' };
   const client = requireSupabase();
   if (String(code || '').trim()) {
     const { error: verifyError } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: String(code), type: 'recovery' });
@@ -186,7 +196,7 @@ export async function completePasswordReset({ email, code, password, confirmPass
     const { data: session } = await client.auth.getSession();
     if (!session.session) return { success: false, error: 'Open the password-reset link from your email first.' };
   }
-  const { error } = await client.auth.updateUser({ password: String(password) });
+  const { error } = await client.auth.updateUser({ password: passwordValue });
   if (error) return { success: false, error: error.message || 'Could not update the password.' };
   await client.auth.signOut();
   return { success: true, message: 'Password reset successful.' };
@@ -315,15 +325,20 @@ export async function createReview(appointmentId, rating, reviewText) {
   return { success: true, review_id: data.id };
 }
 
-export async function updateCustomerProfile({ firstName, lastName, phone, newPassword }) {
+export async function updateCustomerProfile(fields = {}) {
+  const { firstName, lastName, phone, newPassword } = fields && typeof fields === 'object' ? fields : {};
+  const hasPassword = newPassword !== undefined && newPassword !== null && newPassword !== '';
+  if (hasPassword) {
+    const passwordError = getPasswordPolicyError(newPassword);
+    if (passwordError) return { success: false, error: passwordError };
+  }
   const client = requireSupabase();
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
   if (!String(firstName || '').trim() || String(firstName).length > 100 || String(lastName || '').length > 100 || String(phone || '').length > 50) return { success: false, error: 'Please check the profile field lengths.' };
   unwrap(await client.from('profiles').update({ first_name: String(firstName).trim(), last_name: String(lastName || '').trim(), phone: String(phone).trim() }).eq('id', user.id), 'Could not update your profile.');
-  if (newPassword) {
-    if (String(newPassword).length < 8) return { success: false, error: 'New password must be at least 8 characters.' };
-    unwrap(await client.auth.updateUser({ password: String(newPassword) }), 'Could not update your password.');
+  if (hasPassword) {
+    unwrap(await client.auth.updateUser({ password: newPassword }), 'Could not update your password.');
   }
   return { success: true, message: 'Profile updated.' };
 }

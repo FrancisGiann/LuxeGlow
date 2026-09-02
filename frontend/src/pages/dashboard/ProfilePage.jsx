@@ -6,6 +6,7 @@ import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
+import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 
 export function ProfilePage() {
   const { customer: dashCustomer, refresh: refreshDashboard } = useDashboard();
@@ -39,7 +40,8 @@ export function ProfilePage() {
     if (!form.firstName.trim()) next.firstName = 'First name is required.';
     if (!form.phone.trim()) next.phone = 'Phone number is required.';
     if (form.password) {
-      if (form.password.length < 8) next.password = 'New password must be at least 8 characters.';
+      const passwordError = getPasswordPolicyError(form.password);
+      if (passwordError) next.password = passwordError;
       else if (form.password !== form.confirm) next.confirm = 'Passwords do not match.';
     }
     setErrors(next);
@@ -106,9 +108,10 @@ export function ProfilePage() {
                   id="prof-pass"
                   type="password"
                   label="New password"
-                  placeholder="Min. 8 characters"
+                  placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  hint={PASSWORD_POLICY_HINT}
                   value={form.password}
                   onChange={set('password')}
                   error={errors.password}

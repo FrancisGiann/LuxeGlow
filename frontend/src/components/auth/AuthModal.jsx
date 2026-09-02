@@ -5,6 +5,7 @@ import { useToast } from '../ui/Toast';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { IconX } from '../icons';
+import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 
 const VIEWS = {
   login: 'Customer Login',
@@ -125,8 +126,17 @@ export function AuthModal() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
-    setBusy(true);
     const f = Object.fromEntries(new FormData(e.currentTarget));
+    const passwordError = getPasswordPolicyError(f.password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+    if (f.password !== f.confirm_password) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setBusy(true);
     try {
       const res = await register(f);
       if (!res.ok) setError(res.error);
@@ -207,6 +217,11 @@ export function AuthModal() {
     }
     if (code && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Enter the email address that received the recovery code.');
+      return;
+    }
+    const passwordError = getPasswordPolicyError(fields.password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (fields.password !== fields.confirm_password) {
@@ -319,8 +334,8 @@ export function AuthModal() {
                 maxLength={6}
                 hint="Leave this blank when you opened the secure reset link."
               />
-              <Input id="reset-password" name="password" type="password" label="New password" placeholder="Minimum 8 characters" autoComplete="new-password" minLength={8} required />
-              <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={8} required />
+              <Input id="reset-password" name="password" type="password" label="New password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
+              <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Reset password</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
@@ -355,8 +370,8 @@ export function AuthModal() {
               </div>
               <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" required />
               <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required />
-              <Input id="reg-pass" name="password" type="password" label="Password" placeholder="Minimum 8 characters" autoComplete="new-password" minLength={8} required />
-              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={8} required />
+              <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
+              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Create account</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
