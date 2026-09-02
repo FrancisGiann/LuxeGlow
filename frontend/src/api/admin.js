@@ -1,6 +1,7 @@
 import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
 import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
+import { normalizeStaffNotification, STAFF_NOTIFICATION_LIMIT } from '../utils/staffNotifications';
 
 const STAFF_ROLES = ['staff', 'admin'];
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
@@ -38,6 +39,15 @@ async function assertStaff() {
   const profile = throwIfError(await client.from('profiles').select('role,is_active').eq('id', auth.user.id).single(), 'Could not verify staff access.');
   if (!profile.is_active || !STAFF_ROLES.includes(profile.role)) throw new Error('Staff access required.');
   return client;
+}
+
+async function assertStaffIdentity() {
+  const client = requireSupabase();
+  const { data: auth, error } = await client.auth.getUser();
+  if (error || !auth.user) throw new Error('Staff authentication required.');
+  const profile = throwIfError(await client.from('profiles').select('role,is_active').eq('id', auth.user.id).single(), 'Could not verify staff access.');
+  if (!profile.is_active || !STAFF_ROLES.includes(profile.role)) throw new Error('Staff access required.');
+  return { client, userId: auth.user.id };
 }
 
 export async function listAdminAppointments() {
@@ -222,3 +232,50 @@ export async function inviteStaff(fields) {
   if (error) throw new Error(error.message || 'Could not invite staff member.');
   return data;
 }
+
+export async function listAdminNotifications() {
+  const client = await assertStaff();
+  const rows = throwIfError(
+    await client
+      .from('staff_notifications')
+      .select('id,recipient_id,appointment_id,type,title,message,is_read,created_at')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(STAFF_NOTIFICATION_LIMIT),
+    'Could not load staff notifications.'
+  ) || [];
+  return rows.map(normalizeStaffNotification).filter(Boolean);
+}
+
+export async function markAdminNotificationRead(notificationId) {
+  const id = Number(notificationId);
+  if (!Number.isSafeInteger(id) || id < 1) return { success: false, error: 'Invalid notification.' };
+  const { client, userId } = await assertStaffIdentity();
+  const result = await client
+    .from('staff_notifications')
+    .update({ is_read: true })
+    .eq('id', id)
+    .eq('recipient_id', userId)
+    .select('id,is_read')
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message || 'Could not mark notification as read.');
+  return { success: true, updated: !!result.data };
+}
+
+export async function markAllAdminNotificationsRead() {
+  const { client, userId } = await assertStaffIdentity();
+  const result = await client
+    .from('staff_notifications')
+    .update({ is_read: true })
+    .eq('recipient_id', userId)
+    .eq('is_read', false)
+    .select('id');
+  if (result.error) throw new Error(result.error.message || 'Could not mark notifications as read.');
+  return { success: true, updated: result.data?.length || 0 };
+}
+
+// Keep the API vocabulary useful to focused hooks without weakening the
+// explicit admin authorization boundary above.
+export const listStaffNotifications = listAdminNotifications;
+export const markStaffNotificationRead = markAdminNotificationRead;
+export const markAllStaffNotificationsRead = markAllAdminNotificationsRead;
