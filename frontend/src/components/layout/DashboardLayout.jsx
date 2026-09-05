@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useDashboard } from '../../context/DashboardContext';
 import { NotificationBell } from '../dashboard/NotificationBell';
-import { IconBell, IconCalendar, IconGrid, IconLogout, IconMenu, IconSparkle, IconStar, IconUser, IconX } from '../icons';
+import { IconCalendar, IconGrid, IconLogout, IconMenu, IconSparkle, IconStar, IconUser, IconX } from '../icons';
 
 const NAV_ITEMS = [
-  { to: '/dashboard/overview', label: 'Overview', icon: IconGrid },
-  { to: '/dashboard/book', label: 'Book Appointment', icon: IconSparkle },
+  { to: '/dashboard/overview', label: 'Home', icon: IconGrid },
   { to: '/dashboard/appointments', label: 'My Appointments', icon: IconCalendar },
-  { to: '/dashboard/notifications', label: 'Notifications', icon: IconBell, badgeKey: 'unread_notifications' },
   { to: '/dashboard/reviews', label: 'Ratings & Reviews', icon: IconStar },
   { to: '/dashboard/profile', label: 'My Profile', icon: IconUser },
 ];
 
-const PAGE_TITLES = Object.fromEntries(NAV_ITEMS.map(({ to, label }) => [to, label]));
+const PAGE_TITLES = {
+  '/dashboard/overview': 'Overview',
+  '/dashboard/book': 'Book Appointment',
+  '/dashboard/appointments': 'My Appointments',
+  '/dashboard/notifications': 'Notifications',
+  '/dashboard/reviews': 'Ratings & Reviews',
+  '/dashboard/profile': 'My Profile',
+};
 
 function Brand() {
   return <div className="flex items-center gap-3 px-5 pb-8 pt-7"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-medium text-gold-600">A</span><span className="font-display text-[15px] font-semibold leading-[0.95] tracking-[-0.03em] text-ink-900">Astrid Nails<br /><span className="font-sans text-[9px] font-bold uppercase tracking-[0.16em] text-ink-500">&amp; Beauty Bar</span></span></div>;
@@ -22,10 +26,9 @@ function Brand() {
 
 function SidebarContent({ onNavigate }) {
   const { customer, logout } = useAuth();
-  const { summary } = useDashboard();
   const navigate = useNavigate();
   const handleLogout = async () => { await logout(); navigate('/'); };
-  return <div className="flex h-full flex-col border-r border-line bg-surface"><Brand /><nav aria-label="Dashboard navigation" className="flex flex-col gap-1 px-3">{NAV_ITEMS.map(({ to, label, icon: Icon, badgeKey }) => <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `relative flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${isActive ? 'bg-blush-100 font-bold text-brand-800 before:absolute before:inset-y-2 before:-left-3 before:w-1 before:bg-brand-800 before:content-[""]' : 'font-medium text-ink-600 hover:bg-canvas hover:text-ink-900'}`}><Icon size={18} /><span className="flex-1">{label}</span>{badgeKey && summary[badgeKey] > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blush-600 px-1.5 text-[10px] font-bold text-white">{summary[badgeKey] > 9 ? '9+' : summary[badgeKey]}</span>}</NavLink>)}</nav><div className="mt-auto border-t border-line p-4"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{(customer?.first_name || 'A').charAt(0).toUpperCase()}</span><div className="min-w-0"><p className="truncate text-sm font-bold text-ink-900">{customer?.first_name || 'Client'}</p><p className="truncate text-xs text-ink-500">{customer?.email}</p></div></div><button type="button" onClick={handleLogout} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-ink-500 hover:bg-blush-50 hover:text-danger"><IconLogout size={17} />Log out</button></div></div>;
+  return <div className="flex h-full flex-col border-r border-line bg-surface"><Brand /><NavLink to="/book" onClick={onNavigate} className="mx-3 mb-5 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand-800 px-3 text-sm font-bold text-white shadow-card hover:bg-brand-900"><IconSparkle size={18} />Book appointment</NavLink><nav aria-label="Dashboard navigation" className="flex flex-col gap-1 px-3">{NAV_ITEMS.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `relative flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${isActive ? 'bg-blush-100 font-bold text-brand-800 before:absolute before:inset-y-2 before:-left-3 before:w-1 before:bg-brand-800 before:content-[""]' : 'font-medium text-ink-600 hover:bg-canvas hover:text-ink-900'}`}><Icon size={18} /><span className="flex-1">{label}</span></NavLink>)}</nav><div className="mt-auto border-t border-line p-4"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{(customer?.first_name || 'A').charAt(0).toUpperCase()}</span><div className="min-w-0"><p className="truncate text-sm font-bold text-ink-900">{customer?.first_name || 'Client'}</p><p className="truncate text-xs text-ink-500">{customer?.email}</p></div></div><button type="button" onClick={handleLogout} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-ink-500 hover:bg-blush-50 hover:text-danger"><IconLogout size={17} />Log out</button></div></div>;
 }
 
 export function DashboardLayout() {
