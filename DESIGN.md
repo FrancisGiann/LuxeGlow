@@ -20,7 +20,7 @@ Representative WCAG contrast ratios (calculated against the shipped solid tokens
 
 The public first viewport uses a familiar, restrained header and a split editorial hero: the exact headline “Beauty care, booked around you.”, Lucena City context, clear “Book an appointment” and “Explore services” actions, one dominant salon scene, and nails/lashes treatment crops. Real services, published feedback, about information, FAQs, and footer details continue below through live data.
 
-Customer routes remain separate one-active-workspace views: Overview, Book Appointment, My Appointments, Notifications, Ratings & Reviews, and My Profile. The shell uses a slim rail on wide screens and a drawer on small screens. Booking keeps real service selection (one to eight), date/slot loading, validation, booking RPC, errors, summary, receipt, and the in-salon payment note.
+Customer routes remain separate one-active-workspace views: Home, My Appointments, Ratings & Reviews, and My Profile in the primary navigation; Notifications remain behind the notification bell, and Book appointment is a separate prominent action. The shell uses a slim rail on wide screens and a drawer on small screens while preserving the Overview, Book, Notifications, and Reviews routes. Booking keeps real service selection, service deep links, a session-scoped guest draft, a final authentication gate with no automatic submission, optional staff preference, date/slot loading, validation, booking RPC, errors, the returned assignment, summary, receipt, and the in-salon payment note.
 
 Admin remains a protected one-active-tab workspace: Appointments, Services, Customers, FAQs, Business info, and admin-only Staff accounts. The active tab keeps its list/work area and contextual inspector together; selecting an appointment or customer does not discard queue context. Completed and Cancelled appointments remain readable but are read-only. Small screens replace the rail with an off-canvas staff navigation drawer: a hamburger trigger exposes the same role-gated sections, keeps the current section visible, closes on backdrop, Escape, or navigation, locks body scroll while open, and returns focus to the trigger. The drawer is capped at 320px so the work area remains usable without page overflow.
 
@@ -35,7 +35,7 @@ The shipped rasters are `frontend/public/homepage_hero.jpg`, `frontend/public/na
 ## Do / don’t
 
 - Do keep copy grounded in live salon data and describe feedback as published customer feedback; do not call it independently verified.
-- Do preserve one active customer route or admin tab at a time, real controls, semantic inputs, keyboard access, touch-sized actions, and visible state feedback.
+- Do preserve one active customer route or admin tab at a time, real controls, semantic inputs, keyboard access, touch-sized actions, and visible state feedback. Keep schedule controls legible as a single weekly interval plus a separate full-day exception list, with conflict references visible after edits.
 - Do use intentional image crops, editorial hierarchy, fine rules, and restrained elevation to carry the salon world.
 - Don’t add invented services, staff, locations, policies, awards, ratings, fees, payments, reports, walk-ins, stylist assignments, or operational KPIs.
 - Don’t introduce emoji/Unicode icons, purple SaaS gradients, nested card walls, eyebrow labels above headings, or unsupported backend capabilities.

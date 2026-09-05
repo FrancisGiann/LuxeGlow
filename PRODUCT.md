@@ -26,10 +26,14 @@ An exact competitive or commercial positioning statement remains open and must n
 
 ## Operating Context
 
-- Customers browse services, register or sign in, select one to eight treatments, choose an available date and 30-minute time slot, submit a pending appointment, receive notifications, review appointment history, print appointment records, and review completed visits.
-- Staff update appointment status, reschedule appointments, manage active services and images, inspect customer history, and edit FAQs and business information.
+- Customers browse services, open a service-led `/book?service=<id>` flow, keep a session-scoped guest draft, authenticate at the final submit action, select treatments and an optional staff preference, choose an available date and 30-minute time slot, submit a pending appointment, receive notifications, review appointment history, print appointment records, and review completed visits. Authentication never submits a saved draft automatically.
+- Staff update appointment status, reschedule appointments, manage active services and images, inspect customer history, edit FAQs and business information, and manage weekly hours and full-day closure dates.
 - Administrators can additionally invite staff, change staff roles or activation, and initiate staff password recovery.
 - Appointment scheduling uses Asia/Manila time and currently allows dates up to 60 days ahead.
+- The seeded weekly schedule is Monday–Saturday 10:00–20:00 and Sunday 11:00–18:00 until staff edit it. Each day has one continuous interval; full-day closures are separate exceptions. A booking may end exactly at closing, but never after it.
+- “No preference” is the default staff choice. Anonymous availability exposes only aggregate open/unavailable slots; authenticated booking creation assigns deterministically under a date lock by fewest booked minutes, then booking count, then stable staff id, and returns the actual assignment.
+- Existing Pending and Confirmed appointments survive schedule edits. Staff receive conflict references and reasons for follow-up; schedule saving never moves or cancels appointments.
+- Visit rating and assigned-staff rating are separate 1–5 values; the staff rating is required when a team member was assigned and remains NULL for unassigned legacy visits. Staff aggregates are shown only in the booking picker and protected admin workspace, never on public staff pages or the homepage.
 - Payment is settled at the salon after staff confirmation; appointment records are not proof of payment.
 
 ## Capabilities and Constraints
@@ -40,6 +44,7 @@ An exact competitive or commercial positioning statement remains open and must n
 - Public registration creates customer accounts only. Staff and administrator access must remain protected by administrator-controlled provisioning and authorization.
 - The legacy PHP/MySQL surface is a rollback archive, not the active application.
 - The interface must remain responsive for mobile and desktop web use.
+- Keep the customer overview intentionally small and action-led; retain the Overview and Ratings & Reviews routes and compatibility redirect while making the primary navigation exactly Home, My Appointments, Ratings & Reviews, and My Profile. Notifications remain available through the notification bell, while Book appointment is a separate prominent action.
 - Business address, hours, policies, certifications, hygiene claims, and other optional seed content require confirmation before being treated as public proof.
 
 ## Brand Commitments
