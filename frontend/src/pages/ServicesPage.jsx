@@ -1,19 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { getServices } from '../api/endpoints';
-import { useAuth } from '../context/AuthContext';
 import { useFetch } from '../hooks/useFetch';
 import { Button } from '../components/ui/Button';
 import { ServiceCatalog } from '../components/services/ServiceCatalog';
 
 export function ServicesPage() {
-  const { isAuthenticated, openAuth } = useAuth();
   const navigate = useNavigate();
   const { data: services, loading, error, reload } = useFetch(getServices);
 
-  const book = () => {
-    if (isAuthenticated) navigate('/dashboard/book');
-    else openAuth('login');
-  };
+  const book = () => navigate('/book');
 
   return (
     <section id="services" className="bg-canvas py-12 sm:py-16 lg:py-20">
@@ -29,7 +24,7 @@ export function ServicesPage() {
         </div>
 
         <div className="py-8 sm:py-10">
-          <ServiceCatalog services={services} loading={loading} error={error} onRetry={reload} />
+          <ServiceCatalog services={services} loading={loading} error={error} onRetry={reload} showBookActions />
         </div>
 
         {!loading && !error && services?.length > 0 && (

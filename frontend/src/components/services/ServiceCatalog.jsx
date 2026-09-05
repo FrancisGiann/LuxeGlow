@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSearch, IconSparkle } from '../icons';
 import { formatPeso } from '../../utils/format';
@@ -44,9 +45,12 @@ function ServiceThumbnail({ service }) {
   );
 }
 
-function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
+function ServiceRow({ service, selectable, selected, disabled, onToggle, showBookAction = false }) {
   const category = categoryName(service);
   const typeLabel = itemTypeLabel(service);
+  const rowGridClasses = showBookAction
+    ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
+    : 'grid-cols-[auto_minmax(0,1fr)_auto] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]';
 
   if (selectable) {
     return (
@@ -86,7 +90,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
   }
 
   return (
-    <div className="grid min-h-[68px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-line px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-5 sm:px-3">
+    <div className={`grid min-h-[68px] ${rowGridClasses} items-center gap-x-3 gap-y-1.5 border-t border-line px-2 py-3 sm:gap-5 sm:px-3`}>
       <ServiceThumbnail service={service} />
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-ink-900">{service.name}</span>
@@ -101,6 +105,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle }) {
         <span className="whitespace-nowrap">{service.duration || '—'}</span>
       </span>
       <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>
+      {showBookAction && <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="order-4 inline-flex min-h-11 items-center rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50 sm:order-5">Book it</Link>}
     </div>
   );
 }
@@ -122,6 +127,7 @@ export function ServiceCatalog({
   selectedIds = [],
   onToggle = () => {},
   selectionLimit = null,
+  showBookActions = false,
 }) {
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState('');
@@ -261,7 +267,7 @@ export function ServiceCatalog({
                     {group.items.map((service) => {
                       const selected = selectedIds.includes(service.id);
                       const disabled = selectable && hasSelectionLimit && !selected && selectedIds.length >= selectionLimit;
-                      return <ServiceRow key={service.id} service={service} selectable={selectable} selected={selected} disabled={disabled} onToggle={onToggle} />;
+                      return <ServiceRow key={service.id} service={service} selectable={selectable} selected={selected} disabled={disabled} onToggle={onToggle} showBookAction={showBookActions} />;
                     })}
                   </section>
                 );

@@ -1,13 +1,20 @@
-import { getAbout } from '../../api/endpoints';
+import { getAbout, getSalonSchedule } from '../../api/endpoints';
 import { useFetch } from '../../hooks/useFetch';
 import { SectionHeading } from '../ui/Card';
 import { IconCheckCircle, IconClock, IconMail, IconMapPin, IconPhone } from '../icons';
 
 const lines = (text) => (text || '').split('\n').map((line) => line.trim()).filter(Boolean);
+const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const displayTime = (value) => {
+  const [hour, minute] = String(value || '').split(':').map(Number);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return '';
+  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
+};
 
 export function AboutSection() {
   const { data: about } = useFetch(getAbout);
-  const hours = lines(about?.business_hours);
+  const { data: schedule } = useFetch(getSalonSchedule);
+  const hours = schedule?.length ? schedule.map((row) => `${dayNames[Number(row.day_of_week) - 1] || 'Day'} · ${row.is_closed ? 'Closed' : `${displayTime(row.open_time)}–${displayTime(row.close_time)}`}`) : lines(about?.business_hours);
   const policies = lines(about?.salon_policies);
   return (
     <section id="about" className="scroll-mt-20 bg-surface py-24 sm:py-28">

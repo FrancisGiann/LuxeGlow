@@ -1,17 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { IconMapPin } from '../icons';
 
 const heroAsset = (name) => `${import.meta.env.BASE_URL}${name}`;
 
 export function Hero() {
-  const { isAuthenticated, openAuth } = useAuth();
   const navigate = useNavigate();
 
-  const book = () => {
-    if (isAuthenticated) navigate('/dashboard/book');
-    else openAuth('login');
-  };
+  const book = () => navigate('/book');
 
   return (
     <section id="home" className="overflow-hidden border-b border-line bg-canvas">

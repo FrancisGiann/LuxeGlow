@@ -269,7 +269,7 @@ export async function getDashboard() {
   if (session.customer?.role !== 'customer') throw Object.assign(new Error('Customer dashboard access required'), { status: 403 });
   const [profileResult, appointmentsResult, notificationsResult, appointmentStaffResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
     client.from('user_notifications').select('id,appointment_id,type,title,message,is_read,created_at').eq('customer_id', session.user.id).order('created_at', { ascending: false }).limit(30),
     client.rpc('get_my_appointment_staff'),
   ]);
@@ -286,7 +286,7 @@ export async function getDashboard() {
       return nestedReviews.map((review) => ({ review, appointment: row }));
     })
     .sort((a, b) => Date.parse(b.review.created_at || '') - Date.parse(a.review.created_at || ''))
-    .map(({ review, appointment }) => ({ review_id: Number(review.id), appointment_id: appointment.id, rating: Number(review.rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((s) => s.service_name).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
+    .map(({ review, appointment }) => ({ review_id: Number(review.id), appointment_id: appointment.id, rating: Number(review.rating), staff_rating: review.staff_rating == null ? null : Number(review.staff_rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((s) => s.service_name).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
   const summary = { pending_count: 0, confirmed_count: 0, completed_count: 0, cancelled_count: 0, unread_notifications: notifications.filter((n) => !n.is_read).length };
   appointments.forEach((row) => { const key = `${row.status.toLowerCase()}_count`; if (key in summary) summary[key] += 1; });
   return { success: true, customer: profilePayload(profile, session.user), summary, appointments, notifications, reviews };
@@ -310,17 +310,24 @@ export async function getRatableAppointments() {
   const client = requireSupabase();
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
-  const data = unwrap(await client.from('appointments').select('id,reference_no,local_date,local_time,total_price,appointment_services(service_name),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }), 'Could not load visits.') || [];
-  return { success: true, appointments: data.filter((row) => { const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews; return !review; }).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), service_names: (row.appointment_services || []).map((s) => s.service_name).join(', '), total_price: Number(row.total_price) })) };
+  const [appointmentsResult, staffResult] = await Promise.all([
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,appointment_services(service_name),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }),
+    client.rpc('get_my_appointment_staff'),
+  ]);
+  const data = unwrap(appointmentsResult, 'Could not load visits.') || [];
+  const staffRows = unwrap(staffResult, 'Could not load appointment staff.') || [];
+  const staffNames = new Map(staffRows.map((row) => [row.appointment_id, row.display_name]));
+  return { success: true, appointments: data.filter((row) => { const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews; return !review; }).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((s) => s.service_name).join(', '), total_price: Number(row.total_price) })) };
 }
 
-export async function createReview(appointmentId, rating, reviewText) {
+export async function createReview(appointmentId, visitRating, staffRating = null, reviewText = '') {
   const client = requireSupabase();
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
-  const value = Number(rating);
-  if (!Number.isInteger(value) || value < 1 || value > 5 || String(reviewText || '').length > 2000) return { success: false, error: 'Enter a rating from 1 to 5 and keep the review under 2,000 characters.' };
-  const data = unwrap(await client.from('reviews').insert({ appointment_id: appointmentId, customer_id: user.id, rating: value, review_text: String(reviewText || '').trim() }).select('id').single(), 'Could not submit your review.');
+  const value = Number(visitRating);
+  const staffValue = staffRating === null || staffRating === undefined || staffRating === '' ? null : Number(staffRating);
+  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId)) || !Number.isInteger(value) || value < 1 || value > 5 || (staffValue !== null && (!Number.isInteger(staffValue) || staffValue < 1 || staffValue > 5)) || String(reviewText || '').length > 2000) return { success: false, error: 'Enter a visit rating from 1 to 5, a 1–5 staff rating when a team member was assigned, and keep the review under 2,000 characters.' };
+  const data = unwrap(await client.from('reviews').insert({ appointment_id: appointmentId, customer_id: user.id, rating: value, staff_rating: staffValue, review_text: String(reviewText || '').trim() }).select('id').single(), 'Could not submit your review.');
   return { success: true, review_id: data.id };
 }
 
@@ -345,24 +352,58 @@ export async function updateCustomerProfile(fields = {}) {
 /* ── Race-safe booking ───────────────────────────────────────── */
 export async function getBookableStaff() {
   const data = unwrap(await requireSupabase().rpc('get_bookable_staff'), 'Could not load team members.');
-  return (data || []).map((row) => ({ id: row.id || row.staff_id, name: row.display_name || 'Team member' })).filter((row) => /^[0-9a-f-]{36}$/i.test(String(row.id)));
+  return (data || []).map((row) => ({ id: row.id || row.staff_id, name: row.display_name || 'Team member', average_rating: row.average_rating == null ? 0 : Number(row.average_rating), rating_count: Number(row.rating_count || 0) })).filter((row) => /^[0-9a-f-]{36}$/i.test(String(row.id)));
 }
 
 export async function getAvailableSlots(date, durationMinutes, staffId) {
-  if (!/^[0-9a-f-]{36}$/i.test(String(staffId))) throw new Error('Choose an available team member.');
-  const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_staff_id: staffId, p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !Number.isInteger(Number(durationMinutes)) || Number(durationMinutes) < 1 || Number(durationMinutes) > 600 || (staffId != null && !/^[0-9a-f-]{36}$/i.test(String(staffId)))) throw new Error('Choose a valid date and appointment duration.');
+  const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_staff_id: staffId || null, p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
   return (data || []).map((row) => ({ time: row.time || row.slot_time, available: !!row.available }));
 }
 
 export async function createAppointment({ serviceIds, staffId, date, time }) {
   const cleanIds = [...new Set((serviceIds || []).map(String))].filter((id) => /^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id));
-  if (!cleanIds.length || !/^[0-9a-f-]{36}$/i.test(String(staffId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
+  if (!cleanIds.length || (staffId != null && !/^[0-9a-f-]{36}$/i.test(String(staffId))) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
   try {
-    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: staffId, p_date: date, p_time: time }), 'Could not place the booking.');
+    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: staffId || null, p_date: date, p_time: time }), 'Could not place the booking.');
     const row = rows?.[0];
     if (!row) return { success: false, error: 'Could not place the booking.' };
-    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, staff_id: staffId, total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
+    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, staff_id: row.assigned_staff_id || row.staff_id || staffId || null, staff_name: row.assigned_staff_name || row.staff_name || 'Assigned team member', total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
   } catch (error) {
     return { success: false, error: /no longer available|exclusion|overlap/i.test(error.message) ? 'That slot is no longer available.' : error.message };
   }
+}
+
+/* ── Salon schedule ──────────────────────────────────────────── */
+export async function getSalonSchedule() {
+  const data = unwrap(await requireSupabase().rpc('get_salon_schedule'), 'Could not load salon hours.');
+  return (data || []).map((row) => ({ day_of_week: Number(row.day_of_week), open_time: row.open_time ? String(row.open_time).slice(0, 5) : '', close_time: row.close_time ? String(row.close_time).slice(0, 5) : '', is_closed: !!row.is_closed }));
+}
+
+export async function getSalonClosures(from, to) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) throw new Error('Choose a valid closure date range.');
+  return unwrap(await requireSupabase().rpc('get_salon_closures', { p_from: from, p_to: to }), 'Could not load salon closures.') || [];
+}
+
+export async function saveSalonHours({ dayOfWeek, openTime, closeTime, isClosed }) {
+  if (!Number.isInteger(Number(dayOfWeek)) || Number(dayOfWeek) < 1 || Number(dayOfWeek) > 7 || (isClosed ? openTime || closeTime : !/^\d{2}:\d{2}$/.test(String(openTime)) || !/^\d{2}:\d{2}$/.test(String(closeTime)))) return { success: false, error: 'Check the day and opening hours.' };
+  const data = unwrap(await requireSupabase().rpc('save_salon_hours', { p_day_of_week: Number(dayOfWeek), p_open_time: isClosed ? null : openTime, p_close_time: isClosed ? null : closeTime, p_is_closed: !!isClosed }), 'Could not save salon hours.');
+  return { success: true, schedule: data };
+}
+
+export async function saveSalonClosure(closureDate, reason = '') {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate)) || String(reason).length > 500) return { success: false, error: 'Check the closure date and reason.' };
+  const data = unwrap(await requireSupabase().rpc('save_salon_closure', { p_closure_date: closureDate, p_reason: String(reason).trim() || null }), 'Could not save closure.');
+  return { success: true, closure: data };
+}
+
+export async function deleteSalonClosure(closureDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate))) return { success: false, error: 'Choose a valid closure date.' };
+  unwrap(await requireSupabase().rpc('delete_salon_closure', { p_closure_date: closureDate }), 'Could not remove closure.');
+  return { success: true };
+}
+
+export async function getScheduleConflicts(from, to) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) throw new Error('Choose a valid conflict range.');
+  return unwrap(await requireSupabase().rpc('get_schedule_conflicts', { p_from: from, p_to: to }), 'Could not load schedule conflicts.') || [];
 }

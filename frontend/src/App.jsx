@@ -55,6 +55,7 @@ export default function App() {
             <Route element={<PublicLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/services" element={<ServicesPage />} />
+              <Route path="/book" element={<BookingPage />} />
               <Route path="/reset-password" element={<HomePage />} />
             </Route>
 
@@ -69,7 +70,7 @@ export default function App() {
             >
               <Route index element={<Navigate to="overview" replace />} />
               <Route path="overview" element={<DashboardOverviewPage />} />
-              <Route path="book" element={<BookingPage />} />
+              <Route path="book" element={<Navigate to="/book" replace />} />
               <Route path="appointments" element={<MyAppointmentsPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="reviews" element={<ReviewsPage />} />

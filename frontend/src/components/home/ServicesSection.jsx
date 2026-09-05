@@ -27,7 +27,7 @@ function ServiceCard({ service }) {
           {service.description && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-500">{service.description}</p>}
           <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg font-semibold text-brand-800">₱{Number(service.price).toLocaleString('en-PH')}</span>
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>
+            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span><Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book it</Link></span>
           </div>
         </div>
       </div>

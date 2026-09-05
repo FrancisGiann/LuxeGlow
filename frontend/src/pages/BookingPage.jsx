@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createAppointment, getAvailableSlots, getBookableStaff, getServices } from '../api/endpoints';
 import { useAuth } from '../context/AuthContext';
-import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../components/ui/Toast';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -29,6 +28,19 @@ const durationLabel = (minutes) => {
   const rest = minutes % 60;
   return `${hours ? `${hours}h` : ''}${rest ? `${hours ? ' ' : ''}${rest}m` : ''}` || '—';
 };
+const BOOKING_DRAFT_KEY = 'luxeglow-booking-draft-v1';
+const readDraft = () => {
+  try {
+    const raw = window.sessionStorage.getItem(BOOKING_DRAFT_KEY);
+    const draft = raw ? JSON.parse(raw) : null;
+    return draft && typeof draft === 'object' ? draft : {};
+  } catch {
+    return {};
+  }
+};
+const writeDraft = (draft) => {
+  try { window.sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify(draft)); } catch { /* Storage may be blocked. */ }
+};
 
 function SlotGrid({ slots, loading, error, selectedTime, onSelect, onRetry }) {
   if (loading) return <div className="flex items-center gap-2 py-6 text-sm text-ink-500"><Spinner size="sm" tone="brand" />Checking availability…</div>;
@@ -43,11 +55,21 @@ function StaffPicker({ staff, loading, error, selectedId, onSelect }) {
   if (loading) return <div className="flex items-center gap-2 py-4 text-sm text-ink-500"><Spinner size="sm" tone="brand" />Loading team members…</div>;
   if (error) return <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{error}</p>;
   if (!staff?.length) return <p className="rounded-xl border border-gold-600 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900">No team members are accepting appointments right now. Please check again later.</p>;
-  return <div role="radiogroup" aria-label="Bookable team members" className="grid gap-2 sm:grid-cols-2">{staff.map((member) => <button key={member.id} type="button" role="radio" aria-checked={selectedId === member.id} onClick={() => onSelect(member.id)} className={`min-h-12 rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selectedId === member.id ? 'border-brand-800 bg-brand-50 text-brand-800' : 'border-line bg-surface text-ink-700 hover:border-brand-400 hover:bg-brand-50'}`}><span className="block">{member.name}</span><span className="mt-0.5 block text-xs font-normal text-ink-500">{selectedId === member.id ? 'Selected team member' : 'Select this team member'}</span></button>)}</div>;
+  const selected = staff.find((member) => member.id === selectedId);
+  return <details className="rounded-xl border border-line bg-surface" open={!!selectedId}>
+    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-bold text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
+      <span>Team member preference</span>
+      <span className="text-right text-brand-800">{selected?.name || 'No preference'}</span>
+    </summary>
+    <div role="radiogroup" aria-label="Bookable team members" className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
+      <button type="button" role="radio" aria-checked={!selectedId} onClick={() => onSelect('')} className={`min-h-12 rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${!selectedId ? 'border-brand-800 bg-brand-50 text-brand-800' : 'border-line bg-surface text-ink-700 hover:border-brand-400 hover:bg-brand-50'}`}><span className="block">No preference</span><span className="mt-0.5 block text-xs font-normal text-ink-500">We’ll match you with an available team member</span></button>
+      {staff.map((member) => <button key={member.id} type="button" role="radio" aria-checked={selectedId === member.id} onClick={() => onSelect(member.id)} className={`min-h-12 rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selectedId === member.id ? 'border-brand-800 bg-brand-50 text-brand-800' : 'border-line bg-surface text-ink-700 hover:border-brand-400 hover:bg-brand-50'}`}><span className="block">{member.name}</span><span className="mt-0.5 block text-xs font-normal text-ink-500">{selectedId === member.id ? 'Selected team member' : member.average_rating > 0 ? `${member.average_rating.toFixed(1)} staff rating${member.rating_count ? ` · ${member.rating_count} visit${member.rating_count === 1 ? '' : 's'}` : ''} · choose as preference` : 'No ratings yet.'}</span></button>)}
+    </div>
+  </details>;
 }
 
 function Summary({ selectedServices, totalPrice, totalMinutes, prettyDate, time, staffName, compact = false }) {
-  return <aside className={`${compact ? '' : 'lg:sticky lg:top-24'} self-start`}><Card className="overflow-hidden"><div className="border-b border-line bg-brand-800 px-5 py-5 text-white sm:px-6"><p className="text-xs font-bold uppercase tracking-[0.18em] text-blush-200">Your appointment</p><p className="mt-2 font-display text-3xl font-medium">{formatPeso(totalPrice)}</p></div><div className="px-5 py-5 sm:px-6"><div className="flex items-center justify-between gap-3"><h3 className="font-display text-lg font-medium text-ink-900">Services</h3><span className="text-xs font-bold text-ink-500">{selectedServices.length} selected</span></div>{selectedServices.length ? <ul className="mt-4 divide-y divide-line">{selectedServices.map((service) => <li key={service.id} className="flex items-start justify-between gap-3 py-3 first:pt-0"><span className="min-w-0 text-sm font-semibold text-ink-700">{service.name}<span className="mt-1 block text-xs font-normal text-ink-500">{service.duration}</span></span><span className="shrink-0 text-sm font-bold text-ink-900">{formatPeso(service.price)}</span></li>)}</ul> : <p className="mt-3 text-sm text-ink-500">Select a treatment to begin.</p>}<dl className="mt-4 border-t border-line pt-4 text-sm"><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Team member</dt><dd className="text-right font-semibold text-ink-900">{staffName || '—'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Date</dt><dd className="text-right font-semibold text-ink-900">{prettyDate || '—'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Time</dt><dd className="font-semibold text-ink-900">{time || '—'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Duration</dt><dd className="font-semibold text-ink-900">{totalMinutes ? durationLabel(totalMinutes) : '—'}</dd></div></dl></div></Card></aside>;
+  return <aside className={`${compact ? '' : 'lg:sticky lg:top-24'} self-start`}><Card className="overflow-hidden"><div className="border-b border-line bg-brand-800 px-5 py-5 text-white sm:px-6"><p className="text-xs font-bold uppercase tracking-[0.18em] text-blush-200">Your appointment</p><p className="mt-2 font-display text-3xl font-medium">{formatPeso(totalPrice)}</p></div><div className="px-5 py-5 sm:px-6"><div className="flex items-center justify-between gap-3"><h3 className="font-display text-lg font-medium text-ink-900">Services</h3><span className="text-xs font-bold text-ink-500">{selectedServices.length} selected</span></div>{selectedServices.length ? <ul className="mt-4 divide-y divide-line">{selectedServices.map((service) => <li key={service.id} className="flex items-start justify-between gap-3 py-3 first:pt-0"><span className="min-w-0 text-sm font-semibold text-ink-700">{service.name}<span className="mt-1 block text-xs font-normal text-ink-500">{service.duration}</span></span><span className="shrink-0 text-sm font-bold text-ink-900">{formatPeso(service.price)}</span></li>)}</ul> : <p className="mt-3 text-sm text-ink-500">Select a treatment to begin.</p>}<dl className="mt-4 border-t border-line pt-4 text-sm"><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Team member</dt><dd className="text-right font-semibold text-ink-900">{staffName || 'No preference'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Date</dt><dd className="text-right font-semibold text-ink-900">{prettyDate || '—'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Time</dt><dd className="font-semibold text-ink-900">{time || '—'}</dd></div><div className="flex justify-between gap-3 py-1.5"><dt className="text-ink-500">Duration</dt><dd className="font-semibold text-ink-900">{totalMinutes ? durationLabel(totalMinutes) : '—'}</dd></div></dl></div></Card></aside>;
 }
 
 function BookingSuccess({ reference, summary, customer, onBookAnother }) {
@@ -57,17 +79,18 @@ function BookingSuccess({ reference, summary, customer, onBookAnother }) {
 }
 
 export function BookingPage() {
-  const { customer } = useAuth();
-  const { customer: dashboardCustomer, refresh: refreshDashboard } = useDashboard();
+  const { customer, isAuthenticated, status, openAuth } = useAuth();
   const toast = useToast();
+  const location = useLocation();
   const [services, setServices] = useState(null);
   const [servicesError, setServicesError] = useState('');
   const [staff, setStaff] = useState(null);
   const [staffError, setStaffError] = useState('');
-  const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  const [initialDraft] = useState(readDraft);
+  const [selectedStaffId, setSelectedStaffId] = useState(() => String(initialDraft.staffId || ''));
+  const [selectedIds, setSelectedIds] = useState(() => Array.isArray(initialDraft.serviceIds) ? initialDraft.serviceIds.map(String) : []);
+  const [date, setDate] = useState(() => { const draftDate = String(initialDraft.date || ''); return /^\d{4}-\d{2}-\d{2}$/.test(draftDate) && draftDate >= todayISO() && draftDate <= maxISO() ? draftDate : ''; });
+  const [time, setTime] = useState(() => String(initialDraft.time || ''));
   const [slots, setSlots] = useState(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState('');
@@ -78,6 +101,23 @@ export function BookingPage() {
   const [success, setSuccess] = useState(null);
 
   useEffect(() => { let alive = true; getServices().then((data) => alive && setServices(Array.isArray(data) ? data : [])).catch(() => alive && setServicesError('Could not load the treatment menu.')); getBookableStaff().then((data) => alive && setStaff(Array.isArray(data) ? data : [])).catch(() => alive && setStaffError('Could not load available team members.')); return () => { alive = false; }; }, []);
+  useEffect(() => {
+    if (!services) return;
+    setSelectedIds((current) => current.filter((id) => services.some((service) => service.id === id)));
+  }, [services]);
+  useEffect(() => {
+    if (!staff) return;
+    setSelectedStaffId((current) => current && staff.some((member) => member.id === current) ? current : '');
+  }, [staff]);
+  useEffect(() => {
+    const requested = new URLSearchParams(location.search).get('service');
+    if (!requested || !services?.some((service) => service.id === requested)) return;
+    setSelectedIds((current) => current.includes(requested) ? current : [...current, requested]);
+  }, [location.search, services]);
+  useEffect(() => {
+    if (success || isAuthenticated) return;
+    writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time });
+  }, [date, isAuthenticated, selectedIds, selectedStaffId, success, time]);
   const selectedServices = useMemo(() => (services || []).filter((service) => selectedIds.includes(service.id)), [services, selectedIds]);
   const selectedStaff = useMemo(() => (staff || []).find((member) => member.id === selectedStaffId), [staff, selectedStaffId]);
   const totalMinutes = selectedServices.reduce((sum, service) => sum + (service.minutes || 0), 0);
@@ -116,7 +156,7 @@ export function BookingPage() {
     setFormError(''); setTime(''); invalidateAvailability();
   };
   useEffect(() => {
-    if (!selectedStaffId || !date || !totalMinutes) { availabilityRequestRef.current += 1; return undefined; }
+    if (!date || !totalMinutes) { availabilityRequestRef.current += 1; return undefined; }
     loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current);
     return undefined;
   }, [date, totalMinutes, selectedStaffId, selectedIds]);
@@ -124,42 +164,48 @@ export function BookingPage() {
 
   const submit = async (event) => {
     event.preventDefault(); setFormError('');
-    if (!selectedStaffId) return setFormError('Choose a team member.');
     if (!selectedIds.length) return setFormError('Select at least one service.');
-    if (!date) return setFormError('Choose your preferred date.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayISO() || date > maxISO()) return setFormError('Choose a date within the next 60 days.');
     if (!time) return setFormError('Pick an available time slot.');
+    if (!isAuthenticated || status !== 'authenticated') {
+      writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time });
+      try { window.sessionStorage.setItem('luxeglow-auth-return', '/book'); } catch { /* Storage may be blocked. */ }
+      openAuth('login');
+      toast('Sign in to finish your booking request. Your choices are saved.', 'info');
+      return;
+    }
     const selectionVersion = availabilitySelectionVersionRef.current;
     setSubmitting(true);
     try {
       const result = await createAppointment({ serviceIds: selectedIds, staffId: selectedStaffId, date, time });
-      if (result.success) { const createdAt = new Date().toISOString(); setSuccess({ reference: result.appointment_id, customer: dashboardCustomer || customer, summary: { staffName: selectedStaff?.name || 'Unassigned', services: selectedServices.map((service) => service.name).join(', '), serviceItems: selectedServices.map((service) => ({ name: service.name, price: service.price })), rawDate: date, rawTime: time, date: prettyDate, time, total: totalPrice, createdAt } }); refreshDashboard(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      if (result.success) { const createdAt = new Date().toISOString(); try { window.sessionStorage.removeItem(BOOKING_DRAFT_KEY); window.sessionStorage.removeItem('luxeglow-auth-return'); } catch { /* Storage may be blocked. */ } setSuccess({ reference: result.appointment_id, customer, summary: { staffName: result.staff_name || selectedStaff?.name || 'Assigned team member', services: selectedServices.map((service) => service.name).join(', '), serviceItems: selectedServices.map((service) => ({ name: service.name, price: service.price })), rawDate: date, rawTime: time, date: prettyDate, time, total: totalPrice, createdAt } }); window.scrollTo({ top: 0, behavior: 'smooth' }); }
       else { setFormError(result.error || 'Booking failed. Please try again.'); if (/no longer available/i.test(result.error || '')) { setTime(''); toast('That slot was just taken. Pick a new time.', 'error'); loadAvailability(selectedStaffId, date, totalMinutes, selectionVersion); } }
     } catch (error) { setFormError(error.message || 'Could not place the booking.'); } finally { setSubmitting(false); }
   };
   const resetForm = () => { setSuccess(null); setSelectedIds([]); setSelectedStaffId(''); setDate(''); setTime(''); invalidateAvailability(); setFormError(''); };
   if (success) return <div className="mx-auto max-w-6xl"><BookingSuccess reference={success.reference} summary={success.summary} customer={success.customer} onBookAnother={resetForm} /></div>;
-  const canSubmit = selectedIds.length > 0 && selectedStaffId && date && time && !submitting;
+  const canSubmit = selectedIds.length > 0 && date && time && !submitting;
   return <form onSubmit={submit} className="mx-auto max-w-[1240px]" noValidate>
     <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
-      <div><h2 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h2><p className="mt-2 text-sm text-ink-500">Choose your treatments, team member, and an available time.</p></div>
+      <div><h2 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h2><p className="mt-2 text-sm text-ink-500">Choose your treatments, an optional team preference, and an available time.</p>{!isAuthenticated && <p className="mt-3 max-w-[52ch] rounded-xl border border-gold-400 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900" role="status">You can explore availability as a guest. Sign in only when you are ready to submit; nothing is sent automatically.</p>}</div>
       <Link to="/dashboard/appointments" className="text-sm font-bold text-brand-800 hover:text-brand-900">View my appointments</Link>
     </div>
     <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-6">
         <Card className="p-5 sm:p-7"><CardHeader title="Select services" subtitle="Choose the treatments you want for this visit." /><div className="pt-5"><ServiceCatalog services={services} loading={!services && !servicesError} error={servicesError} onToggle={toggleService} selectable selectedIds={selectedIds} /></div></Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Choose your team member" subtitle="Your selected member’s schedule will determine the available times." /><div className="pt-5"><StaffPicker staff={staff} loading={!staff && !staffError} error={staffError} selectedId={selectedStaffId} onSelect={(id) => { setSelectedStaffId(id); setTime(''); invalidateAvailability(); setFormError(''); }} /></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Choose a team preference" subtitle="Optional — leave this on No preference and we’ll match an available team member." /><div className="pt-5"><StaffPicker staff={staff} loading={!staff && !staffError} error={staffError} selectedId={selectedStaffId} onSelect={(id) => { setSelectedStaffId(id); setTime(''); invalidateAvailability(); setFormError(''); }} /></div></Card>
         <Card className="p-5 sm:p-7">
-          <CardHeader title="Choose date and time" subtitle={selectedStaff ? `${selectedStaff.name} · ${totalMinutes ? `${durationLabel(totalMinutes)} needed for your selected services.` : 'Select services first so we can check the right amount of time.'}` : 'Select a team member and services first so we can check availability.'} />
+          <CardHeader title="Choose date and time" subtitle={selectedStaff ? `${selectedStaff.name} · ${totalMinutes ? `${durationLabel(totalMinutes)} needed for your selected services.` : 'Select services first so we can check the right amount of time.'}` : totalMinutes ? `${durationLabel(totalMinutes)} needed. Times show when any available team member can perform these services.` : 'Select services first so we can check availability.'} />
           <div className="flex flex-col gap-6 pt-5">
             <Input id="booking-date" type="date" label="Preferred date" min={todayISO()} max={maxISO()} value={date} onChange={(event) => { setDate(event.target.value); setTime(''); invalidateAvailability(); }} required />
-            <div><span className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ''}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current)} />{!date && <p className="mt-2 text-xs text-ink-500">Times are offered in 30-minute increments.</p>}</div>
+            <div><span className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ' for any available team member'}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current)} />{!date && <p className="mt-2 text-xs text-ink-500">Times are offered in 30-minute increments.</p>}</div>
           </div>
         </Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Review and confirm" subtitle="Your request will be placed under your account." /><dl className="grid gap-3 pt-5 text-sm sm:grid-cols-2"><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Name</dt><dd className="truncate font-semibold text-ink-900">{customer?.full_name || customer?.first_name || '—'}</dd></div><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Email</dt><dd className="truncate font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="flex justify-between gap-4 pb-1 sm:col-span-2"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || '—'}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 hidden lg:block"><Button type="submit" size="lg" block disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : 'Confirm booking'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Payment is settled at the salon after staff confirmation.</p></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Review and confirm" subtitle="Your request will be placed under your account." /><dl className="grid gap-3 pt-5 text-sm sm:grid-cols-2"><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Name</dt><dd className="truncate font-semibold text-ink-900">{customer?.full_name || customer?.first_name || '—'}</dd></div><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Email</dt><dd className="truncate font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="flex justify-between gap-4 pb-1 sm:col-span-2"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || 'No preference'}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 hidden lg:block"><Button type="submit" size="lg" block disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Payment is settled at the salon after staff confirmation.</p></div></Card>
       </div>
       <div className="hidden lg:block"><Summary selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
     </div>
     <div className="mt-6 lg:hidden"><Summary compact selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
-    <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur-sm lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg" disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : 'Confirm booking'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
+    <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur-sm lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg" disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
   </form>;
 }

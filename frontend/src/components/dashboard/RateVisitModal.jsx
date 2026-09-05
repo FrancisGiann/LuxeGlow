@@ -38,6 +38,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
   const [loadError, setLoadError] = useState('');
   const [appointmentId, setAppointmentId] = useState(presetAppointmentId || '');
   const [rating, setRating] = useState(5);
+  const [staffRating, setStaffRating] = useState(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -77,9 +78,13 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
       setError('Please choose a visit to rate.');
       return;
     }
+    if (selected?.staff_id && !staffRating) {
+      setError('Please rate your team member from 1 to 5 stars.');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await createReview(appointmentId, rating, text.trim());
+      const res = await createReview(appointmentId, rating, staffRating, text.trim());
       if (res.success) {
         toast(res.message || 'Thank you for your feedback!');
         refresh();
@@ -134,7 +139,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
                   id="rate-visit"
                   label="Select visit"
                   value={appointmentId}
-                  onChange={(e) => setAppointmentId(e.target.value)}
+                  onChange={(e) => { setAppointmentId(e.target.value); setStaffRating(null); setError(''); }}
                   required
                 >
                   {ratable.map((a) => (
@@ -154,6 +159,12 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
                   <span className="text-sm font-semibold text-ink-900">Your rating</span>
                   <StarPicker value={rating} onChange={setRating} />
                 </div>
+
+                {selected?.staff_id && <div className="flex flex-col items-center gap-2 border-t border-line pt-4">
+                  <span className="text-sm font-semibold text-ink-900">Team member rating (required)</span>
+                  <p className="text-xs text-ink-500">{selected.staff_name || 'Assigned team member'}</p>
+                  <StarPicker value={staffRating} onChange={setStaffRating} />
+                </div>}
 
                 <Textarea
                   id="rate-text"

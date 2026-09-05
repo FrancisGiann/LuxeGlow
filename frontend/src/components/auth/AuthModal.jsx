@@ -85,8 +85,15 @@ export function AuthModal() {
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
 
   const finishAndGoDashboard = () => {
+    let returnPath = '';
+    try {
+      returnPath = window.sessionStorage.getItem('luxeglow-auth-return') || '';
+      window.sessionStorage.removeItem('luxeglow-auth-return');
+    } catch {
+      // Storage may be blocked; use the normal dashboard destination.
+    }
     closeAuth();
-    navigate('/dashboard/overview', { replace: true });
+    navigate(returnPath === '/book' || window.location.pathname === '/book' ? '/book' : '/dashboard/overview', { replace: true });
   };
 
   const handleLogin = async (e) => {
