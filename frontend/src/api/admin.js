@@ -52,10 +52,17 @@ async function assertStaffIdentity() {
 
 export async function listAdminAppointments() {
   const client = await assertStaff();
-  const rows = throwIfError(await client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('local_date', { ascending: true }).order('local_time', { ascending: true }), 'Could not load appointments.');
+  const [appointmentResult, aggregateResult] = await Promise.all([
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('local_date', { ascending: true }).order('local_time', { ascending: true }),
+    client.rpc('get_staff_rating_aggregates'),
+  ]);
+  const rows = throwIfError(appointmentResult, 'Could not load appointments.');
+  const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
+  const ratingByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: row.average_rating == null ? 0 : Number(row.average_rating), rating_count: Number(row.rating_count || 0) }]));
   return (rows || []).map((row) => {
     const staffName = row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : row.staff_id ? 'Assigned team member' : 'Unassigned';
-    return { ...row, staff_name: staffName || 'Assigned team member', total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] };
+    const rating = ratingByStaff.get(String(row.staff_id));
+    return { ...row, staff_name: staffName || 'Assigned team member', staff_average_rating: rating?.average_rating || 0, staff_rating_count: rating?.rating_count || 0, total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] };
   });
 }
 
@@ -104,7 +111,11 @@ export async function listAdminProfiles(role) {
   const client = await assertStaff();
   let query = client.from('profiles').select('id,email,first_name,last_name,phone,username,role,is_active,accepts_appointments,created_at,legacy_customer_id,legacy_staff_id').order('last_name').order('first_name');
   if (role) query = query.eq('role', role);
-  return throwIfError(await query, 'Could not load accounts.') || [];
+  const [profileResult, aggregateResult] = await Promise.all([query, client.rpc('get_staff_rating_aggregates')]);
+  const profiles = throwIfError(profileResult, 'Could not load accounts.') || [];
+  const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
+  const ratingsByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: Number(row.average_rating || 0), rating_count: Number(row.rating_count || 0) }]));
+  return profiles.map((profile) => ({ ...profile, average_rating: ratingsByStaff.get(String(profile.id))?.average_rating || 0, rating_count: ratingsByStaff.get(String(profile.id))?.rating_count || 0 }));
 }
 
 export async function getCustomerHistory(id) {
@@ -219,7 +230,7 @@ export async function getAdminAbout() {
 
 export async function updateAdminAbout(fields) {
   const client = await assertStaff();
-  const data = Object.fromEntries(['business_name', 'description', 'mission_statement', 'phone', 'email', 'address', 'business_hours', 'salon_policies'].map((key) => [key, String(fields[key] || '').slice(0, 10000) || null]));
+  const data = Object.fromEntries(['business_name', 'description', 'mission_statement', 'phone', 'email', 'address', 'salon_policies'].map((key) => [key, String(fields[key] || '').slice(0, 10000) || null]));
   const current = await getAdminAbout();
   if (!current?.id) throw new Error('Business information has not been seeded.');
   throwIfError(await client.from('about_content').update(data).eq('id', current.id), 'Could not save business information.');
@@ -245,6 +256,48 @@ export async function listAdminNotifications() {
     'Could not load staff notifications.'
   ) || [];
   return rows.map(normalizeStaffNotification).filter(Boolean);
+}
+
+export async function listAdminSchedule() {
+  const client = await assertStaff();
+  const schedule = throwIfError(await client.rpc('get_salon_schedule'), 'Could not load salon hours.') || [];
+  return schedule.map((row) => ({ day_of_week: Number(row.day_of_week), open_time: row.open_time ? String(row.open_time).slice(0, 5) : '', close_time: row.close_time ? String(row.close_time).slice(0, 5) : '', is_closed: !!row.is_closed }));
+}
+
+export async function listAdminClosures(from, to) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) throw new Error('Choose a valid closure date range.');
+  const client = await assertStaff();
+  return throwIfError(await client.rpc('get_salon_closures', { p_from: from, p_to: to }), 'Could not load salon closures.') || [];
+}
+
+export async function saveAdminSchedule({ dayOfWeek, openTime, closeTime, isClosed }) {
+  if (!Number.isInteger(Number(dayOfWeek)) || Number(dayOfWeek) < 1 || Number(dayOfWeek) > 7 || (isClosed ? openTime || closeTime : !/^\d{2}:\d{2}$/.test(String(openTime)) || !/^\d{2}:\d{2}$/.test(String(closeTime)))) return { success: false, error: 'Check the day and opening hours.' };
+  const client = await assertStaff();
+  const result = await client.rpc('save_salon_hours', { p_day_of_week: Number(dayOfWeek), p_open_time: isClosed ? null : openTime, p_close_time: isClosed ? null : closeTime, p_is_closed: !!isClosed });
+  if (result.error) throw new Error(result.error.message || 'Could not save salon hours.');
+  return { success: true, schedule: result.data };
+}
+
+export async function saveAdminClosure(closureDate, reason = '') {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate)) || String(reason).length > 500) return { success: false, error: 'Check the closure date and reason.' };
+  const client = await assertStaff();
+  const result = await client.rpc('save_salon_closure', { p_closure_date: closureDate, p_reason: String(reason).trim() || null });
+  if (result.error) throw new Error(result.error.message || 'Could not save closure.');
+  return { success: true, closure: result.data };
+}
+
+export async function deleteAdminClosure(closureDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate))) return { success: false, error: 'Choose a valid closure date.' };
+  const client = await assertStaff();
+  const result = await client.rpc('delete_salon_closure', { p_closure_date: closureDate });
+  if (result.error) throw new Error(result.error.message || 'Could not remove closure.');
+  return { success: true };
+}
+
+export async function listScheduleConflicts(from, to) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) throw new Error('Choose a valid conflict range.');
+  const client = await assertStaff();
+  return throwIfError(await client.rpc('get_schedule_conflicts', { p_from: from, p_to: to }), 'Could not load schedule conflicts.') || [];
 }
 
 export async function markAdminNotificationRead(notificationId) {
