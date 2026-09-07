@@ -356,19 +356,28 @@ export async function getBookableStaff() {
 }
 
 export async function getAvailableSlots(date, durationMinutes, staffId) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !Number.isInteger(Number(durationMinutes)) || Number(durationMinutes) < 1 || Number(durationMinutes) > 600 || (staffId != null && !/^[0-9a-f-]{36}$/i.test(String(staffId)))) throw new Error('Choose a valid date and appointment duration.');
-  const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_staff_id: staffId || null, p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
-  return (data || []).map((row) => ({ time: row.time || row.slot_time, available: !!row.available }));
+  const normalizedStaffId = staffId ? String(staffId).trim() || null : null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !Number.isInteger(Number(durationMinutes)) || Number(durationMinutes) < 1 || Number(durationMinutes) > 600 || (normalizedStaffId != null && !/^[0-9a-f-]{36}$/i.test(normalizedStaffId))) throw new Error('Choose a valid date and appointment duration.');
+  try {
+    const data = unwrap(await requireSupabase().rpc('get_available_slots', { p_staff_id: normalizedStaffId, p_date: date, p_duration_minutes: Number(durationMinutes) }), 'Could not load availability.');
+    return (data || []).map((row) => ({ time: row.time || row.slot_time, available: !!row.available }));
+  } catch (error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLocaleLowerCase();
+    if (code === '42883' || code === 'PGRST202' || /get_available_slots|function .* does not exist/.test(message)) throw new Error('Availability is unavailable right now. Please ask an administrator to apply the latest booking schedule update, then try again.');
+    throw error;
+  }
 }
 
 export async function createAppointment({ serviceIds, staffId, date, time }) {
   const cleanIds = [...new Set((serviceIds || []).map(String))].filter((id) => /^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id));
-  if (!cleanIds.length || (staffId != null && !/^[0-9a-f-]{36}$/i.test(String(staffId))) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
+  const normalizedStaffId = staffId ? String(staffId).trim() || null : null;
+  if (!cleanIds.length || (normalizedStaffId != null && !/^[0-9a-f-]{36}$/i.test(normalizedStaffId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}(?::\d{2})?\s?(?:AM|PM)$/i.test(time)) return { success: false, error: 'Invalid appointment details.' };
   try {
-    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: staffId || null, p_date: date, p_time: time }), 'Could not place the booking.');
+    const rows = unwrap(await requireSupabase().rpc('book_appointment', { p_service_ids: cleanIds, p_staff_id: normalizedStaffId, p_date: date, p_time: time }), 'Could not place the booking.');
     const row = rows?.[0];
     if (!row) return { success: false, error: 'Could not place the booking.' };
-    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, staff_id: row.assigned_staff_id || row.staff_id || staffId || null, staff_name: row.assigned_staff_name || row.staff_name || 'Assigned team member', total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
+    return { success: true, appointment_id: row.reference_no, appointment_uuid: row.appointment_id, staff_id: row.assigned_staff_id || row.staff_id || normalizedStaffId, staff_name: row.assigned_staff_name || row.staff_name || 'Assigned team member', total_price: Number(row.total_price), total_duration_minutes: row.total_duration_minutes };
   } catch (error) {
     return { success: false, error: /no longer available|exclusion|overlap/i.test(error.message) ? 'That slot is no longer available.' : error.message };
   }

@@ -94,6 +94,7 @@ export function BookingPage() {
   const [slots, setSlots] = useState(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState('');
+  const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0);
   const availabilityRequestRef = useRef(0);
   const availabilitySelectionVersionRef = useRef(0);
   const [submitting, setSubmitting] = useState(false);
@@ -127,6 +128,7 @@ export function BookingPage() {
   const invalidateAvailability = () => {
     availabilityRequestRef.current += 1;
     availabilitySelectionVersionRef.current += 1;
+    setAvailabilityReloadKey((current) => current + 1);
     setSlots(null);
     setSlotsError('');
     setSlotsLoading(false);
@@ -159,7 +161,7 @@ export function BookingPage() {
     if (!date || !totalMinutes) { availabilityRequestRef.current += 1; return undefined; }
     loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current);
     return undefined;
-  }, [date, totalMinutes, selectedStaffId, selectedIds]);
+  }, [date, totalMinutes, selectedStaffId, selectedIds, availabilityReloadKey]);
   useEffect(() => { if (time && slots && !slotsLoading && !slots.some((slot) => slot.time === time && slot.available)) setTime(''); }, [slots, slotsLoading, time]);
 
   const submit = async (event) => {
