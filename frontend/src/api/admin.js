@@ -53,7 +53,7 @@ async function assertStaffIdentity() {
 export async function listAdminAppointments() {
   const client = await assertStaff();
   const [appointmentResult, aggregateResult] = await Promise.all([
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('local_date', { ascending: true }).order('local_time', { ascending: true }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
     client.rpc('get_staff_rating_aggregates'),
   ]);
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');
