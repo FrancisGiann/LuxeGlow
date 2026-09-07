@@ -157,6 +157,22 @@
   }
 }
 
+/* Keep the business-info submit action content-width even though the form is
+   a two-column grid. The shared Button still supplies the visual treatment;
+   this only prevents the grid item from stretching while preserving a
+   comfortable touch target. */
+form.mt-5.grid.gap-4.sm\:grid-cols-2 > button[type="submit"] {
+  width: fit-content;
+  min-height: 44px;
+  justify-self: start;
+}
+
+@media (min-width: 640px) {
+  form.mt-5.grid.gap-4.sm\:grid-cols-2 > button[type="submit"] {
+    justify-self: end;
+  }
+}
+
 /* ── Receipt printing ────────────────────────────────────────── */
 @media print {
   @page {
