@@ -105,7 +105,7 @@ test('public and admin schedule clients use validated RPC boundaries', () => {
     /export async function getSalonSchedule\(\)/,
     /rpc\('get_salon_schedule'/,
     /export async function getAvailableSlots\(date, durationMinutes, staffId\)/,
-    /p_staff_id: staffId \|\| null/,
+    /p_staff_id: normalizedStaffId/,
     /export async function saveAdminSchedule/,
     /export async function listScheduleConflicts/,
   ]) assert.match(`${endpoints}\n${admin}`, contract);
