@@ -1,12 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { IconMapPin } from '../icons';
 
 const heroAsset = (name) => `${import.meta.env.BASE_URL}${name}`;
 
 export function Hero() {
   const navigate = useNavigate();
+  const { customer } = useAuth();
+  const isStaff = ['staff', 'admin'].includes(customer?.role);
 
-  const book = () => navigate('/book');
+  const book = () => navigate(isStaff ? '/admin' : '/book');
 
   return (
     <section id="home" className="overflow-hidden border-b border-line bg-canvas">
@@ -25,7 +28,7 @@ export function Hero() {
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <button type="button" onClick={book} className="min-h-14 rounded-xl bg-brand-800 px-8 text-base font-bold text-white shadow-card transition-transform hover:-translate-y-0.5 hover:bg-brand-900">
-              Book an appointment
+              {isStaff ? 'Open staff workspace' : 'Book an appointment'}
             </button>
             <Link to="/services" className="inline-flex min-h-14 items-center rounded-xl border border-blush-500 bg-transparent px-8 text-base font-bold text-blush-600 transition-colors hover:bg-blush-50">
               Explore services

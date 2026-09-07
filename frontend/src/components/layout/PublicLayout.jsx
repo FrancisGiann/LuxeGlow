@@ -165,7 +165,7 @@ function Footer() {
 export function PublicLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { openAuth, status } = useAuth();
+  const { customer, openAuth, status } = useAuth();
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -176,8 +176,9 @@ export function PublicLayout() {
     } catch {
       return;
     }
-    if (returnPath === '/book' && location.pathname !== '/book') navigate('/book', { replace: true });
-  }, [location.pathname, navigate, status]);
+    if (returnPath === '/book' && ['staff', 'admin'].includes(customer?.role)) navigate('/admin', { replace: true });
+    else if (returnPath === '/book' && location.pathname !== '/book') navigate('/book', { replace: true });
+  }, [customer?.role, location.pathname, navigate, status]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getServices } from '../../api/endpoints';
+import { useAuth } from '../../context/AuthContext';
 import { useFetch } from '../../hooks/useFetch';
 import { Card, SectionHeading } from '../ui/Card';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
@@ -11,7 +12,7 @@ function previewImage(service) {
   return serviceImageUrl(service);
 }
 
-function ServiceCard({ service }) {
+function ServiceCard({ service, isStaff }) {
   const image = previewImage(service);
   return (
     <Card as="article" hoverable className="overflow-hidden rounded-2xl">
@@ -27,7 +28,7 @@ function ServiceCard({ service }) {
           {service.description && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-500">{service.description}</p>}
           <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg font-semibold text-brand-800">₱{Number(service.price).toLocaleString('en-PH')}</span>
-            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span><Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book it</Link></span>
+            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>{isStaff ? <Link to="/admin" className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Staff workspace</Link> : <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book it</Link>}</span>
           </div>
         </div>
       </div>
@@ -36,6 +37,8 @@ function ServiceCard({ service }) {
 }
 
 export function ServicesSection() {
+  const { customer } = useAuth();
+  const isStaff = ['staff', 'admin'].includes(customer?.role);
   const { data: services, loading, error, reload } = useFetch(getServices);
   const curated = services ? curateHomepageServices(services, 6) : [];
 
@@ -49,7 +52,7 @@ export function ServicesSection() {
         <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {loading && Array.from({ length: 6 }).map((_, i) => <div key={i} className="grid min-h-[190px] grid-cols-[0.85fr_1.15fr] overflow-hidden rounded-2xl border border-line bg-canvas"><div className="animate-pulse bg-blush-50" /><SkeletonRows rows={3} className="p-5" /></div>)}
           {!loading && error && <div className="col-span-full"><EmptyState icon={IconAlertCircle} title="Could not load services" description={error} action={<button type="button" onClick={reload} className="min-h-11 rounded-lg px-3 text-sm font-bold text-brand-800 underline decoration-line underline-offset-4">Try again</button>} /></div>}
-          {!loading && !error && curated.map((service) => <ServiceCard key={service.id} service={service} />)}
+          {!loading && !error && curated.map((service) => <ServiceCard key={service.id} service={service} isStaff={isStaff} />)}
         </div>
         {!loading && !error && !services?.length && <EmptyState icon={IconSparkle} title="Services coming soon" description="The treatment menu will appear here when it is published." />}
       </div>

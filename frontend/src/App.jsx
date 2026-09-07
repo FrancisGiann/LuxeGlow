@@ -33,6 +33,13 @@ function RequireStaff({ children }) {
   return children;
 }
 
+function RequireBookingAccess({ children }) {
+  const { status, customer } = useAuth();
+  if (status === 'loading') return <PageLoader />;
+  if (status === 'authenticated' && ['staff', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  return children;
+}
+
 function NotFound() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas px-4 text-center">
@@ -55,7 +62,7 @@ export default function App() {
             <Route element={<PublicLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/services" element={<ServicesPage />} />
-              <Route path="/book" element={<BookingPage />} />
+              <Route path="/book" element={<RequireBookingAccess><BookingPage /></RequireBookingAccess>} />
               <Route path="/reset-password" element={<HomePage />} />
             </Route>
 
