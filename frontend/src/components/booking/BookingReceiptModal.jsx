@@ -282,7 +282,7 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
 
           <footer className="mt-6 grid gap-1 border-t border-line pt-4 text-xs text-ink-500 sm:grid-cols-2">
             <p>Booking created / issued: <span className="font-semibold text-ink-700">{formatTimestamp(normalized.createdAt)}</span></p>
-            <p className="sm:text-right">Generated / printed: <span className="font-semibold text-ink-700">{formatTimestamp(generatedAt)}</span></p>
+            {!hidePrint && <p className="sm:text-right">Generated / printed: <span className="font-semibold text-ink-700">{formatTimestamp(generatedAt)}</span></p>}
           </footer>
 
           {printMessage && <p className="receipt-print-actions mt-4 text-center text-xs font-medium text-danger" role="status">{printMessage}</p>}
