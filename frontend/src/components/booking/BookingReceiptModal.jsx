@@ -131,7 +131,7 @@ function ReceiptRow({ label, children, emphasized = false }) {
  * Shared booking confirmation preview used after booking and from completed visits.
  * The confirmation data is display-only: it intentionally contains no payment state.
  */
-export function BookingReceiptModal({ receipt, onClose }) {
+export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
   const titleId = useId();
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -200,12 +200,12 @@ export function BookingReceiptModal({ receipt, onClose }) {
 
       <div className="receipt-print-content relative my-6 w-full max-w-2xl sm:my-8">
         <div className="receipt-print-actions mb-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-white">Booking confirmation preview</p>
+          <p className="text-sm font-semibold text-white">{hidePrint ? 'Booking details' : 'Booking confirmation preview'}</p>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="on-dark" size="sm" onClick={handlePrint}>
+            {!hidePrint && <Button type="button" variant="on-dark" size="sm" onClick={handlePrint}>
               <IconPrinter size={16} />
               Print
-            </Button>
+            </Button>}
             <button
               ref={closeButtonRef}
               type="button"
@@ -225,7 +225,7 @@ export function BookingReceiptModal({ receipt, onClose }) {
               <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-ink-400">LuxeGlow Experience</p>
             </div>
             <div className="text-left sm:text-right">
-              <h2 id={titleId} className="font-display text-2xl font-bold text-ink-900">Booking Confirmation</h2>
+              <h2 id={titleId} className="font-display text-2xl font-bold text-ink-900">{hidePrint ? 'Booking Details' : 'Booking Confirmation'}</h2>
               <p className="mt-1 text-sm font-semibold text-ink-500">Appointment record</p>
             </div>
           </header>
