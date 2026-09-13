@@ -14,6 +14,7 @@ import { serviceImageUrl } from '../utils/serviceImages';
 import { serviceCategoryOptions as categoryOptionsForType, serviceSubcategoryOptions as subcategoryOptionsFor, serviceTypeOptions } from '../utils/serviceMetadata';
 import { deleteFaq, getAdminAbout, getCustomerHistory, inviteStaff, listAdminAppointments, listAdminFaqs, listAdminProfiles, listAdminServices, resetStaffPassword, rescheduleAppointment, saveFaq, saveService, setServiceActive, setServiceHomepageFeatured, updateAdminAbout, updateAdminProfile, updateAppointmentStatus, uploadServiceImage } from '../api/admin';
 import { getAvailableSlots } from '../api/endpoints';
+import { STAFF_POSITION_TITLE_MAX_LENGTH, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 import { IconArrowRight, IconCalendar, IconCheckCircle, IconClock, IconGrid, IconMenu, IconSearch, IconSparkle, IconUser, IconX } from '../components/icons';
 
 const TERMINAL_APPOINTMENT_STATUSES = new Set(['Completed', 'Cancelled']);
@@ -373,21 +374,68 @@ function FaqRow({ faq, onSaved }) {
 
 function ProfileRow({ profile, selected, onSelect }) {
   const name = staffDisplayName(profile);
-  const accountSummary = !profile.is_active ? 'Inactive' : profile.accepts_appointments ? 'Accepts appointments' : 'Appointments off';
+  const accountStatus = !profile.is_active ? 'Inactive' : profile.accepts_appointments ? 'Bookable' : 'Appointments off';
+  const statusTone = !profile.is_active ? 'bg-danger/10 text-danger' : profile.accepts_appointments ? 'bg-success/10 text-success' : 'bg-gold-100 text-ink-900';
   return <li className="border-b border-line last:border-b-0">
-    <button type="button" onClick={() => onSelect(profile.id)} aria-pressed={selected} className={`flex min-h-20 w-full items-center justify-between gap-3 rounded-xl px-3 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selected ? 'bg-blush-50' : 'hover:bg-canvas'}`}>
+    <button type="button" onClick={() => onSelect(profile.id)} aria-pressed={selected} className={`grid min-h-20 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selected ? 'bg-blush-50' : 'hover:bg-canvas'}`}>
       <span className="min-w-0">
         <span className="block truncate font-semibold text-ink-900">{name}</span>
-        <span className="mt-1 block truncate text-xs text-ink-500">{profile.email}</span>
-        <span className="mt-1 block text-xs font-semibold text-gold-600">{profile.rating_count > 0 ? `${Number(profile.average_rating).toFixed(1)} / 5 · ${profile.rating_count} published rating${profile.rating_count === 1 ? '' : 's'}` : 'No ratings yet'}</span>
+        {profile.position_title && <span className="mt-0.5 block truncate text-sm font-semibold text-brand-800">{profile.position_title}</span>}
+        <span className="mt-0.5 block truncate text-xs text-ink-500">{profile.email}</span>
       </span>
-      <span className="flex shrink-0 items-center gap-2">
-        <span className={`hidden rounded-full px-2.5 py-1 text-[10px] font-bold uppercase sm:inline-flex ${profile.is_active ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>{profile.is_active ? 'Active' : 'Inactive'}</span>
-        <span className="text-xs font-semibold text-ink-500">{accountSummary}</span>
-        <IconArrowRight size={16} className={`text-ink-400 transition-transform ${selected ? 'translate-x-0.5 text-brand-700' : ''}`} />
+      <span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+        <span aria-label={`Account status: ${accountStatus}`} className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold ${statusTone}`}>{accountStatus}</span>
+        <IconArrowRight size={16} aria-hidden="true" className={`shrink-0 text-ink-400 transition-transform ${selected ? 'translate-x-0.5 text-brand-700' : ''}`} />
       </span>
     </button>
   </li>;
+}
+
+function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
+  const [title, setTitle] = useState(staffMember?.position_title || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  if (!canManage || !staffMember || !['staff', 'admin'].includes(staffMember.role)) return null;
+
+  const save = async (event) => {
+    event.preventDefault();
+    const nextTitle = normalizeStaffPositionTitle(title);
+    const currentTitle = normalizeStaffPositionTitle(staffMember.position_title);
+    setError('');
+    setNotice('');
+    if (nextTitle === currentTitle) {
+      setNotice('Position title is unchanged.');
+      return;
+    }
+    if (nextTitle && nextTitle.length > STAFF_POSITION_TITLE_MAX_LENGTH) {
+      setError(`Position title must be ${STAFF_POSITION_TITLE_MAX_LENGTH} characters or fewer.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await updateAdminProfile(staffMember.id, { position_title: nextTitle });
+      if (!result.success) throw new Error(result.error || 'Could not save position title.');
+      const savedTitle = normalizeStaffPositionTitle(result.position_title);
+      setTitle(savedTitle || '');
+      onSaved(staffMember.id, savedTitle);
+    } catch (saveError) {
+      setError(saveError?.message || 'Could not save position title.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputId = `staff-position-title-${staffMember.id}`;
+  return <form onSubmit={save} aria-busy={busy} className="mt-4 grid gap-2 border-t border-line pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+    <label htmlFor={inputId} className="text-sm font-semibold text-ink-900">Optional position title
+      <input id={inputId} type="text" maxLength={STAFF_POSITION_TITLE_MAX_LENGTH} value={title} onChange={(event) => { setTitle(event.target.value); setError(''); setNotice(''); }} placeholder="Head Massage Therapist" disabled={busy} aria-invalid={!!error} aria-describedby={error ? `${inputId}-error` : undefined} className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm font-normal text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:opacity-60" />
+    </label>
+    <Button type="submit" size="sm" className="min-h-11 w-fit justify-self-start" disabled={busy}>{busy ? 'Saving…' : 'Save title'}</Button>
+    {error && <p id={`${inputId}-error`} className="text-sm font-semibold text-danger sm:col-span-2" role="alert">{error}</p>}
+    {notice && <p className="text-sm font-semibold text-success sm:col-span-2" role="status">{notice}</p>}
+  </form>;
 }
 
 function StaffAvailabilityPanel({ staffMember, date, minDate, maxDate, onDateChange, onShiftDate, slots, loading, error, onRetry, appointments, onRequestAction, actionBusy, canManage }) {
@@ -413,6 +461,7 @@ function StaffAvailabilityPanel({ staffMember, date, minDate, maxDate, onDateCha
         <Button type="button" size="sm" variant="soft" disabled={actionBusy} onClick={() => onRequestAction({ type: 'active', enabled: !staffMember.is_active })} className="min-h-11">{staffMember.is_active ? 'Deactivate account' : 'Activate account'}</Button>
         <Button type="button" size="sm" variant="soft" disabled={actionBusy} onClick={() => onRequestAction({ type: 'reset' })} className="min-h-11">Send password reset</Button>
       </div>
+      <StaffPositionTitleEditor key={`${staffMember.id}:${staffMember.position_title || ''}`} staffMember={staffMember} canManage={canManage} onSaved={(id, positionTitle) => onRequestAction({ type: 'position_title_saved', id, position_title: positionTitle })} />
     </div>}
     <div className="mt-5 flex flex-wrap items-center gap-2 border-y border-line py-4">
       <button type="button" onClick={() => onShiftDate(-1)} disabled={date <= minDate} aria-label="Previous day" className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 transition-colors hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45"><IconArrowRight size={16} className="rotate-180" /></button>
@@ -766,6 +815,14 @@ export function AdminPage() {
     openReschedule(appointment);
   };
   const requestStaffAction = (action) => {
+    if (action.type === 'position_title_saved') {
+      const profileId = String(action.id || '');
+      if (customer?.role !== 'admin' || !staff.some((profile) => String(profile.id) === profileId)) return;
+      setStaff((current) => current.map((profile) => String(profile.id) === profileId ? { ...profile, position_title: action.position_title } : profile));
+      setError('');
+      setNotice('Position title saved.');
+      return;
+    }
     if (!selectedStaff || customer?.role !== 'admin' || staffActionBusy) return;
     const name = staffDisplayName(selectedStaff);
     let nextAction = null;

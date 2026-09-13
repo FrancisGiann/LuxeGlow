@@ -32,6 +32,7 @@ An exact competitive or commercial positioning statement remains open and must n
 - Appointment scheduling uses Asia/Manila time and currently allows dates up to 60 days ahead.
 - The seeded weekly schedule is Monday–Saturday 10:00–20:00 and Sunday 11:00–18:00 until staff edit it. Each day has one continuous interval; full-day closures are separate exceptions. A booking may end exactly at closing, but never after it.
 - “No preference” is the default staff choice. Anonymous availability exposes only aggregate open/unavailable slots; authenticated booking creation assigns deterministically under a date lock by fewest booked minutes, then booking count, then stable staff id, and returns the actual assignment.
+- Administrators may set an optional free-text position title for staff or admin accounts. The booking picker may show that title with the existing abbreviated staff name and published rating; no private profile details are exposed.
 - Existing Pending and Confirmed appointments survive schedule edits. Staff receive conflict references and reasons for follow-up; schedule saving never moves or cancels appointments.
 - Visit rating and assigned-staff rating are separate 1–5 values; the staff rating is required when a team member was assigned and remains NULL for unassigned legacy visits. Staff aggregates are shown only in the booking picker and protected admin workspace, never on public staff pages or the homepage.
 - Payment is settled at the salon after staff confirmation; appointment records are not proof of payment.

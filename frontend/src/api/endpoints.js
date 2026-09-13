@@ -2,6 +2,7 @@ import { publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import { passwordResetPath } from '../utils/authRedirect';
+import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -330,7 +331,16 @@ export async function updateCustomerProfile(fields = {}) {
 /* ── Race-safe booking ───────────────────────────────────────── */
 export async function getBookableStaff() {
   const data = unwrap(await requireSupabase().rpc('get_bookable_staff'), 'Could not load team members.');
-  return (data || []).map((row) => ({ id: row.id || row.staff_id, name: row.display_name || 'Team member', average_rating: row.average_rating == null ? 0 : Number(row.average_rating), rating_count: Number(row.rating_count || 0) })).filter((row) => /^[0-9a-f-]{36}$/i.test(String(row.id)));
+  return (data || []).map((row) => {
+    const positionTitle = normalizeStaffPositionTitle(row.position_title);
+    return {
+      id: row.id || row.staff_id,
+      name: row.display_name || 'Team member',
+      position_title: isStaffPositionTitleWithinLimit(positionTitle) ? positionTitle : null,
+      average_rating: row.average_rating == null ? 0 : Number(row.average_rating),
+      rating_count: Number(row.rating_count || 0),
+    };
+  }).filter((row) => /^[0-9a-f-]{36}$/i.test(String(row.id)));
 }
 
 export async function getAvailableSlots(date, durationMinutes, staffId) {

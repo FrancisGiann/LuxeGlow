@@ -2,6 +2,7 @@ import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
 import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
 import { normalizeStaffNotification, STAFF_NOTIFICATION_LIMIT } from '../utils/staffNotifications';
+import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 
 const STAFF_ROLES = ['staff', 'admin'];
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
@@ -109,13 +110,21 @@ export async function deleteFaq(id) {
 
 export async function listAdminProfiles(role) {
   const client = await assertStaff();
-  let query = client.from('profiles').select('id,email,first_name,last_name,phone,username,role,is_active,accepts_appointments,created_at,legacy_customer_id,legacy_staff_id').order('last_name').order('first_name');
+  let query = client.from('profiles').select('id,email,first_name,last_name,phone,position_title,username,role,is_active,accepts_appointments,created_at,legacy_customer_id,legacy_staff_id').order('last_name').order('first_name');
   if (role) query = query.eq('role', role);
   const [profileResult, aggregateResult] = await Promise.all([query, client.rpc('get_staff_rating_aggregates')]);
   const profiles = throwIfError(profileResult, 'Could not load accounts.') || [];
   const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
   const ratingsByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: Number(row.average_rating || 0), rating_count: Number(row.rating_count || 0) }]));
-  return profiles.map((profile) => ({ ...profile, average_rating: ratingsByStaff.get(String(profile.id))?.average_rating || 0, rating_count: ratingsByStaff.get(String(profile.id))?.rating_count || 0 }));
+  return profiles.map((profile) => {
+    const positionTitle = normalizeStaffPositionTitle(profile.position_title);
+    return {
+      ...profile,
+      position_title: isStaffPositionTitleWithinLimit(positionTitle) ? positionTitle : null,
+      average_rating: ratingsByStaff.get(String(profile.id))?.average_rating || 0,
+      rating_count: ratingsByStaff.get(String(profile.id))?.rating_count || 0,
+    };
+  });
 }
 
 export async function getCustomerHistory(id) {
@@ -131,6 +140,12 @@ export async function getCustomerHistory(id) {
 export async function updateAdminProfile(id, fields) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id))) return { success: false, error: 'Invalid account.' };
   const patch = {};
+  if (fields.position_title !== undefined) {
+    if (fields.position_title !== null && typeof fields.position_title !== 'string') return { success: false, error: 'Enter a valid position title.' };
+    const positionTitle = normalizeStaffPositionTitle(fields.position_title);
+    if (!isStaffPositionTitleWithinLimit(positionTitle)) return { success: false, error: 'Position title must be 100 characters or fewer.' };
+    patch.position_title = positionTitle;
+  }
   if (fields.first_name !== undefined) patch.first_name = String(fields.first_name).trim().slice(0, 100);
   if (fields.last_name !== undefined) patch.last_name = String(fields.last_name).trim().slice(0, 100);
   if (fields.phone !== undefined) patch.phone = String(fields.phone).trim().slice(0, 50) || null;
@@ -142,6 +157,17 @@ export async function updateAdminProfile(id, fields) {
   if (fields.accepts_appointments !== undefined) patch.accepts_appointments = !!fields.accepts_appointments;
   if (!Object.keys(patch).length) return { success: false, error: 'No account changes supplied.' };
   const client = await assertStaff();
+  if (patch.position_title !== undefined) {
+    const { data: auth, error: authError } = await client.auth.getUser();
+    if (authError || !auth.user) return { success: false, error: 'Administrator access required.' };
+    const caller = throwIfError(await client.from('profiles').select('role').eq('id', auth.user.id).single(), 'Could not verify administrator access.');
+    if (caller.role !== 'admin') return { success: false, error: 'Administrator access required.' };
+    const result = await client.from('profiles').update(patch).eq('id', id).select('position_title').maybeSingle();
+    const saved = throwIfError(result, 'Could not update account.');
+    if (!saved) return { success: false, error: 'Staff account not found.' };
+    const savedTitle = normalizeStaffPositionTitle(saved.position_title);
+    return { success: true, position_title: isStaffPositionTitleWithinLimit(savedTitle) ? savedTitle : null };
+  }
   throwIfError(await client.from('profiles').update(patch).eq('id', id), 'Could not update account.');
   return { success: true };
 }
