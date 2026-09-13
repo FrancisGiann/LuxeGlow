@@ -27,9 +27,9 @@ function RequireAuth({ children }) {
 function RequireStaff({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
-  if (status === 'guest') return <Navigate to="/?openAuth=admin" replace />;
+  if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
   if (customer?.role === 'customer') return <Navigate to="/dashboard/overview" replace />;
-  if (!['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=admin" replace />;
+  if (!['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
 

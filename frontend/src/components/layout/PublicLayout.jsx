@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getAbout, getSalonClosures, getSalonSchedule } from '../../api/endpoints';
+import { getAbout } from '../../api/endpoints';
 import { useFetch } from '../../hooks/useFetch';
 import { AuthModal } from '../auth/AuthModal';
 import { getInitials } from '../../utils/format';
-import { IconClock, IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
+import { IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
 
 const NAV_LINKS = [
   ['Services', '#services'],
@@ -13,27 +13,6 @@ const NAV_LINKS = [
   ['About', '#about'],
   ['FAQs', '#faqs'],
 ];
-
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const displayTime = (value) => {
-  const [hour, minute] = String(value || '').split(':').map(Number);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return '';
-  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
-};
-const manilaToday = () => {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-const dateAfter = (date, days) => {
-  const [year, month, day] = String(date).split('-').map(Number);
-  const next = new Date(Date.UTC(year, month - 1, day + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
-};
-const getFooterClosures = () => {
-  const start = manilaToday();
-  return getSalonClosures(start, dateAfter(start, 370));
-};
 
 function SalonWordmark({ compact = false }) {
   return (
@@ -124,11 +103,6 @@ function Navbar() {
 
 function Footer() {
   const { data: about } = useFetch(getAbout);
-  const { data: schedule } = useFetch(getSalonSchedule);
-  const { data: closures } = useFetch(getFooterClosures);
-  const hours = schedule?.length
-    ? schedule.map((row) => `${DAY_NAMES[Number(row.day_of_week) - 1] || 'Day'} · ${row.is_closed ? 'Closed' : `${displayTime(row.open_time)}–${displayTime(row.close_time)}`}`)
-    : (about?.business_hours || '').split('\n').map((line) => line.trim()).filter(Boolean);
   const salonName = about?.salon_name || 'Astrid Nails & Beauty Bar';
 
   return (
@@ -148,9 +122,6 @@ function Footer() {
         <div>
           <h2 className="font-display text-lg font-semibold">Visit</h2>
           <ul className="mt-4 flex flex-col gap-3 text-sm text-ink-500">
-            {hours.map((line) => <li key={line} className="flex items-start gap-2"><IconClock size={15} className="mt-0.5 shrink-0 text-gold-500" />{line}</li>)}
-            {closures?.slice(0, 3).map((closure) => <li key={closure.closure_date} className="flex items-start gap-2"><IconClock size={15} className="mt-0.5 shrink-0 text-gold-500" />Closed {closure.closure_date}{closure.reason ? ` · ${closure.reason}` : ''}</li>)}
-            {closures?.length > 3 && <li className="text-xs text-ink-400">More closure dates may apply.</li>}
             {about?.address && <li className="flex items-start gap-2"><IconMapPin size={15} className="mt-0.5 shrink-0 text-gold-500" />{about.address}</li>}
             {about?.phone && <li className="flex items-start gap-2"><IconPhone size={15} className="mt-0.5 shrink-0 text-gold-500" /><a href={`tel:${about.phone.replace(/\s/g, '')}`} className="hover:text-brand-800">{about.phone}</a></li>}
             {about?.email && <li className="flex items-start gap-2"><IconMail size={15} className="mt-0.5 shrink-0 text-gold-500" /><a href={`mailto:${about.email}`} className="break-all hover:text-brand-800">{about.email}</a></li>}
@@ -183,8 +154,9 @@ export function PublicLayout() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const requestedView = params.get('openAuth');
-    if (!['login', 'admin'].includes(requestedView) || status === 'loading') return;
-    if (status === 'guest') openAuth(requestedView);
+    const normalizedView = requestedView === 'admin' ? 'login' : requestedView;
+    if (!['login'].includes(normalizedView) || status === 'loading') return;
+    if (status === 'guest') openAuth(normalizedView);
     if (status !== 'loading') {
       params.delete('openAuth');
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });

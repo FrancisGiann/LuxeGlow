@@ -161,7 +161,7 @@ export function AuthProvider({ children }) {
     setStatus('guest');
     if (expired) {
       setSessionNotice('Your session expired after a period of inactivity. Please sign in again.');
-      setModalView(isStaffRole(role) ? 'admin' : 'login');
+      setModalView('login');
     } else {
       setSessionNotice('');
       setModalView(null);
@@ -205,7 +205,7 @@ export function AuthProvider({ children }) {
     }
   }, [customer?.role, broadcast, applySignedOut]);
 
-  /** Returns { ok, needsVerification } without throwing on bad credentials. */
+  /** Returns { ok, role, needsVerification } without throwing on bad credentials. */
   const login = useCallback(async (email, password) => {
     const data = await api.loginCustomer(email, password);
     if (data.needs_verification) {
@@ -216,19 +216,9 @@ export function AuthProvider({ children }) {
     if (data.success) {
       await refreshSession();
       closeAuth();
-      return { ok: true };
+      return { ok: true, role: data.role };
     }
     return { ok: false, error: data.error || 'Invalid email or password.' };
-  }, [refreshSession, closeAuth]);
-
-  const loginStaff = useCallback(async (username, password) => {
-    const data = await api.loginStaff(username, password);
-    if (data.success) {
-      await refreshSession();
-      closeAuth();
-      return { ok: true, redirect: data.redirect || null };
-    }
-    return { ok: false, error: data.error || 'Invalid staff credentials.' };
   }, [refreshSession, closeAuth]);
 
   /** Returns { ok, error }. On success the session enters "pending email verification". */
@@ -337,7 +327,6 @@ export function AuthProvider({ children }) {
       openAuth,
       closeAuth,
       login,
-      loginStaff,
       register,
       resend,
       requestPasswordReset,
@@ -348,7 +337,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       sessionNotice,
     }),
-    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, loginStaff, register, resend, requestPasswordReset, completePasswordReset, passwordSetup, passwordCompletion, logout, refreshSession, sessionNotice]
+    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, register, resend, requestPasswordReset, completePasswordReset, passwordSetup, passwordCompletion, logout, refreshSession, sessionNotice]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

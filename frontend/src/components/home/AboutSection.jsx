@@ -11,11 +11,59 @@ const displayTime = (value) => {
   return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
 };
 
+const extractIframeSrc = (text) => {
+  if (!text) return '';
+  if (text.includes('<iframe') && text.includes('src="')) {
+    const match = text.match(/src="([^"]+)"/);
+    if (match) return match[1];
+  }
+  return text;
+};
+
+const groupHours = (scheduleRows) => {
+  if (!scheduleRows?.length) return [];
+  const groups = [];
+  for (const row of scheduleRows) {
+    const timeString = row.is_closed ? 'Closed' : `${displayTime(row.open_time)}–${displayTime(row.close_time)}`;
+    const existing = groups.find(g => g.timeString === timeString);
+    if (existing) {
+      existing.days.push(Number(row.day_of_week));
+    } else {
+      groups.push({ timeString, days: [Number(row.day_of_week)] });
+    }
+  }
+  
+  groups.sort((a, b) => Math.min(...a.days) - Math.min(...b.days));
+
+  const formatDays = (days) => {
+    days.sort((a, b) => a - b);
+    const ranges = [];
+    let start = days[0];
+    let prev = days[0];
+    for (let i = 1; i <= days.length; i++) {
+      if (days[i] === prev + 1) {
+        prev = days[i];
+      } else {
+        if (start === prev) ranges.push(dayNames[start - 1]);
+        else if (prev === start + 1) ranges.push(`${dayNames[start - 1]}, ${dayNames[prev - 1]}`);
+        else ranges.push(`${dayNames[start - 1]} – ${dayNames[prev - 1]}`);
+        start = days[i];
+        prev = days[i];
+      }
+    }
+    return ranges.join(', ');
+  };
+
+  return groups.map(g => `${formatDays(g.days)} · ${g.timeString}`);
+};
+
 export function AboutSection() {
   const { data: about } = useFetch(getAbout);
   const { data: schedule } = useFetch(getSalonSchedule);
-  const hours = schedule?.length ? schedule.map((row) => `${dayNames[Number(row.day_of_week) - 1] || 'Day'} · ${row.is_closed ? 'Closed' : `${displayTime(row.open_time)}–${displayTime(row.close_time)}`}`) : lines(about?.business_hours);
+  const hours = schedule?.length ? groupHours(schedule) : lines(about?.business_hours);
   const policies = lines(about?.salon_policies);
+  const mapUrl = extractIframeSrc(about?.map_embed_url);
+  
   return (
     <section id="about" className="scroll-mt-20 bg-surface py-24 sm:py-28">
       <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-14">
@@ -34,6 +82,33 @@ export function AboutSection() {
               {about?.email && <div className="flex items-start gap-3"><IconMail size={17} className="mt-0.5 shrink-0 text-gold-500" /><dd><a href={`mailto:${about.email}`} className="break-all text-ink-700 hover:text-brand-800">{about.email}</a></dd></div>}
             </dl>
             {hours.length > 0 && <div className="mt-9 border-t border-line pt-5"><h4 className="flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-[0.18em] text-ink-500"><IconClock size={14} className="text-gold-500" />Hours</h4><ul className="mt-3 flex flex-col gap-1.5 text-sm text-ink-700">{hours.map((line) => <li key={line}>{line}</li>)}</ul></div>}
+            {mapUrl && (
+              <div className="mt-8">
+                <div className="overflow-hidden rounded-2xl border border-line">
+                  <iframe
+                    src={mapUrl}
+                    width="100%"
+                    height="300"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Salon location on Google Maps"
+                  />
+                </div>
+                {about?.address && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(about.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex min-h-12 items-center gap-2 rounded-xl border border-line bg-surface px-5 text-sm font-bold text-ink-900 shadow-card transition-colors hover:border-brand-300 hover:text-brand-800"
+                  >
+                    <IconMapPin size={16} className="text-gold-500" />
+                    Get Directions
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

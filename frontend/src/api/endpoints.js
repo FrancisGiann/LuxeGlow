@@ -102,7 +102,7 @@ export async function checkSession() {
   return { loggedIn: true, customer: profilePayload(profile, user), user };
 }
 
-export async function loginCustomer(email, password) {
+export async function loginUnified(email, password) {
   const normalizedEmail = normalizeEmail(email);
   if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) return { success: false, error: 'Invalid email or password.' };
   const client = requireSupabase();
@@ -113,33 +113,11 @@ export async function loginCustomer(email, password) {
     await client.auth.signOut().catch(() => {});
     return { success: false, error: 'Unable to sign in right now. Please try again later.' };
   }
-  if (profile.role !== 'customer') {
-    await client.auth.signOut().catch(() => {});
-    return { success: false, error: 'This is a staff account. Use Staff Login.' };
-  }
-  return { success: true, user: gateway.user };
+  return { success: true, user: gateway.user, role: profile.role };
 }
 
-export async function loginStaff(identifier, password) {
-  const email = normalizeEmail(identifier);
-  if (!LOGIN_EMAIL_PATTERN.test(email) || email.length > LOGIN_EMAIL_MAX_LENGTH) return { success: false, error: 'Staff sign-in uses the staff email address.' };
-  const client = requireSupabase();
-  const gateway = await loginThroughGateway('staff', email, password);
-  if (!gateway.success) {
-    if (gateway.rate_limited) return gateway;
-    return { ...gateway, error: gateway.error === 'Invalid email or password.' ? 'Invalid staff credentials.' : gateway.error };
-  }
-  const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', gateway.user.id).maybeSingle();
-  if (profileError || !profile || profile.is_active !== true || !['customer', 'staff', 'admin'].includes(profile.role)) {
-    await client.auth.signOut().catch(() => {});
-    return { success: false, error: 'This account is not authorized for staff access.' };
-  }
-  if (profile.role === 'customer') {
-    await client.auth.signOut().catch(() => {});
-    return { success: false, error: 'This is a customer account. Use Customer Login.' };
-  }
-  return { success: true, redirect: '/admin' };
-}
+export const loginCustomer = loginUnified;
+export const loginStaff = loginUnified;
 
 export async function registerCustomer(fields) {
   const input = fields && typeof fields === 'object' ? fields : {};

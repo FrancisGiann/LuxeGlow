@@ -8,8 +8,8 @@ import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 
 const VIEWS = {
-  login: 'Customer Login',
-  admin: 'Admin / Staff Login',
+  login: 'Log in',
+  admin: 'Log in',
   register: 'Create an Account',
   verify: 'Verify Your Email',
   'forgot-request': 'Reset Your Password',
@@ -34,7 +34,6 @@ export function AuthModal() {
     verifyEmail,
     openAuth,
     login,
-    loginStaff,
     register,
     resend,
     requestPasswordReset,
@@ -103,26 +102,16 @@ export function AuthModal() {
     const f = new FormData(e.currentTarget);
     try {
       const res = await login(f.get('email'), f.get('password'));
-      if (res.ok) finishAndGoDashboard();
-      else if (!res.needsVerification) setError(res.error);
-    } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleStaffLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setBusy(true);
-    const f = new FormData(e.currentTarget);
-    try {
-      const res = await loginStaff(f.get('username'), f.get('password'));
       if (res.ok) {
-        toast('Welcome back, staff!', 'success');
-        navigate(res.redirect || '/admin', { replace: true });
-      } else setError(res.error);
+        if (res.role === 'staff' || res.role === 'admin') {
+          toast('Welcome back, staff!', 'success');
+          navigate('/admin', { replace: true });
+        } else {
+          finishAndGoDashboard();
+        }
+      } else if (!res.needsVerification) {
+        setError(res.error);
+      }
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -256,8 +245,7 @@ export function AuthModal() {
           <BrandMark />
           <h2 id="auth-modal-title" className="mt-4 text-center font-display text-2xl font-bold">{VIEWS[modalView]}</h2>
           <p className="mt-1 text-center text-sm text-ink-500">
-            {modalView === 'login' && 'Sign in to book and manage your appointments.'}
-            {modalView === 'admin' && 'Restricted access for salon staff.'}
+            {modalView === 'login' && 'Sign in to your account.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Check your inbox for a verification email.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
@@ -279,7 +267,6 @@ export function AuthModal() {
                   New here?{' '}
                   <button type="button" onClick={() => openAuth('register')} className="font-semibold text-brand-800 hover:text-brand-900">Create an account</button>
                 </span>
-                <button type="button" onClick={() => openAuth('admin')} className="font-semibold text-brand-800 hover:text-brand-900">Staff / Admin sign-in</button>
               </div>
             </form>
           )}
@@ -350,35 +337,18 @@ export function AuthModal() {
                     <h3 className="font-display text-xl font-medium text-ink-900">Staff account verified</h3>
                     <p className="mt-2 text-sm leading-relaxed text-ink-600">Your account email is verified and your password was created successfully.</p>
                   </div>
-                  <Button type="button" block size="lg" onClick={() => openAuth('admin')}>Staff Login</Button>
+                  <Button type="button" block size="lg" onClick={() => openAuth('login')}>Log in</Button>
                 </>
               ) : (
                 <>
                   <div>
                     <h3 className="font-display text-xl font-medium text-ink-900">Password changed successfully</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-600">Your password was changed successfully. Choose where to sign in next.</p>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-600">Your password was changed successfully.</p>
                   </div>
-                  <div className="flex w-full flex-col gap-3">
-                    <Button type="button" block size="lg" onClick={() => openAuth('login')}>Customer Login</Button>
-                    <Button type="button" block size="lg" variant="soft" onClick={() => openAuth('admin')}>Staff / Admin Login</Button>
-                  </div>
+                  <Button type="button" block size="lg" onClick={() => openAuth('login')}>Log in</Button>
                 </>
               )}
             </div>
-          )}
-
-          {/* ── STAFF ── */}
-          {modalView === 'admin' && (
-            <form onSubmit={handleStaffLogin} className="mt-6 flex flex-col gap-4" noValidate>
-              <Input id="staff-username" name="username" type="email" label="Staff email address" placeholder="staff@example.com" autoComplete="username" required />
-              <Input id="staff-password" name="password" type="password" label="Password" placeholder="••••••••" autoComplete="current-password" required />
-              {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy}>Log in as Staff</Button>
-              <p className="pt-1 text-center text-sm text-ink-500">
-                Not staff?{' '}
-                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Customer login</button>
-              </p>
-            </form>
           )}
 
           {/* ── REGISTER ── */}

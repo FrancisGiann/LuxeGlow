@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import nodemailer from 'npm:nodemailer';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'null',
@@ -14,28 +15,45 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const cronSecret = Deno.env.get('CRON_SECRET_TOKEN');
-const resendKey = Deno.env.get('RESEND_API_KEY');
-const from = Deno.env.get('MAIL_FROM_ADDRESS') || 'appointments@example.com';
+
+// SMTP Config
+const smtpHost = Deno.env.get('MAIL_HOST') || 'smtp.gmail.com';
+const smtpPort = Number(Deno.env.get('MAIL_PORT')) || 587;
+const smtpUser = Deno.env.get('MAIL_USERNAME');
+const smtpPass = Deno.env.get('MAIL_PASSWORD');
+const fromAddress = Deno.env.get('MAIL_FROM_ADDRESS') || 'appointments@example.com';
 const fromName = Deno.env.get('MAIL_FROM_NAME') || 'Astrid Nails & Beauty Bar';
 
-if (!serviceKey || !supabaseUrl || !cronSecret || !resendKey) {
-  console.error('Missing notification function secrets');
+if (!serviceKey || !supabaseUrl || !cronSecret || !smtpUser || !smtpPass) {
+  console.error('Missing notification function secrets or SMTP credentials');
 }
+
+const transporter = nodemailer.createTransport({
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
+  auth: {
+    user: smtpUser,
+    pass: smtpPass,
+  },
+});
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  if (!serviceKey || !supabaseUrl || !cronSecret || !resendKey) return json({ error: 'Function is not configured' }, 500);
+  if (!serviceKey || !supabaseUrl || !cronSecret || !smtpUser || !smtpPass) return json({ error: 'Function is not configured' }, 500);
 
   const supplied = request.headers.get('x-cron-token') || '';
   if (supplied.length !== cronSecret.length || supplied !== cronSecret) return json({ error: 'Unauthorized' }, 401);
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  
   const { error: maintenanceError } = await admin.rpc('run_appointment_maintenance');
   if (maintenanceError) {
     console.error('maintenance failed', maintenanceError);
     return json({ error: 'Maintenance failed' }, 500);
   }
+  
   const { data: jobs, error: claimError } = await admin.rpc('claim_notification_outbox', { p_limit: 25 });
   if (claimError) {
     console.error('claim failed', claimError);
@@ -47,18 +65,27 @@ Deno.serve(async (request) => {
     try {
       const { data: profile, error: profileError } = await admin.from('profiles').select('email,first_name').eq('id', job.recipient_id).single();
       if (profileError || !profile?.email) throw new Error('Recipient profile is missing an email');
+      
       const payload = job.payload || {};
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `luxeglow-outbox-${job.id}` },
-        body: JSON.stringify({
-          from: `${fromName} <${from}>`,
-          to: [profile.email],
-          subject: payload.title || 'Astrid Nails appointment update',
-          text: `Hi ${profile.first_name || 'there'},\n\n${payload.message || 'You have an appointment update.'}\n\nAstrid Nails & Beauty Bar`,
-        }),
+      const subject = payload.title || 'Astrid Nails update';
+      
+      let htmlMessage = '';
+      if (job.kind === 'welcome') {
+          htmlMessage = `<p>Hi ${profile.first_name || 'there'},</p><p>${payload.message}</p><p>We look forward to seeing you!</p>`;
+      } else if (job.kind === 'password_changed') {
+          htmlMessage = `<p>Hi ${profile.first_name || 'there'},</p><p>${payload.message}</p>`;
+      } else {
+          htmlMessage = `<p>Hi ${profile.first_name || 'there'},</p><p>${payload.message || 'You have an appointment update.'}</p><p>Astrid Nails & Beauty Bar</p>`;
+      }
+
+      await transporter.sendMail({
+        from: `"${fromName}" <${fromAddress}>`,
+        to: profile.email,
+        subject: subject,
+        html: htmlMessage,
+        text: `Hi ${profile.first_name || 'there'},\n\n${payload.message || 'You have an appointment update.'}\n\nAstrid Nails & Beauty Bar`,
       });
-      if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+      
       const { error: updateError } = await admin.from('notification_outbox').update({ sent_at: new Date().toISOString(), claimed_at: null, last_error: null }).eq('id', job.id);
       if (updateError) throw updateError;
       sent += 1;

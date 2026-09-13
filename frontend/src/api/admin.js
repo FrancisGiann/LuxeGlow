@@ -230,7 +230,7 @@ export async function getAdminAbout() {
 
 export async function updateAdminAbout(fields) {
   const client = await assertStaff();
-  const data = Object.fromEntries(['business_name', 'description', 'mission_statement', 'phone', 'email', 'address', 'salon_policies'].map((key) => [key, String(fields[key] || '').slice(0, 10000) || null]));
+  const data = Object.fromEntries(['business_name', 'description', 'mission_statement', 'phone', 'email', 'address', 'salon_policies', 'map_embed_url'].map((key) => [key, String(fields[key] || '').slice(0, 10000) || null]));
   const current = await getAdminAbout();
   if (!current?.id) throw new Error('Business information has not been seeded.');
   throwIfError(await client.from('about_content').update(data).eq('id', current.id), 'Could not save business information.');

@@ -78,6 +78,7 @@
     scroll-behavior: smooth;
     scrollbar-color: var(--color-line-strong) var(--color-canvas);
     scrollbar-width: thin;
+    overflow-x: hidden;
   }
 
   body {
