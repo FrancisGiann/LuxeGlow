@@ -180,8 +180,9 @@ export async function completePasswordReset(fields = {}) {
   return { success: true, message: 'Password updated successfully.' };
 }
 
-export async function logoutCustomer() {
-  const { error } = await requireSupabase().auth.signOut();
+export async function logoutCustomer(scope = 'global') {
+  if (!['global', 'local'].includes(scope)) throw new TypeError('Invalid sign-out scope.');
+  const { error } = await requireSupabase().auth.signOut({ scope });
   if (error) throw asError(error, 'Could not sign out.');
   return { success: true };
 }
@@ -246,6 +247,10 @@ export async function getDashboard() {
   const session = await checkSession();
   if (!session.loggedIn) throw Object.assign(new Error('Not logged in'), { status: 401 });
   if (session.customer?.role !== 'customer') throw Object.assign(new Error('Customer dashboard access required'), { status: 403 });
+  unwrap(
+    await client.rpc('reconcile_expired_pending_appointments'),
+    'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
+  );
   const [profileResult, appointmentsResult, notificationsResult, appointmentStaffResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
     client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),

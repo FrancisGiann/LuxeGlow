@@ -67,7 +67,7 @@ function Navbar() {
             <>
               <Link to={isStaff ? '/admin' : '/dashboard'} className="flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink-900 hover:border-brand-300">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blush-100 text-[11px] font-bold text-brand-800">{getInitials(customer?.first_name, customer?.last_name)}</span>
-                {isStaff ? 'Admin dashboard' : 'My dashboard'}
+                {isStaff ? 'Staff workspace' : 'My dashboard'}
               </Link>
             </>
           ) : (
@@ -91,7 +91,7 @@ function Navbar() {
             {isAuthenticated ? (
               <>
                 {!isStaff && <Link to="/book" className="rounded-xl bg-brand-800 px-4 py-3 text-center text-sm font-bold text-white">Book an appointment</Link>}
-                <Link to={isStaff ? '/admin' : '/dashboard'} className="rounded-xl border border-line px-4 py-3 text-center text-sm font-bold text-ink-900">{isStaff ? 'Admin dashboard' : 'My dashboard'}</Link>
+                <Link to={isStaff ? '/admin' : '/dashboard'} className="rounded-xl border border-line px-4 py-3 text-center text-sm font-bold text-ink-900">{isStaff ? 'Staff workspace' : 'My dashboard'}</Link>
               </>
             ) : <button type="button" onClick={() => openAuth('login')} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Log in / Register</button>}
           </div>

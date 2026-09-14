@@ -123,6 +123,7 @@ export function BookingPage() {
   const selectedStaff = useMemo(() => (staff || []).find((member) => member.id === selectedStaffId), [staff, selectedStaffId]);
   const totalMinutes = selectedServices.reduce((sum, service) => sum + (service.minutes || 0), 0);
   const totalPrice = selectedServices.reduce((sum, service) => sum + (service.price || 0), 0);
+  const hasAvailableSelectedTime = Boolean(time && slots?.some((slot) => slot.time === time && slot.available));
   const prettyDate = useMemo(() => date ? new Date(`${date}T00:00:00+08:00`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '', [date]);
 
   const invalidateAvailability = () => {
@@ -137,6 +138,7 @@ export function BookingPage() {
     if (expectedSelectionVersion !== availabilitySelectionVersionRef.current) return Promise.resolve();
     const requestId = availabilityRequestRef.current + 1;
     availabilityRequestRef.current = requestId;
+    setSlots(null);
     setSlotsLoading(true);
     setSlotsError('');
     return getAvailableSlots(dateValue, durationMinutes, staffId)
@@ -155,20 +157,28 @@ export function BookingPage() {
   };
   const toggleService = (id) => {
     setSelectedIds((current) => { if (current.includes(id)) return current.filter((value) => value !== id); return [...current, id]; });
-    setFormError(''); setTime(''); invalidateAvailability();
+    setFormError(''); invalidateAvailability();
   };
+  const selectDate = (value) => { setDate(value); invalidateAvailability(); };
+  const selectStaff = (id) => { setSelectedStaffId(id); invalidateAvailability(); setFormError(''); };
   useEffect(() => {
-    if (!date || !totalMinutes) { availabilityRequestRef.current += 1; return undefined; }
-    loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current);
+    if (!date) { availabilityRequestRef.current += 1; return undefined; }
+    loadAvailability(selectedStaffId, date, totalMinutes || 30, availabilitySelectionVersionRef.current);
     return undefined;
   }, [date, totalMinutes, selectedStaffId, selectedIds, availabilityReloadKey]);
-  useEffect(() => { if (time && slots && !slotsLoading && !slots.some((slot) => slot.time === time && slot.available)) setTime(''); }, [slots, slotsLoading, time]);
+  useEffect(() => {
+    if (slotsLoading || !time || !slots || slots.some((slot) => slot.time === time && slot.available)) return;
+    setTime('');
+    toast("That time doesn't fit your updated choices. Choose another available time.", 'info');
+  }, [slots, slotsLoading, time, toast]);
 
   const submit = async (event) => {
     event.preventDefault(); setFormError('');
     if (!selectedIds.length) return setFormError('Select at least one service.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayISO() || date > maxISO()) return setFormError('Choose a date within the next 60 days.');
     if (!time) return setFormError('Pick an available time slot.');
+    if (slotsLoading) return setFormError('Availability is still loading. Wait, then confirm an open time.');
+    if (!hasAvailableSelectedTime) return setFormError('Choose an open time from the current availability list.');
     if (!isAuthenticated || status !== 'authenticated') {
       writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time });
       try { window.sessionStorage.setItem('luxeglow-auth-return', '/book'); } catch { /* Storage may be blocked. */ }
@@ -181,29 +191,29 @@ export function BookingPage() {
     try {
       const result = await createAppointment({ serviceIds: selectedIds, staffId: selectedStaffId, date, time });
       if (result.success) { const createdAt = new Date().toISOString(); try { window.sessionStorage.removeItem(BOOKING_DRAFT_KEY); window.sessionStorage.removeItem('luxeglow-auth-return'); } catch { /* Storage may be blocked. */ } setSuccess({ reference: result.appointment_id, customer, summary: { staffName: result.staff_name || selectedStaff?.name || 'Assigned team member', services: selectedServices.map((service) => service.name).join(', '), serviceItems: selectedServices.map((service) => ({ name: service.name, price: service.price })), rawDate: date, rawTime: time, date: prettyDate, time, total: totalPrice, createdAt } }); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-      else { setFormError(result.error || 'Booking failed. Please try again.'); if (/no longer available/i.test(result.error || '')) { setTime(''); toast('That slot was just taken. Pick a new time.', 'error'); loadAvailability(selectedStaffId, date, totalMinutes, selectionVersion); } }
+      else { setFormError(result.error || 'Booking failed. Please try again.'); if (/no longer available/i.test(result.error || '')) { setTime(''); toast('That slot was just taken. Pick a new time.', 'error'); loadAvailability(selectedStaffId, date, totalMinutes || 30, selectionVersion); } }
     } catch (error) { setFormError(error.message || 'Could not place the booking.'); } finally { setSubmitting(false); }
   };
   const resetForm = () => { setSuccess(null); setSelectedIds([]); setSelectedStaffId(''); setDate(''); setTime(''); invalidateAvailability(); setFormError(''); };
   if (success) return <div className="mx-auto max-w-6xl"><BookingSuccess reference={success.reference} summary={success.summary} customer={success.customer} onBookAnother={resetForm} /></div>;
-  const canSubmit = selectedIds.length > 0 && date && time && !submitting;
+  const canSubmit = Boolean(selectedIds.length > 0 && date && hasAvailableSelectedTime && !slotsLoading && !submitting);
   return <form onSubmit={submit} className="mx-auto max-w-[1240px]" noValidate>
     <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
-      <div><h2 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h2><p className="mt-2 text-sm text-ink-500">Choose your treatments, an optional team preference, and an available time.</p>{!isAuthenticated && <p className="mt-3 max-w-[52ch] rounded-xl border border-gold-400 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900" role="status">You can explore availability as a guest. Sign in only when you are ready to submit; nothing is sent automatically.</p>}</div>
+      <div><h2 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h2><p className="mt-2 text-sm text-ink-500">Choose a date and time first, then select services and an optional team preference. We’ll recheck availability as your choices change.</p>{!isAuthenticated && <p className="mt-3 max-w-[52ch] rounded-xl border border-gold-400 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900" role="status">You can explore availability as a guest. Sign in only when you are ready to submit; nothing is sent automatically.</p>}</div>
       <Link to="/dashboard/appointments" className="text-sm font-bold text-brand-800 hover:text-brand-900">View my appointments</Link>
     </div>
     <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-6">
-        <Card className="p-5 sm:p-7"><CardHeader title="Select services" subtitle="Choose the treatments you want for this visit." /><div className="pt-5"><ServiceCatalog services={services} loading={!services && !servicesError} error={servicesError} onToggle={toggleService} selectable selectedIds={selectedIds} /></div></Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Choose a team preference" subtitle="Optional — leave this on No preference and we’ll match an available team member." /><div className="pt-5"><StaffPicker staff={staff} loading={!staff && !staffError} error={staffError} selectedId={selectedStaffId} onSelect={(id) => { setSelectedStaffId(id); setTime(''); invalidateAvailability(); setFormError(''); }} /></div></Card>
         <Card className="p-5 sm:p-7">
-          <CardHeader title="Choose date and time" subtitle={selectedStaff ? `${selectedStaff.name} · ${totalMinutes ? `${durationLabel(totalMinutes)} needed for your selected services.` : 'Select services first so we can check the right amount of time.'}` : totalMinutes ? `${durationLabel(totalMinutes)} needed. Times show when any available team member can perform these services.` : 'Select services first so we can check availability.'} />
+          <CardHeader title="Choose date and time" subtitle="Times are offered in 30-minute increments. With no services selected, we check for a 30-minute visit. Change your date, services, or team preference and we’ll recheck your time." />
           <div className="flex flex-col gap-6 pt-5">
-            <Input id="booking-date" type="date" label="Preferred date" min={todayISO()} max={maxISO()} value={date} onChange={(event) => { setDate(event.target.value); setTime(''); invalidateAvailability(); }} required />
-            <div><span className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ' for any available team member'}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes, availabilitySelectionVersionRef.current)} />{!date && <p className="mt-2 text-xs text-ink-500">Times are offered in 30-minute increments.</p>}</div>
+            <Input id="booking-date" type="date" label="Preferred date" min={todayISO()} max={maxISO()} value={date} onChange={(event) => selectDate(event.target.value)} required />
+            <div><span className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ' for any available team member'}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes || 30, availabilitySelectionVersionRef.current)} /></div>
           </div>
         </Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Review and confirm" subtitle="Your request will be placed under your account." /><dl className="grid gap-3 pt-5 text-sm sm:grid-cols-2"><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Name</dt><dd className="truncate font-semibold text-ink-900">{customer?.full_name || customer?.first_name || '—'}</dd></div><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Email</dt><dd className="truncate font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="flex justify-between gap-4 pb-1 sm:col-span-2"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || 'No preference'}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 hidden lg:block"><Button type="submit" size="lg" block disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Payment is settled at the salon after staff confirmation.</p></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Select services" subtitle="Choose treatments for this visit; availability will be rechecked against their combined duration." /><div className="pt-5"><ServiceCatalog services={services} loading={!services && !servicesError} error={servicesError} onToggle={toggleService} selectable selectedIds={selectedIds} /></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Choose a team preference" subtitle="Optional — leave No preference to match any available team member, or choose someone; your selected time will be rechecked." /><div className="pt-5"><StaffPicker staff={staff} loading={!staff && !staffError} error={staffError} selectedId={selectedStaffId} onSelect={selectStaff} /></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Review and confirm" subtitle="Review your details and appointment choices before confirming." /><dl className="grid gap-3 pt-5 text-sm sm:grid-cols-2"><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Name</dt><dd className="truncate font-semibold text-ink-900">{customer?.full_name || customer?.first_name || '—'}</dd></div><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Email</dt><dd className="truncate font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="flex justify-between gap-4 pb-1 sm:col-span-2"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || 'No preference'}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 hidden lg:block"><Button type="submit" size="lg" block disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Payment is settled at the salon after staff confirmation.</p></div></Card>
       </div>
       <div className="hidden lg:block"><Summary selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
     </div>

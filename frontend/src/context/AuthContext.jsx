@@ -2,6 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api/endpoints';
 import { authRedirect, supabase } from '../lib/supabase';
 import { passwordSetupError } from '../utils/authRedirect';
+import {
+  configuredIdleTimeout,
+  clearPersistedSessionActivity,
+  isSessionActivityExpired,
+  parseSessionActivityPayload,
+  restoreSessionActivity,
+  SESSION_ACTIVITY_VERSION,
+  writePersistedSessionActivity,
+} from '../utils/sessionIdle';
 
 /**
  * Owns the Supabase Auth session and the auth modal (login / staff login /
@@ -9,16 +18,15 @@ import { passwordSetupError } from '../utils/authRedirect';
  * profiles RLS and server-side RPCs; UI state is never trusted for access.
  */
 const AuthContext = createContext(null);
-const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-const MIN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-const MAX_IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const ACTIVITY_BROADCAST_INTERVAL_MS = 15 * 1000;
 const AUTH_EVENT_STORAGE_KEY = 'luxeglow-auth-event';
 
-function configuredIdleTimeout() {
-  const configuredMinutes = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MINUTES);
-  if (!Number.isFinite(configuredMinutes)) return DEFAULT_IDLE_TIMEOUT_MS;
-  return Math.min(MAX_IDLE_TIMEOUT_MS, Math.max(MIN_IDLE_TIMEOUT_MS, configuredMinutes * 60 * 1000));
+function sessionActivityStorage() {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function isStaffRole(role) {
@@ -57,10 +65,16 @@ export function AuthProvider({ children }) {
   const lastActivityRef = useRef(0);
   const lastActivityBroadcastRef = useRef(0);
   const activityResetRef = useRef(() => {});
+  const signOutPromiseRef = useRef(null);
   const channelRef = useRef(null);
   const sourceRef = useRef(null);
   const authCallbackHandledRef = useRef(false);
   const passwordRecoveryObservedRef = useRef(false);
+  const authenticatedUserIdRef = useRef(null);
+
+  useEffect(() => {
+    authenticatedUserIdRef.current = status === 'authenticated' && customer?.id ? customer.id : null;
+  }, [status, customer?.id]);
 
   useEffect(() => {
     sourceRef.current = createAuthSourceId();
@@ -123,7 +137,10 @@ export function AuthProvider({ children }) {
           ? authRedirect.type
           : '';
       if (acceptPasswordSetup(callbackType, session)) return;
-      if (event === 'SIGNED_OUT') setPasswordSetup(null);
+      if (event === 'SIGNED_OUT') {
+        clearPersistedSessionActivity(sessionActivityStorage(), authenticatedUserIdRef.current || session?.user?.id);
+        setPasswordSetup(null);
+      }
       // Defer the profile query until the auth callback has returned; this
       // avoids re-entering the Supabase client from inside its event loop.
       setTimeout(refreshSession, 0);
@@ -155,8 +172,11 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const applySignedOut = useCallback(({ expired = false, role = null } = {}) => {
+  const applySignedOut = useCallback(({ expired = false, role = null, userId = null } = {}) => {
     clearTimeout(idleTimerRef.current);
+    clearPersistedSessionActivity(sessionActivityStorage(), userId || authenticatedUserIdRef.current);
+    lastActivityRef.current = 0;
+    lastActivityBroadcastRef.current = 0;
     setCustomer(null);
     setStatus('guest');
     if (expired) {
@@ -172,11 +192,27 @@ export function AuthProvider({ children }) {
     const onMessage = (message) => {
       const payload = message?.data || message;
       if (!payload || payload.source === sourceRef.current) return;
-      if (payload.type === 'activity' && Number.isFinite(Number(payload.at))) {
-        lastActivityRef.current = Math.max(lastActivityRef.current, Number(payload.at));
+      if (payload.type === 'activity') {
+        const userId = authenticatedUserIdRef.current;
+        if (!userId || payload.userId !== userId) return;
+        const activityAt = parseSessionActivityPayload({
+          version: payload.version,
+          userId: payload.userId,
+          lastActivityAt: payload.lastActivityAt,
+        }, userId);
+        if (activityAt === null || activityAt <= lastActivityRef.current) return;
+        lastActivityRef.current = activityAt;
+        lastActivityBroadcastRef.current = Math.max(lastActivityBroadcastRef.current, activityAt);
+        writePersistedSessionActivity(sessionActivityStorage(), userId, activityAt);
         activityResetRef.current();
+        return;
       }
-      if (payload.type === 'signed_out') applySignedOut({ expired: payload.reason === 'expired', role: payload.role });
+      if (payload.type === 'signed_out') {
+        const activeUserId = authenticatedUserIdRef.current;
+        const userId = typeof payload.userId === 'string' ? payload.userId : activeUserId;
+        if (activeUserId && userId && activeUserId !== userId) return;
+        applySignedOut({ expired: payload.reason === 'expired', role: payload.role, userId });
+      }
     };
     if (typeof BroadcastChannel !== 'undefined') {
       channelRef.current = new BroadcastChannel('luxeglow-auth');
@@ -196,14 +232,25 @@ export function AuthProvider({ children }) {
   }, [applySignedOut]);
 
   const performSignOut = useCallback(async ({ expired = false } = {}) => {
+    if (signOutPromiseRef.current) return signOutPromiseRef.current;
     const role = customer?.role;
-    broadcast({ type: 'signed_out', reason: expired ? 'expired' : 'manual', role });
+    const userId = customer?.id || authenticatedUserIdRef.current;
+    clearPersistedSessionActivity(sessionActivityStorage(), userId);
+    broadcast({ type: 'signed_out', reason: expired ? 'expired' : 'manual', role, userId });
+    const signOutPromise = (async () => {
+      try {
+        await api.logoutCustomer(expired ? 'local' : 'global');
+      } finally {
+        applySignedOut({ expired, role, userId });
+      }
+    })();
+    signOutPromiseRef.current = signOutPromise;
     try {
-      await api.logoutCustomer();
+      await signOutPromise;
     } finally {
-      applySignedOut({ expired, role });
+      signOutPromiseRef.current = null;
     }
-  }, [customer?.role, broadcast, applySignedOut]);
+  }, [customer?.id, customer?.role, broadcast, applySignedOut]);
 
   /** Returns { ok, role, needsVerification } without throwing on bad credentials. */
   const login = useCallback(async (email, password) => {
@@ -283,12 +330,19 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => performSignOut(), [performSignOut]);
 
   useEffect(() => {
-    if (status !== 'authenticated' || !customer?.role) {
+    const userId = customer?.id;
+    if (status !== 'authenticated' || !customer?.role || !userId) {
       clearTimeout(idleTimerRef.current);
       return undefined;
     }
-    lastActivityRef.current = Date.now();
-    const timeoutMs = configuredIdleTimeout();
+    const timeoutMs = configuredIdleTimeout(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MINUTES);
+    const restored = restoreSessionActivity(sessionActivityStorage(), userId, timeoutMs);
+    lastActivityRef.current = restored.lastActivityAt;
+    lastActivityBroadcastRef.current = restored.lastActivityAt;
+    if (restored.status === 'expired') {
+      performSignOut({ expired: true });
+      return undefined;
+    }
     const schedule = () => {
       clearTimeout(idleTimerRef.current);
       const remaining = timeoutMs - (Date.now() - lastActivityRef.current);
@@ -299,12 +353,18 @@ export function AuthProvider({ children }) {
       idleTimerRef.current = setTimeout(schedule, Math.min(remaining, 60 * 1000));
     };
     const onActivity = () => {
-      lastActivityRef.current = Date.now();
+      const now = Date.now();
+      if (isSessionActivityExpired(lastActivityRef.current, now, timeoutMs)) {
+        performSignOut({ expired: true });
+        return;
+      }
+      lastActivityRef.current = now;
+      schedule();
       if (lastActivityRef.current - lastActivityBroadcastRef.current >= ACTIVITY_BROADCAST_INTERVAL_MS) {
         lastActivityBroadcastRef.current = lastActivityRef.current;
-        broadcast({ type: 'activity' });
+        writePersistedSessionActivity(sessionActivityStorage(), userId, lastActivityRef.current);
+        broadcast({ type: 'activity', version: SESSION_ACTIVITY_VERSION, userId, lastActivityAt: lastActivityRef.current });
       }
-      schedule();
     };
     activityResetRef.current = schedule;
     const events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
@@ -315,7 +375,7 @@ export function AuthProvider({ children }) {
       clearTimeout(idleTimerRef.current);
       activityResetRef.current = () => {};
     };
-  }, [status, customer?.role, broadcast, performSignOut]);
+  }, [status, customer?.id, customer?.role, broadcast, performSignOut]);
 
   const value = useMemo(
     () => ({

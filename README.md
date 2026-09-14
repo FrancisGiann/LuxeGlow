@@ -73,6 +73,9 @@ never use a `VITE_` prefix.
   throttling for direct callers.
 - Postgres triggers create notification rows/outbox jobs. The scheduled worker
   sends transactional mail and performs late pending cancellation/reminders.
+  Customer and staff dashboard loads also reconcile overdue pending bookings;
+  keep the scheduler configured for reminders and maintenance when nobody is
+  viewing a dashboard.
 
 For migration, password handling, timezone guarantees, scheduler setup,
 rollback, and the explicit legacy boundary, read
