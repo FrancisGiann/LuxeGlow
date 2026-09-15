@@ -18,7 +18,7 @@ function ServiceCard({ service, isStaff }) {
     <Card as="article" hoverable className="overflow-hidden rounded-2xl">
       <div className="grid min-h-[190px] grid-cols-[0.85fr_1.15fr]">
         <div className="relative overflow-hidden bg-blush-100">
-          {image ? <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-brand-300" aria-hidden="true"><IconSparkle size={26} /></div>}
+          {image ? <img src={image} alt={`${service.name} treatment`} loading="lazy" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-brand-300" aria-hidden="true"><IconSparkle size={26} /></div>}
         </div>
         <div className="flex flex-col justify-center p-5">
           <div className="flex items-start justify-between gap-3">
@@ -28,7 +28,7 @@ function ServiceCard({ service, isStaff }) {
           {service.description && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-500">{service.description}</p>}
           <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg font-semibold text-brand-800">₱{Number(service.price).toLocaleString('en-PH')}</span>
-            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>{isStaff ? <Link to="/admin" className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Staff workspace</Link> : <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book it</Link>}</span>
+            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>{isStaff ? <Link to="/admin" className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Staff workspace</Link> : <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book {service.name}</Link>}</span>
           </div>
         </div>
       </div>

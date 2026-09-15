@@ -14,6 +14,7 @@ import { NotificationsPage } from './pages/dashboard/NotificationsPage';
 import { ReviewsPage } from './pages/dashboard/ReviewsPage';
 import { ProfilePage } from './pages/dashboard/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
+import { RouteSeo } from './components/seo/RouteSeo';
 
 function RequireAuth({ children }) {
   const { status, customer } = useAuth();
@@ -57,6 +58,7 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <DashboardProvider>
+          <RouteSeo />
           <Routes>
             {/* Marketing site */}
             <Route element={<PublicLayout />}>

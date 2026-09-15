@@ -41,6 +41,7 @@ Set these Vercel build-environment variables for Preview and Production:
 | --- | --- | --- |
 | `VITE_SUPABASE_URL` | Browser-safe | Supabase Dashboard → Connect dialog → Project URL |
 | `VITE_SUPABASE_ANON_KEY` | Browser-safe | Supabase Dashboard → Settings → API Keys → Publishable key (or the legacy anon key) |
+| `VITE_SITE_URL` | Browser-safe | Verified production origin: `https://luxe-glow-astrid.vercel.app` (replace only if the public domain changes) |
 | `VITE_ASSET_BASE` | Browser-safe | `/` for a normal Vercel domain; use the deployed sub-path only when one is configured |
 | `VITE_ROUTER_BASE` | Browser-safe | `/` for a normal Vercel domain; it must match `VITE_ASSET_BASE` |
 | `VITE_SESSION_IDLE_TIMEOUT_MINUTES` | Browser-safe, optional | A bounded timeout in minutes; defaults to 30 when omitted |
@@ -48,6 +49,20 @@ Set these Vercel build-environment variables for Preview and Production:
 Only the `VITE_` values are bundled into the browser. The URL and publishable
 key are designed to be public and must still be protected by Supabase RLS;
 never put a service-role or other secret key in a `VITE_` variable.
+
+`VITE_SITE_URL` must be the real origin (scheme plus host, with no path) for
+the deployment that will be indexed. The build uses it for the canonical,
+Open Graph, structured-data, and sitemap URLs. If it is omitted, Vercel builds
+fall back to `VERCEL_PROJECT_PRODUCTION_URL` (or `VERCEL_URL`) when Vercel
+system environment variables are exposed; no placeholder origin is emitted.
+
+The SEO baseline is static and dependency-free: the build emits `robots.txt`,
+`sitemap.xml`, root metadata, and evidence-based BeautySalon JSON-LD, while the
+client updates titles, canonicals, social metadata, and `noindex` for each
+route. Because this is a client-rendered SPA, crawlers that do not execute
+JavaScript will only see the root document metadata; live services, reviews,
+and business details loaded from Supabase are not available for route-specific
+static indexing without SSR or prerendering.
 
 The Supabase Edge Functions remain an external deployment. Set their secrets
 with `supabase secrets set` (never in Vercel or tracked files):

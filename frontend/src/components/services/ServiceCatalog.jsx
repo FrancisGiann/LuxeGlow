@@ -105,7 +105,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle, showBoo
         <span className="whitespace-nowrap">{service.duration || '—'}</span>
       </span>
       <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>
-      {showBookAction && <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="order-4 inline-flex min-h-11 items-center rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50 sm:order-5">Book it</Link>}
+      {showBookAction && <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="order-4 inline-flex min-h-11 items-center rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50 sm:order-5">Book {service.name}</Link>}
     </div>
   );
 }
