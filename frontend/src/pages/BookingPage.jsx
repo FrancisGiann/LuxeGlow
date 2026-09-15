@@ -197,10 +197,10 @@ export function BookingPage() {
   const resetForm = () => { setSuccess(null); setSelectedIds([]); setSelectedStaffId(''); setDate(''); setTime(''); invalidateAvailability(); setFormError(''); };
   if (success) return <div className="mx-auto max-w-6xl"><BookingSuccess reference={success.reference} summary={success.summary} customer={success.customer} onBookAnother={resetForm} /></div>;
   const canSubmit = Boolean(selectedIds.length > 0 && date && hasAvailableSelectedTime && !slotsLoading && !submitting);
-  return <form onSubmit={submit} className="mx-auto max-w-[1240px]" noValidate>
+  return <form onSubmit={submit} className="mx-auto max-w-[1240px] px-5 py-8 sm:px-8 lg:px-14 lg:py-12" noValidate>
     <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
       <div><h1 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h1><p className="mt-2 text-sm text-ink-500">Choose a date and time first, then select services and an optional team preference. We’ll recheck availability as your choices change.</p>{!isAuthenticated && <p className="mt-3 max-w-[52ch] rounded-xl border border-gold-400 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900" role="status">You can explore availability as a guest. Sign in only when you are ready to submit; nothing is sent automatically.</p>}</div>
-      <Link to="/dashboard/appointments" className="text-sm font-bold text-brand-800 hover:text-brand-900">View my appointments</Link>
+      <Link to="/dashboard/appointments" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-surface px-5 text-sm font-bold text-ink-900 shadow-sm transition-colors hover:border-brand-300">View my appointments</Link>
     </div>
     <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-6">
@@ -218,6 +218,6 @@ export function BookingPage() {
       <div className="hidden lg:block"><Summary selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
     </div>
     <div className="mt-6 lg:hidden"><Summary compact selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
-    <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur-sm lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg" disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
+    <div className="sticky bottom-0 z-20 -mx-5 mt-6 border-t border-line bg-canvas/95 px-5 py-4 backdrop-blur-sm sm:-mx-8 sm:px-8 lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg" disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
   </form>;
 }
