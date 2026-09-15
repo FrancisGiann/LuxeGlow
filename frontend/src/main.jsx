@@ -6,8 +6,8 @@ import './styles/theme.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {/* basename keeps SPA routes working under the htdocs sub-folder
-        (VITE_ROUTER_BASE=/luxeglow in production; default '/' in dev) */}
+    {/* Set VITE_ROUTER_BASE when hosting the SPA under a sub-path; root hosting
+        uses '/' by default. */}
     <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASE || '/'}>
       <App />
     </BrowserRouter>

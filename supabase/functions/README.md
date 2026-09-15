@@ -9,6 +9,7 @@ supabase functions deploy reset-staff-password --no-verify-jwt
 supabase functions deploy upload-service-image --no-verify-jwt
 supabase functions deploy login-rate-limit --no-verify-jwt
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... RESEND_API_KEY=... \
+  MAIL_HOST=smtp.gmail.com MAIL_PORT=587 MAIL_USERNAME=... MAIL_PASSWORD=... \
   MAIL_FROM_ADDRESS=... MAIL_FROM_NAME="Astrid Nails & Beauty Bar" \
   CRON_SECRET_TOKEN=... ALLOWED_ORIGIN=https://your-site.example \
   APP_ROUTER_BASE=/ \

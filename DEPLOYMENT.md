@@ -22,6 +22,65 @@ is not part of deployment.
    notification worker schedule and cron header configured in the Supabase
    project.
 
+## Vercel setup
+
+Import the repository with the Root Directory left at the repository root.
+[`vercel.json`](vercel.json) already runs `npm ci` and `npm run build` from
+`frontend/`, publishes `frontend/dist`, and rewrites client-side routes to
+`index.html`. If a Vercel project is configured with `frontend` as its Root
+Directory instead, remove that override or use a separate frontend-only
+configuration; the root config is intended to own the project settings.
+
+The frontend build requires Node 22.12+ (declared in `frontend/package.json`).
+Vercel Node 22.x and 24.x both satisfy that requirement; do not select Node
+20.x or older because Vite 8 requires Node 22.12+.
+
+Set these Vercel build-environment variables for Preview and Production:
+
+| Variable | Scope | Where to obtain it |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | Browser-safe | Supabase Dashboard → Connect dialog → Project URL |
+| `VITE_SUPABASE_ANON_KEY` | Browser-safe | Supabase Dashboard → Settings → API Keys → Publishable key (or the legacy anon key) |
+| `VITE_ASSET_BASE` | Browser-safe | `/` for a normal Vercel domain; use the deployed sub-path only when one is configured |
+| `VITE_ROUTER_BASE` | Browser-safe | `/` for a normal Vercel domain; it must match `VITE_ASSET_BASE` |
+| `VITE_SESSION_IDLE_TIMEOUT_MINUTES` | Browser-safe, optional | A bounded timeout in minutes; defaults to 30 when omitted |
+
+Only the `VITE_` values are bundled into the browser. The URL and publishable
+key are designed to be public and must still be protected by Supabase RLS;
+never put a service-role or other secret key in a `VITE_` variable.
+
+The Supabase Edge Functions remain an external deployment. Set their secrets
+with `supabase secrets set` (never in Vercel or tracked files):
+
+- `SUPABASE_URL`: Supabase Dashboard → Connect dialog → Project URL.
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase Dashboard → Settings → API Keys →
+  secret service-role key. It is server-only.
+- `RESEND_API_KEY`: Resend Dashboard → API Keys. Used by
+  `reset-staff-password`.
+- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`: credentials and
+  SMTP endpoint supplied by the transactional mail provider for
+  `process-notifications`.
+- `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`: the verified sender configured with
+  that mail provider.
+- `CRON_SECRET_TOKEN`, `LOGIN_RATE_LIMIT_SECRET`: long random values generated
+  by the operator; the scheduler sends the former as `x-cron-token`.
+- `AUTH_PROXY_SECRET_KEY`: Supabase Dashboard → Settings → API Keys → create a
+  secret API key. It is the `sb_secret_...` key used only by
+  `login-rate-limit`.
+- `ALLOWED_ORIGIN`: the exact Vercel deployment origin, such as
+  `https://your-site.vercel.app`, with no path or trailing slash.
+- `APP_ROUTER_BASE`: `/` for this root-hosted deployment (or the matching
+  sub-path if the app is intentionally mounted below the domain root).
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`:
+  Cloudinary Console → Product Environment Settings → API Keys; all three are
+  server-only and the API secret must never reach the browser.
+
+`SUPABASE_DB_URL`, `SUPABASE_PDO_DSN`, `SUPABASE_DB_USER`, and
+`SUPABASE_DB_PASSWORD` are migration/import inputs only; obtain them from the
+Supabase Dashboard → Connect dialog database connection details and keep them
+on the migration operator's machine. `LEGACY_DB_*` values are one-time MariaDB
+exporter inputs and are not Vercel or Edge Function variables.
+
 ## Schedule and booking smoke checks
 
 After applying the migration, verify the staff Schedule tab can save a weekly

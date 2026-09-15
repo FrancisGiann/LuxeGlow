@@ -59,7 +59,7 @@ export function appointmentFilterPreset(kind, today = manilaDateKey(), appointme
   if (kind === 'pending') return { date: '', status: 'Pending', search: '' };
   if (kind === 'all') return { date: '', status: 'all', search: '' };
   if (kind === 'appointment') {
-    return { date: isValidLocalDate(appointment?.local_date) ? appointment.local_date : '', status: 'all', search: '' };
+    return { date: '', status: 'all', search: '' };
   }
   return { date: isValidLocalDate(today) ? today : manilaDateKey(), status: 'all', search: '' };
 }

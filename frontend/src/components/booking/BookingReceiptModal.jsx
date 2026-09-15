@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Button } from '../ui/Button';
 import { IconPrinter, IconX } from '../icons';
 import { formatLongDate, formatPeso, formatTime, toAppointmentDate } from '../../utils/format';
+import { Document, Page, Text, View, StyleSheet, PDFViewer } from '@react-pdf/renderer';
 
 const DEFAULT_SALON_NAME = 'Astrid Nails & Beauty Bar';
 
@@ -116,28 +117,94 @@ const normalizeReceipt = (receipt = {}) => {
   };
 };
 
-function ReceiptRow({ label, children, emphasized = false }) {
-  return (
-    <div className={`flex items-start justify-between gap-6 border-b border-line py-3 last:border-b-0 ${emphasized ? 'font-bold' : ''}`}>
-      <dt className="shrink-0 text-sm text-ink-500">{label}</dt>
-      <dd className={`min-w-0 text-right text-sm ${emphasized ? 'font-display text-lg text-brand-800' : 'font-semibold text-ink-900'}`}>
-        {children}
-      </dd>
-    </div>
-  );
-}
+const styles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica' },
+  header: { borderBottom: '2px solid #5a1846', paddingBottom: 10, marginBottom: 20 },
+  salonName: { fontSize: 24, color: '#5a1846', fontWeight: 'bold' },
+  subtitle: { fontSize: 10, color: '#999', marginTop: 4, textTransform: 'uppercase' },
+  title: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
+  sectionTitle: { fontSize: 10, color: '#999', textTransform: 'uppercase', marginBottom: 10, marginTop: 20 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', borderBottom: '1px solid #eee', paddingVertical: 8 },
+  rowLabel: { fontSize: 12, color: '#666' },
+  rowValue: { fontSize: 12, fontWeight: 'bold', color: '#111', width: '60%', textAlign: 'right' },
+  rowValueEmphasized: { fontSize: 16, fontWeight: 'bold', color: '#5a1846', width: '60%', textAlign: 'right' },
+  servicesBox: { border: '1px solid #eee', borderRadius: 4, padding: 10, marginTop: 10 },
+  serviceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  serviceName: { fontSize: 12, color: '#111' },
+  servicePrice: { fontSize: 12, color: '#333' },
+  note: { marginTop: 20, padding: 10, backgroundColor: '#fcf8e3', border: '1px solid #faebcc', borderRadius: 4, textAlign: 'center', fontSize: 10, color: '#8a6d3b' },
+  footer: { marginTop: 20, borderTop: '1px solid #eee', paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between' },
+  footerText: { fontSize: 9, color: '#666' },
+});
 
-/**
- * Shared booking confirmation preview used after booking and from completed visits.
- * The confirmation data is display-only: it intentionally contains no payment state.
- */
+const ReceiptDocument = ({ normalized, appointmentDate, appointmentTime, generatedAt, hidePrint }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      <View style={styles.header}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View>
+            <Text style={styles.salonName}>{normalized.salonName}</Text>
+            <Text style={styles.subtitle}>LuxeGlow Experience</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.title}>{hidePrint ? 'Booking Details' : 'Booking Confirmation'}</Text>
+            <Text style={{ fontSize: 10, color: '#666', marginTop: 4 }}>Appointment record</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <View style={{ width: '48%' }}>
+          <Text style={styles.sectionTitle}>Booking details</Text>
+          <View style={styles.row}><Text style={styles.rowLabel}>Booking reference</Text><Text style={styles.rowValue}>{normalized.reference || '—'}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Appointment date</Text><Text style={styles.rowValue}>{appointmentDate}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Appointment time</Text><Text style={styles.rowValue}>{appointmentTime}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Team member</Text><Text style={styles.rowValue}>{normalized.staffName}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Booking status</Text><Text style={styles.rowValue}>{normalized.status || '—'}</Text></View>
+        </View>
+        <View style={{ width: '48%' }}>
+          <Text style={styles.sectionTitle}>Customer</Text>
+          <View style={styles.row}><Text style={styles.rowLabel}>Name</Text><Text style={styles.rowValue}>{normalized.customerName}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Email</Text><Text style={styles.rowValue}>{normalized.email || '—'}</Text></View>
+          <View style={styles.row}><Text style={styles.rowLabel}>Phone</Text><Text style={styles.rowValue}>{normalized.phone || '—'}</Text></View>
+        </View>
+      </View>
+
+      <Text style={styles.sectionTitle}>Services</Text>
+      <View style={styles.servicesBox}>
+        {normalized.services.length > 0 ? (
+          normalized.services.map((service, index) => (
+            <View key={index} style={styles.serviceRow}>
+              <Text style={styles.serviceName}>{service.name}</Text>
+              {service.price !== null && <Text style={styles.servicePrice}>{formatPeso(service.price)}</Text>}
+            </View>
+          ))
+        ) : (
+          <Text style={styles.serviceName}>—</Text>
+        )}
+      </View>
+
+      <View style={{ ...styles.row, marginTop: 10, borderBottom: 'none' }}>
+        <Text style={styles.rowLabel}>Service total</Text>
+        <Text style={styles.rowValueEmphasized}>{normalized.serviceTotal === null ? '—' : formatPeso(normalized.serviceTotal)}</Text>
+      </View>
+
+      <Text style={styles.note}>Appointment record only — not proof of payment.</Text>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Booking created: {formatTimestamp(normalized.createdAt)}</Text>
+        {!hidePrint && <Text style={styles.footerText}>Generated: {formatTimestamp(generatedAt)}</Text>}
+      </View>
+    </Page>
+  </Document>
+);
+
 export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
   const titleId = useId();
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
   const [generatedAt] = useState(() => new Date());
-  const [printMessage, setPrintMessage] = useState('');
   const normalized = useMemo(() => normalizeReceipt(receipt), [receipt]);
 
   useEffect(() => {
@@ -165,19 +232,6 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
     };
   }, []);
 
-  const handlePrint = () => {
-    if (typeof window === 'undefined' || typeof window.print !== 'function') {
-      setPrintMessage('Printing is not available in this browser.');
-      return;
-    }
-
-    try {
-      window.print();
-    } catch {
-      setPrintMessage('Printing is not available in this browser.');
-    }
-  };
-
   const appointmentDate = formatAppointmentDate(
     normalized.appointmentDate,
     normalized.appointmentTime,
@@ -190,7 +244,7 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
   );
 
   return (
-    <div className="receipt-print-overlay fixed inset-0 z-[1150] flex items-start justify-center overflow-y-auto overscroll-contain bg-ink-900/75 px-4 py-6 backdrop-blur-md sm:items-center sm:px-6 sm:py-8" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div className="receipt-print-overlay fixed inset-0 z-[1150] flex items-start justify-center bg-ink-900/75 p-4 sm:p-8 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <button
         type="button"
         className="receipt-print-backdrop absolute inset-0 h-full w-full cursor-default border-0 bg-transparent"
@@ -198,95 +252,31 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
         aria-label="Close booking confirmation preview"
       />
 
-      <div className="receipt-print-content relative my-6 w-full max-w-2xl sm:my-8">
-        <div className="receipt-print-actions mb-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-white">{hidePrint ? 'Booking details' : 'Booking confirmation preview'}</p>
-          <div className="flex items-center gap-2">
-            {!hidePrint && <Button type="button" variant="on-dark" size="sm" onClick={handlePrint}>
-              <IconPrinter size={16} />
-              Print
-            </Button>}
-            <button
-              ref={closeButtonRef}
-              type="button"
-              onClick={() => onCloseRef.current?.()}
-              aria-label="Close booking confirmation preview"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20"
-            >
-              <IconX size={17} />
-            </button>
-          </div>
+      <div className="receipt-print-content relative flex h-full w-full max-w-4xl flex-col rounded-2xl bg-surface shadow-float">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3 sm:px-6">
+          <p className="font-semibold text-ink-900" id={titleId}>{hidePrint ? 'Booking details' : 'Booking confirmation preview'}</p>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={() => onCloseRef.current?.()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-500 hover:bg-canvas hover:text-ink-900"
+            aria-label="Close"
+          >
+            <IconX size={17} />
+          </button>
         </div>
-
-        <article className="receipt-print-document rounded-3xl border border-line bg-surface p-6 shadow-float sm:p-10">
-          <header className="flex flex-wrap items-start justify-between gap-5 border-b-2 border-brand-800 pb-6">
-            <div>
-              <p className="font-display text-2xl font-extrabold text-brand-800">{normalized.salonName}</p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-ink-400">LuxeGlow Experience</p>
-            </div>
-            <div className="text-left sm:text-right">
-              <h2 id={titleId} className="font-display text-2xl font-bold text-ink-900">{hidePrint ? 'Booking Details' : 'Booking Confirmation'}</h2>
-              <p className="mt-1 text-sm font-semibold text-ink-500">Appointment record</p>
-            </div>
-          </header>
-
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            <section aria-labelledby={`${titleId}-booking`}>
-              <h3 id={`${titleId}-booking`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Booking details</h3>
-              <dl className="mt-2">
-                <ReceiptRow label="Booking reference">{normalized.reference || '—'}</ReceiptRow>
-                <ReceiptRow label="Appointment date">{appointmentDate}</ReceiptRow>
-                <ReceiptRow label="Appointment time">{appointmentTime}</ReceiptRow>
-                <ReceiptRow label="Team member">{normalized.staffName}</ReceiptRow>
-                <ReceiptRow label="Booking status">{normalized.status || '—'}</ReceiptRow>
-              </dl>
-            </section>
-
-            <section aria-labelledby={`${titleId}-customer`}>
-              <h3 id={`${titleId}-customer`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Customer</h3>
-              <dl className="mt-2">
-                <ReceiptRow label="Name">{normalized.customerName}</ReceiptRow>
-                <ReceiptRow label="Email">{normalized.email || '—'}</ReceiptRow>
-                <ReceiptRow label="Phone">{normalized.phone || '—'}</ReceiptRow>
-              </dl>
-            </section>
-          </div>
-
-          <section className="mt-7" aria-labelledby={`${titleId}-services`}>
-            <h3 id={`${titleId}-services`} className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-ink-400">Services</h3>
-            <div className="mt-2 rounded-2xl border border-line">
-              {normalized.services.length > 0 ? (
-                <ul>
-                  {normalized.services.map((service, index) => (
-                    <li key={`${service.name}-${index}`} className="flex items-start justify-between gap-5 border-b border-line px-4 py-3 text-sm last:border-b-0">
-                      <span className="font-semibold text-ink-900">{service.name}</span>
-                      {service.price !== null && <span className="shrink-0 font-semibold text-ink-700">{formatPeso(service.price)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="px-4 py-3 text-sm text-ink-500">—</p>
-              )}
-            </div>
-          </section>
-
-          <dl className="mt-5 border-t-2 border-brand-800">
-            <ReceiptRow label="Service total" emphasized>
-              {normalized.serviceTotal === null ? '—' : formatPeso(normalized.serviceTotal)}
-            </ReceiptRow>
-          </dl>
-
-          <p className="receipt-payment-note mt-6 rounded-xl border border-gold-600 bg-gold-100 px-4 py-3 text-center text-sm font-bold text-ink-900">
-            Appointment record only — not proof of payment.
-          </p>
-
-          <footer className="mt-6 grid gap-1 border-t border-line pt-4 text-xs text-ink-500 sm:grid-cols-2">
-            <p>Booking created / issued: <span className="font-semibold text-ink-700">{formatTimestamp(normalized.createdAt)}</span></p>
-            {!hidePrint && <p className="sm:text-right">Generated / printed: <span className="font-semibold text-ink-700">{formatTimestamp(generatedAt)}</span></p>}
-          </footer>
-
-          {printMessage && <p className="receipt-print-actions mt-4 text-center text-xs font-medium text-danger" role="status">{printMessage}</p>}
-        </article>
+        
+        <div className="flex-1 overflow-hidden p-0">
+          <PDFViewer width="100%" height="100%" className="border-0">
+            <ReceiptDocument
+              normalized={normalized}
+              appointmentDate={appointmentDate}
+              appointmentTime={appointmentTime}
+              generatedAt={generatedAt}
+              hidePrint={hidePrint}
+            />
+          </PDFViewer>
+        </div>
       </div>
     </div>
   );
