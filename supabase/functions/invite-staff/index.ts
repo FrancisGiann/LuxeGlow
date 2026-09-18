@@ -35,11 +35,16 @@ Deno.serve(async (request) => {
   const email = String(input.email || '').trim().toLowerCase();
   const firstName = String(input.first_name || '').trim();
   const lastName = String(input.last_name || '').trim();
-  const role = input.role === 'admin' ? 'admin' : 'staff';
+  const role = input.role;
+  if (role !== 'head') return json({ error: 'Only head role invitations are allowed' }, 400);
+
+  const { data: existingHead } = await admin.from('profiles').select('id').eq('role', 'head').eq('is_active', true).limit(1).maybeSingle();
+  if (existingHead) return json({ error: 'A Head is already assigned. Remove the current Head before inviting a new one.' }, 400);
+
   if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || firstName.length > 100 || lastName.length > 100) return json({ error: 'Valid email and name are required' }, 400);
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) }, redirectTo: passwordSetupRedirect });
   if (inviteError || !invited.user) return json({ error: inviteError?.message || 'Could not invite staff member' }, 400);
-  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role, is_active: true, accepts_appointments: false, updated_at: new Date().toISOString() }).eq('id', invited.user.id);
+  const { error: profileError } = await admin.from('profiles').update({ email, first_name: firstName, last_name: lastName, phone: String(input.phone || '').slice(0, 50) || null, username: String(input.username || '').trim().slice(0, 100) || null, role: 'head', is_active: true, accepts_appointments: false, updated_at: new Date().toISOString() }).eq('id', invited.user.id);
   if (profileError) {
     // The Auth invite and profile role update are separate APIs. Remove the
     // just-created invite on a profile failure so a partial privileged account
