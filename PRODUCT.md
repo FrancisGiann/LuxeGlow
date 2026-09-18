@@ -9,8 +9,9 @@ web
 ## Users
 
 - Local customers in Lucena City booking nail, lash, spa, waxing, gentleman, or kiddie treatments for themselves or family members.
-- Salon staff and front-desk operators managing appointments, customer records, services, business information, and published content.
-- Salon administrators managing staff access and the same operational workspace.
+- A Head user managing appointments and customer interactions.
+- Salon administrators (owners) managing everything, including team access, services, hours, and content.
+- Staff members are roster-only profiles for the booking menu (no accounts).
 
 ## Product Purpose
 
@@ -27,8 +28,8 @@ An exact competitive or commercial positioning statement remains open and must n
 ## Operating Context
 
 - Customers browse services, open a service-led `/book?service=<id>` flow, keep a session-scoped guest draft, authenticate at the final submit action, select treatments and an optional staff preference, choose an available date and 30-minute time slot, submit a pending appointment, receive notifications, review appointment history, print appointment records, and review completed visits. Authentication never submits a saved draft automatically.
-- Staff update appointment status, reschedule appointments, manage active services and images, inspect customer history, edit FAQs and business information, and manage weekly hours and full-day closure dates.
-- Administrators can additionally invite staff, change staff roles or activation, and initiate staff password recovery.
+- Head users update appointment status, reschedule appointments, and inspect customer history.
+- Administrators manage everything, including services, hours, website content, and team access. Administrators can manage the passive staff roster and assign the Head role.
 - Appointment scheduling uses Asia/Manila time and currently allows dates up to 60 days ahead.
 - The seeded weekly schedule is Monday–Saturday 10:00–20:00 and Sunday 11:00–18:00 until staff edit it. Each day has one continuous interval; full-day closures are separate exceptions. A booking may end exactly at closing, but never after it.
 - “No preference” is the default staff choice. Anonymous availability exposes only aggregate open/unavailable slots; authenticated booking creation assigns deterministically under a date lock by fewest booked minutes, then booking count, then stable staff id, and returns the actual assignment.

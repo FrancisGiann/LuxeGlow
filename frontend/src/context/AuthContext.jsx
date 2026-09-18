@@ -30,7 +30,7 @@ function sessionActivityStorage() {
 }
 
 function isStaffRole(role) {
-  return role === 'staff' || role === 'admin';
+  return role === 'head' || role === 'admin';
 }
 
 function createAuthSourceId() {

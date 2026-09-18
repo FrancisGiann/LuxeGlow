@@ -20,7 +20,7 @@ function RequireAuth({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
-  if (['staff', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  if (['head', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
   if (customer?.role !== 'customer') return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
@@ -30,14 +30,14 @@ function RequireStaff({ children }) {
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
   if (customer?.role === 'customer') return <Navigate to="/dashboard/overview" replace />;
-  if (!['staff', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
+  if (!['head', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
 
 function RequireBookingAccess({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
-  if (status === 'authenticated' && ['staff', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  if (status === 'authenticated' && ['head', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
   return children;
 }
 
