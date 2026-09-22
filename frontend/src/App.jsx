@@ -15,12 +15,13 @@ import { ReviewsPage } from './pages/dashboard/ReviewsPage';
 import { ProfilePage } from './pages/dashboard/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 import { RouteSeo } from './components/seo/RouteSeo';
+import { isStaffRole } from './utils/roles';
 
 function RequireAuth({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
-  if (['head', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  if (isStaffRole(customer?.role)) return <Navigate to="/admin" replace />;
   if (customer?.role !== 'customer') return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
@@ -30,14 +31,14 @@ function RequireStaff({ children }) {
   if (status === 'loading') return <PageLoader />;
   if (status === 'guest') return <Navigate to="/?openAuth=login" replace />;
   if (customer?.role === 'customer') return <Navigate to="/dashboard/overview" replace />;
-  if (!['head', 'admin'].includes(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
+  if (!isStaffRole(customer?.role) || customer?.is_active === false) return <Navigate to="/?openAuth=login" replace />;
   return children;
 }
 
 function RequireBookingAccess({ children }) {
   const { status, customer } = useAuth();
   if (status === 'loading') return <PageLoader />;
-  if (status === 'authenticated' && ['head', 'admin'].includes(customer?.role)) return <Navigate to="/admin" replace />;
+  if (status === 'authenticated' && isStaffRole(customer?.role)) return <Navigate to="/admin" replace />;
   return children;
 }
 

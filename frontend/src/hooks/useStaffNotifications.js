@@ -3,14 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { listAdminNotifications, markAdminNotificationRead, markAllAdminNotificationsRead } from '../api/admin';
 import { supabase } from '../lib/supabase';
 import { mergeStaffNotifications } from '../utils/staffNotifications';
+import { isStaffRole } from '../utils/roles';
 
-const STAFF_ROLES = new Set(['staff', 'admin']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isActiveStaff(customer, status) {
   return status === 'authenticated'
     && customer?.is_active === true
-    && STAFF_ROLES.has(customer?.role)
+    && isStaffRole(customer?.role)
     && UUID_PATTERN.test(String(customer?.id || ''));
 }
 

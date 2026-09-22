@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { isStaffRole } from '../../utils/roles';
 import { IconMapPin } from '../icons';
 
 const heroAsset = (name) => `${import.meta.env.BASE_URL}${name}`;
@@ -7,7 +8,7 @@ const heroAsset = (name) => `${import.meta.env.BASE_URL}${name}`;
 export function Hero() {
   const navigate = useNavigate();
   const { customer } = useAuth();
-  const isStaff = ['staff', 'admin'].includes(customer?.role);
+  const isStaff = isStaffRole(customer?.role);
 
   const book = () => navigate(isStaff ? '/admin' : '/book');
 

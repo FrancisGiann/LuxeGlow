@@ -5,6 +5,7 @@ import { getAbout } from '../../api/endpoints';
 import { useFetch } from '../../hooks/useFetch';
 import { AuthModal } from '../auth/AuthModal';
 import { getInitials } from '../../utils/format';
+import { isStaffRole } from '../../utils/roles';
 import { IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
 
 const NAV_LINKS = [
@@ -29,7 +30,7 @@ function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const isStaff = ['staff', 'admin'].includes(customer?.role);
+  const isStaff = isStaffRole(customer?.role);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -147,7 +148,7 @@ export function PublicLayout() {
     } catch {
       return;
     }
-    if (returnPath === '/book' && ['staff', 'admin'].includes(customer?.role)) navigate('/admin', { replace: true });
+    if (returnPath === '/book' && isStaffRole(customer?.role)) navigate('/admin', { replace: true });
     else if (returnPath === '/book' && location.pathname !== '/book') navigate('/book', { replace: true });
   }, [customer?.role, location.pathname, navigate, status]);
 

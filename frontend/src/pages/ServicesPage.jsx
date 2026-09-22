@@ -4,11 +4,12 @@ import { useFetch } from '../hooks/useFetch';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { ServiceCatalog } from '../components/services/ServiceCatalog';
+import { isStaffRole } from '../utils/roles';
 
 export function ServicesPage() {
   const navigate = useNavigate();
   const { customer } = useAuth();
-  const isStaff = ['staff', 'admin'].includes(customer?.role);
+  const isStaff = isStaffRole(customer?.role);
   const { data: services, loading, error, reload } = useFetch(getServices);
 
   const book = () => navigate(isStaff ? '/admin' : '/book');

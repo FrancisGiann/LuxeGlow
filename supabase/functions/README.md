@@ -73,13 +73,13 @@ Do not place the service key or cron secret in the browser. `invite-staff`
 requires a caller bearer token and checks the caller's `profiles.role = admin`
 using the service client before calling `auth.admin.inviteUserByEmail`.
 Invite links intentionally create passwordless users; the recipient is sent to
-the configured `/reset-password` route to choose a password. New staff accounts
+the configured `/reset-password` route to choose a password. New head accounts
 remain unavailable for appointments until an administrator enables them after
 the recipient accepts the invitation.
 `reset-staff-password` uses the same admin check, sends a one-time Auth recovery
 link through Resend for confirmed accounts (or an invitation link for an
 unconfirmed account), and never returns a password or reset token to the browser.
-`upload-service-image` requires an active staff/admin profile, accepts only
+`upload-service-image` requires an active head/admin profile, accepts only
 JPEG/PNG/WebP multipart uploads up to 5 MB, uploads to Cloudinary under the
 `luxeglow/services/{service_id}/` prefix, then stores Cloudinary's `secure_url`
 in `services.image_path` and its `public_id` in `services.image_public_id`.

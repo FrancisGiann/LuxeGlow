@@ -26,7 +26,7 @@ Deno.serve(async (request) => {
   const userId = String(input.user_id || '');
   if (!/^[0-9a-f-]{36}$/i.test(userId)) return json({ error: 'Invalid staff account' }, 400);
   const { data: target } = await admin.from('profiles').select('email,first_name,role,is_active').eq('id', userId).single();
-  if (!target || !['staff', 'admin'].includes(target.role)) return json({ error: 'Staff account not found' }, 404);
+  if (!target || !['head', 'admin'].includes(target.role)) return json({ error: 'Staff account not found' }, 404);
   const { data: authTarget, error: authTargetError } = await admin.auth.admin.getUserById(userId);
   if (authTargetError || !authTarget?.user) return json({ error: 'Staff account not found' }, 404);
   const targetEmail = String(authTarget.user.email || target.email || '').trim().toLowerCase();

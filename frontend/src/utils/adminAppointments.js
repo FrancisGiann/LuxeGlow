@@ -52,7 +52,7 @@ function localTimeSeconds(value) {
 }
 
 export function initialAdminTab(role) {
-  return role === 'staff' ? 'appointments' : 'overview';
+  return role === 'head' ? 'appointments' : 'overview';
 }
 
 export function appointmentFilterPreset(kind, today = manilaDateKey(), appointment = null) {

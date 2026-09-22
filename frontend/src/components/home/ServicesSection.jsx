@@ -6,6 +6,7 @@ import { Card, SectionHeading } from '../ui/Card';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
 import { IconAlertCircle, IconClock, IconSparkle, IconStar } from '../icons';
 import { curateHomepageServices } from '../../utils/services';
+import { isStaffRole } from '../../utils/roles';
 import { serviceImageUrl } from '../../utils/serviceImages';
 
 function previewImage(service) {
@@ -38,7 +39,7 @@ function ServiceCard({ service, isStaff }) {
 
 export function ServicesSection() {
   const { customer } = useAuth();
-  const isStaff = ['staff', 'admin'].includes(customer?.role);
+  const isStaff = isStaffRole(customer?.role);
   const { data: services, loading, error, reload } = useFetch(getServices);
   const curated = services ? curateHomepageServices(services, 6) : [];
 

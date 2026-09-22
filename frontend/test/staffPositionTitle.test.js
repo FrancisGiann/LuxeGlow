@@ -57,7 +57,8 @@ test('admin API validates title writes and both API surfaces map the nullable ti
   assert.match(adminApi, /position_title,username,role/);
   assert.match(adminApi, /fields\.position_title !== undefined/);
   assert.match(adminApi, /isStaffPositionTitleWithinLimit\(positionTitle\)/);
-  assert.match(adminApi, /caller\.role !== 'admin'/);
+  assert.match(adminApi, /async function assertAdmin\(\)[\s\S]*?profile\.role !== 'admin'/);
+  assert.match(adminApi, /const client = await assertAdmin\(\)/);
   assert.match(adminApi, /select\('position_title'\)\.maybeSingle\(\)/);
   assert.match(adminApi, /position_title: isStaffPositionTitleWithinLimit\(savedTitle\) \? savedTitle : null/);
   assert.match(endpoints, /position_title: isStaffPositionTitleWithinLimit\(positionTitle\) \? positionTitle : null/);

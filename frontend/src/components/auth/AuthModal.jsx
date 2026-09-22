@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
+import { isStaffRole } from '../../utils/roles';
 
 const VIEWS = {
   login: 'Log in',
@@ -103,7 +104,7 @@ export function AuthModal() {
     try {
       const res = await login(f.get('email'), f.get('password'));
       if (res.ok) {
-        if (res.role === 'staff' || res.role === 'admin') {
+        if (isStaffRole(res.role)) {
           toast('Welcome back, staff!', 'success');
           navigate('/admin', { replace: true });
         } else {

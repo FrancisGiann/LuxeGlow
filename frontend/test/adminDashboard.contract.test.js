@@ -14,7 +14,7 @@ const scheduleSettings = read('frontend/src/components/admin/ScheduleSettings.js
 
 test('staff and administrators land in their role-appropriate dashboard section', () => {
   assert.match(adminUtilities, /export function initialAdminTab\(role\)/);
-  assert.match(adminUtilities, /return role === 'staff' \? 'appointments' : 'overview';/);
+  assert.match(adminUtilities, /return role === 'head' \? 'appointments' : 'overview';/);
   assert.match(adminPage, /useState\(\(\) => initialAdminTab\(customer\?\.role\)\)/);
 });
 

@@ -2,6 +2,7 @@ import { publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import { passwordResetPath } from '../utils/authRedirect';
+import { isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 
 const asError = (error, fallback = 'Request failed.') => {
@@ -96,7 +97,7 @@ export async function checkSession() {
   if (!user) return { loggedIn: false, customer: null };
   const { data: profile, error } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error) throw asError(error, 'Could not load your profile.');
-  if (!profile || !['customer', 'staff', 'admin'].includes(profile.role) || profile.is_active !== true) {
+  if (!profile || !isSupportedProfileRole(profile.role) || profile.is_active !== true) {
     await client.auth.signOut().catch(() => {});
     return { loggedIn: false, customer: null };
   }
@@ -110,7 +111,7 @@ export async function loginUnified(email, password) {
   const gateway = await loginThroughGateway('customer', normalizedEmail, password);
   if (!gateway.success) return gateway;
   const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', gateway.user.id).maybeSingle();
-  if (profileError || !profile || profile.is_active !== true || !['customer', 'staff', 'admin'].includes(profile.role)) {
+  if (profileError || !profile || profile.is_active !== true || !isSupportedProfileRole(profile.role)) {
     await client.auth.signOut().catch(() => {});
     return { success: false, error: 'Unable to sign in right now. Please try again later.' };
   }

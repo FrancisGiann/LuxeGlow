@@ -101,7 +101,7 @@ Deno.serve(async (request) => {
     .eq('id', caller.user.id)
     .maybeSingle();
   if (profileError) return json({ error: 'Could not verify staff access' }, 500);
-  if (!callerProfile?.is_active || !['staff', 'admin'].includes(callerProfile.role)) return json({ error: 'Staff access required' }, 403);
+  if (!callerProfile?.is_active || !['head', 'admin'].includes(callerProfile.role)) return json({ error: 'Staff access required' }, 403);
 
   let formData: FormData;
   try {

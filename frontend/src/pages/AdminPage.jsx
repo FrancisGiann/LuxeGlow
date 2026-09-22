@@ -16,6 +16,7 @@ import { AdminDialog } from "../components/admin/AdminDialog";
 import { StaffNotificationBell } from "../components/admin/StaffNotificationBell";
 import { ScheduleSettings } from "../components/admin/ScheduleSettings";
 import { formatPeso } from "../utils/format";
+import { isStaffRole } from "../utils/roles";
 import {
   curateHomepageServices,
   supportsHomepageCuration,
@@ -425,7 +426,7 @@ function staffDisplayName(profile) {
 function isBookableStaff(profile) {
   return Boolean(
     profile?.is_active &&
-    ["staff", "admin"].includes(profile?.role) &&
+    isStaffRole(profile?.role) &&
     profile?.accepts_appointments,
   );
 }
@@ -1445,7 +1446,7 @@ function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
   if (
     !canManage ||
     !staffMember ||
-    !["staff", "admin"].includes(staffMember.role)
+    !isStaffRole(staffMember.role)
   )
     return null;
 
@@ -2061,7 +2062,7 @@ export function AdminPage() {
     email: "",
     first_name: "",
     last_name: "",
-    role: "staff",
+    role: "head",
   });
   const [aboutForm, setAboutForm] = useState({});
   const [customerSearch, setCustomerSearch] = useState("");
@@ -2175,7 +2176,7 @@ export function AdminPage() {
       );
       const nextStaff = nextProfiles.filter(
         (profile) =>
-          ["head", "admin"].includes(profile.role) ||
+          isStaffRole(profile.role) ||
           (profile.role === "customer" &&
             !profile.is_active &&
             profile.accepts_appointments),
@@ -2432,7 +2433,7 @@ export function AdminPage() {
     }
   };
   const resetInviteForm = () =>
-    setInviteForm({ email: "", first_name: "", last_name: "", role: "staff" });
+    setInviteForm({ email: "", first_name: "", last_name: "", role: "head" });
   const openInvite = () => {
     setInviteDialogError("");
     setInviteDialogOpen(true);
@@ -2598,15 +2599,15 @@ export function AdminPage() {
     let nextAction = null;
     if (
       action.type === "role" &&
-      ["staff", "admin"].includes(action.nextRole) &&
+      isStaffRole(action.nextRole) &&
       action.nextRole !== selectedStaff.role
     ) {
       nextAction = {
         type: "role",
         fields: { role: action.nextRole },
-        title: `Change ${name} to ${action.nextRole === "admin" ? "admin" : "staff"}?`,
+        title: `Change ${name} to ${action.nextRole === "admin" ? "admin" : "head"}?`,
         description: `This changes the account role after confirmation. The selector will keep ${selectedStaff.role} until the update succeeds.`,
-        confirmLabel: `Change to ${action.nextRole === "admin" ? "admin" : "staff"}`,
+        confirmLabel: `Change to ${action.nextRole === "admin" ? "admin" : "head"}`,
         variant: "primary",
       };
     } else if (action.type === "appointments") {
@@ -3756,7 +3757,7 @@ export function AdminPage() {
               }
               className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
-              <option value="staff">Staff</option>
+              <option value="head">Head</option>
               <option value="admin">Admin</option>
             </select>
           </label>

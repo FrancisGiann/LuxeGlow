@@ -30,14 +30,14 @@ test('business info submit stays compact while retaining the shared button touch
 test('staff and admin roles are kept out of every public booking entry point', () => {
   assert.match(app, /function RequireBookingAccess/);
   assert.match(app, /if \(status === 'loading'\) return <PageLoader \/>/);
-  assert.match(app, /status === 'authenticated' && \['staff', 'admin'\]\.includes\(customer\?\.role\)/);
+  assert.match(app, /status === 'authenticated' && isStaffRole\(customer\?\.role\)/);
   assert.match(app, /path="\/book" element={<RequireBookingAccess><BookingPage \/><\/RequireBookingAccess>}/);
   assert.match(hero, /navigate\(isStaff \? '\/admin' : '\/book'\)/);
   assert.match(servicesSection, /isStaff \? <Link to="\/admin"/);
   assert.match(servicesPage, /showBookActions={!isStaff}/);
   assert.match(servicesPage, /navigate\(isStaff \? '\/admin' : '\/book'\)/);
   assert.match(publicLayout, /!isStaff && <button type="button" onClick=\{\(\) => navigate\('\/book'\)/);
-  assert.match(publicLayout, /\['staff', 'admin'\]\.includes\(customer\?\.role\).*navigate\('\/admin'/s);
+  assert.match(publicLayout, /isStaffRole\(customer\?\.role\).*navigate\('\/admin'/s);
 });
 
 test('No preference uses the nullable RPC contract and always reloads aggregate availability', () => {

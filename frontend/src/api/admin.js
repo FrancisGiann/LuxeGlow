@@ -2,9 +2,9 @@ import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
 import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
 import { normalizeStaffNotification, STAFF_NOTIFICATION_LIMIT } from '../utils/staffNotifications';
+import { isStaffRole, isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 
-const STAFF_ROLES = ['staff', 'admin'];
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
 function isMissingHomepageCurationError(error) {
@@ -38,7 +38,7 @@ async function assertStaff() {
   const { data: auth, error } = await client.auth.getUser();
   if (error || !auth.user) throw new Error('Staff authentication required.');
   const profile = throwIfError(await client.from('profiles').select('role,is_active').eq('id', auth.user.id).single(), 'Could not verify staff access.');
-  if (!profile.is_active || !STAFF_ROLES.includes(profile.role)) throw new Error('Staff access required.');
+  if (!profile.is_active || !isStaffRole(profile.role)) throw new Error('Staff access required.');
   return client;
 }
 
@@ -47,8 +47,17 @@ async function assertStaffIdentity() {
   const { data: auth, error } = await client.auth.getUser();
   if (error || !auth.user) throw new Error('Staff authentication required.');
   const profile = throwIfError(await client.from('profiles').select('role,is_active').eq('id', auth.user.id).single(), 'Could not verify staff access.');
-  if (!profile.is_active || !STAFF_ROLES.includes(profile.role)) throw new Error('Staff access required.');
+  if (!profile.is_active || !isStaffRole(profile.role)) throw new Error('Staff access required.');
   return { client, userId: auth.user.id };
+}
+
+async function assertAdmin() {
+  const client = requireSupabase();
+  const { data: auth, error } = await client.auth.getUser();
+  if (error || !auth.user) throw new Error('Administrator authentication required.');
+  const profile = throwIfError(await client.from('profiles').select('role,is_active').eq('id', auth.user.id).single(), 'Could not verify administrator access.');
+  if (!profile.is_active || profile.role !== 'admin') throw new Error('Administrator access required.');
+  return client;
 }
 
 export async function listAdminAppointments() {
@@ -154,18 +163,14 @@ export async function updateAdminProfile(id, fields) {
   if (fields.last_name !== undefined) patch.last_name = String(fields.last_name).trim().slice(0, 100);
   if (fields.phone !== undefined) patch.phone = String(fields.phone).trim().slice(0, 50) || null;
   if (fields.role !== undefined) {
-    if (!['customer', 'staff', 'admin'].includes(fields.role)) return { success: false, error: 'Invalid role.' };
+    if (!isSupportedProfileRole(fields.role)) return { success: false, error: 'Invalid role.' };
     patch.role = fields.role;
   }
   if (fields.is_active !== undefined) patch.is_active = !!fields.is_active;
   if (fields.accepts_appointments !== undefined) patch.accepts_appointments = !!fields.accepts_appointments;
   if (!Object.keys(patch).length) return { success: false, error: 'No account changes supplied.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   if (patch.position_title !== undefined) {
-    const { data: auth, error: authError } = await client.auth.getUser();
-    if (authError || !auth.user) return { success: false, error: 'Administrator access required.' };
-    const caller = throwIfError(await client.from('profiles').select('role').eq('id', auth.user.id).single(), 'Could not verify administrator access.');
-    if (caller.role !== 'admin') return { success: false, error: 'Administrator access required.' };
     const result = await client.from('profiles').update(patch).eq('id', id).select('position_title').maybeSingle();
     const saved = throwIfError(result, 'Could not update account.');
     if (!saved) return { success: false, error: 'Staff account not found.' };
