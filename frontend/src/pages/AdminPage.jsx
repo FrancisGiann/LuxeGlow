@@ -17,6 +17,7 @@ import { StaffNotificationBell } from "../components/admin/StaffNotificationBell
 import { ScheduleSettings } from "../components/admin/ScheduleSettings";
 import { formatPeso } from "../utils/format";
 import { isStaffRole } from "../utils/roles";
+import { getHeadInviteState } from "../utils/staffInvitations";
 import {
   curateHomepageServices,
   supportsHomepageCuration,
@@ -2114,6 +2115,10 @@ export function AdminPage() {
     () => getAdminAppointmentQueue(appointments, appointmentFilters),
     [appointments, appointmentFilters],
   );
+  const { disabled: inviteRoleDisabled } = getHeadInviteState(
+    inviteForm.role,
+    staff,
+  );
   useEffect(() => {
     if (
       selectedAppointment &&
@@ -3758,7 +3763,6 @@ export function AdminPage() {
               className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="head">Head</option>
-              <option value="admin">Admin</option>
             </select>
           </label>
           <div className="flex flex-wrap justify-end gap-2">
@@ -3771,8 +3775,8 @@ export function AdminPage() {
             >
               Cancel
             </Button>
-            <Button type="submit" className="min-h-11" loading={inviteBusy} disabled={hasActiveHead}>
-              {hasActiveHead ? "A Head is already assigned" : inviteBusy ? "Sending invitation…" : "Send invitation"}
+            <Button type="submit" className="min-h-11" loading={inviteBusy} disabled={inviteRoleDisabled}>
+              {inviteRoleDisabled ? "A Head is already assigned" : inviteBusy ? "Sending invitation…" : "Send invitation"}
             </Button>
           </div>
         </form>
