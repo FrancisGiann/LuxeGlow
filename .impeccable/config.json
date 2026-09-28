@@ -1,3 +1,15 @@
 {
-  "buildPath": "code"
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-09-28T12:50:10.576Z",
+        "reason": "Agent: Arial is an intentional email-client-safe body-text fallback; Georgia provides the branded headings, and external font loading is unreliable in email clients"
+      }
+    ]
+  }
 }
