@@ -9,7 +9,7 @@ supabase functions deploy reset-staff-password --no-verify-jwt
 supabase functions deploy upload-service-image --no-verify-jwt
 supabase functions deploy login-rate-limit --no-verify-jwt
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... RESEND_API_KEY=... \
-  MAIL_HOST=smtp.gmail.com MAIL_PORT=587 MAIL_USERNAME=... MAIL_PASSWORD=... \
+  MAIL_HOST=smtp.gmail.com MAIL_PORT=465 MAIL_USERNAME=... MAIL_PASSWORD=... \
   MAIL_FROM_ADDRESS=... MAIL_FROM_NAME="Astrid Nails & Beauty Bar" \
   CRON_SECRET_TOKEN=... ALLOWED_ORIGIN=https://your-site.example \
   APP_ROUTER_BASE=/ \
@@ -59,10 +59,26 @@ template redirect with a hardcoded Site URL: the token must reach the exact
 registered `/reset-password` URL above. The staff recovery function sends its
 own generated `action_link`, which follows the same redirect configuration.
 
-`process-notifications` deliberately authenticates its own random
-`x-cron-token`, because a scheduler does not have a customer JWT. Schedule a
-POST every minute through Supabase's scheduler/`pg_cron`, GitHub Actions,
-Cloudflare Cron or an equivalent secret-aware scheduler:
+`process-notifications` sends booking and account notification emails over
+SMTP with implicit TLS on port 465. Set `MAIL_HOST`, `MAIL_PORT=465`,
+`MAIL_USERNAME`, and `MAIL_PASSWORD` in Edge Function secrets. For Gmail, use
+`smtp.gmail.com` and an App Password. The worker rejects other ports because
+Supabase Edge Functions cannot use the standard SMTP ports 25 and 587. Set
+`MAIL_FROM_ADDRESS` to the authenticated Gmail address or a sender alias
+configured in that account; if omitted, it defaults to `MAIL_USERNAME`.
+`RESEND_API_KEY` remains required only by `reset-staff-password`.
+
+The worker deliberately authenticates its own random `x-cron-token`, because a
+scheduler does not have a customer JWT. For the hosted Supabase scheduler,
+create two secrets in Supabase Vault named `notification_worker_project_url`
+(the project URL) and `notification_worker_cron_token` (the same value as the
+Edge Function's `CRON_SECRET_TOKEN`). Run
+[`../database/supabase/schedule_notification_worker.sql`](../../database/supabase/schedule_notification_worker.sql)
+in the Supabase SQL Editor; it enables `pg_cron`, `pg_net`, and Vault, then
+installs or replaces a once-per-minute job. The script contains no credentials.
+The token must match the Edge Function secret exactly.
+You can also use GitHub Actions, Cloudflare Cron, or another secret-aware
+scheduler. To smoke-test the deployed worker manually:
 
 ```sh
 curl -fsS -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/process-notifications \

@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState, useId } from 'react';
-import { Button } from '../ui/Button';
-import { IconPrinter, IconX } from '../icons';
+import { IconX } from '../icons';
 import { formatLongDate, formatPeso, formatTime, toAppointmentDate } from '../../utils/format';
-import { Document, Page, Text, View, StyleSheet, PDFViewer } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, PDFViewer, Font } from '@react-pdf/renderer';
+import notoSansRegular from '../../assets/fonts/NotoSans-Regular.ttf';
+import notoSansBold from '../../assets/fonts/NotoSans-Bold.ttf';
 
 const DEFAULT_SALON_NAME = 'Astrid Nails & Beauty Bar';
+const RECEIPT_FONT = 'ReceiptSans';
+
+Font.register({
+  family: RECEIPT_FONT,
+  fonts: [
+    { src: notoSansRegular, fontWeight: 400 },
+    { src: notoSansBold, fontWeight: 700 },
+  ],
+});
 
 const textValue = (value) => {
   if (value === null || value === undefined) return '';
@@ -69,6 +79,19 @@ const formatTimestamp = (value) => {
   return `${formatLongDate(date)} · ${formatTime(date)}`;
 };
 
+const emailFontSize = (email) => {
+  if (!email) return 12;
+
+  const estimatedWidthInEm = Array.from(email).reduce((width, character) => {
+    if (/[ilI.,:;!'|]/.test(character)) return width + 0.3;
+    if (/[MW@%&]/.test(character)) return width + 0.9;
+    if (/[A-Z]/.test(character)) return width + 0.7;
+    return width + 0.55;
+  }, 0);
+
+  return Math.max(6, Math.min(12, 390 / estimatedWidthInEm));
+};
+
 const normalizeServices = (value) => {
   if (Array.isArray(value)) {
     return value
@@ -118,20 +141,22 @@ const normalizeReceipt = (receipt = {}) => {
 };
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: 'Helvetica' },
+  page: { padding: 40, fontFamily: RECEIPT_FONT },
   header: { borderBottom: '2px solid #5a1846', paddingBottom: 10, marginBottom: 20 },
   salonName: { fontSize: 24, color: '#5a1846', fontWeight: 'bold' },
-  subtitle: { fontSize: 10, color: '#999', marginTop: 4, textTransform: 'uppercase' },
+  subtitle: { fontSize: 10, color: '#737373', marginTop: 4, textTransform: 'uppercase' },
   title: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
-  sectionTitle: { fontSize: 10, color: '#999', textTransform: 'uppercase', marginBottom: 10, marginTop: 20 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', borderBottom: '1px solid #eee', paddingVertical: 8 },
-  rowLabel: { fontSize: 12, color: '#666' },
-  rowValue: { fontSize: 12, fontWeight: 'bold', color: '#111', width: '60%', textAlign: 'right' },
-  rowValueEmphasized: { fontSize: 16, fontWeight: 'bold', color: '#5a1846', width: '60%', textAlign: 'right' },
+  sectionTitle: { fontSize: 10, color: '#737373', textTransform: 'uppercase', marginBottom: 10, marginTop: 20 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #eee', paddingVertical: 8 },
+  rowLabel: { fontSize: 12, color: '#666', width: '22%' },
+  rowValue: { fontSize: 12, fontWeight: 'bold', color: '#111', width: '76%', flexShrink: 1, textAlign: 'right' },
+  emailLabel: { fontSize: 12, color: '#666', width: '12%' },
+  emailValue: { color: '#111', fontWeight: 'bold', width: '86%', flexShrink: 1, textAlign: 'left' },
+  rowValueEmphasized: { fontSize: 16, fontWeight: 'bold', color: '#5a1846', width: '76%', textAlign: 'right' },
   servicesBox: { border: '1px solid #eee', borderRadius: 4, padding: 10, marginTop: 10 },
-  serviceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  serviceName: { fontSize: 12, color: '#111' },
-  servicePrice: { fontSize: 12, color: '#333' },
+  serviceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  serviceName: { fontSize: 12, color: '#111', flexGrow: 1, flexShrink: 1, paddingRight: 12 },
+  servicePrice: { fontSize: 12, color: '#333', textAlign: 'right', flexShrink: 0 },
   note: { marginTop: 20, padding: 10, backgroundColor: '#fcf8e3', border: '1px solid #faebcc', borderRadius: 4, textAlign: 'center', fontSize: 10, color: '#8a6d3b' },
   footer: { marginTop: 20, borderTop: '1px solid #eee', paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between' },
   footerText: { fontSize: 9, color: '#666' },
@@ -153,21 +178,21 @@ const ReceiptDocument = ({ normalized, appointmentDate, appointmentTime, generat
         </View>
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <View style={{ width: '48%' }}>
-          <Text style={styles.sectionTitle}>Booking details</Text>
-          <View style={styles.row}><Text style={styles.rowLabel}>Booking reference</Text><Text style={styles.rowValue}>{normalized.reference || '—'}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Appointment date</Text><Text style={styles.rowValue}>{appointmentDate}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Appointment time</Text><Text style={styles.rowValue}>{appointmentTime}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Team member</Text><Text style={styles.rowValue}>{normalized.staffName}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Booking status</Text><Text style={styles.rowValue}>{normalized.status || '—'}</Text></View>
+      <View>
+        <Text style={styles.sectionTitle}>Booking details</Text>
+        <View style={styles.row}><Text style={styles.rowLabel}>Booking reference</Text><Text style={styles.rowValue}>{normalized.reference || '—'}</Text></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Appointment date</Text><Text style={styles.rowValue}>{appointmentDate}</Text></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Appointment time</Text><Text style={styles.rowValue}>{appointmentTime}</Text></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Team member</Text><Text style={styles.rowValue}>{normalized.staffName}</Text></View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Booking status</Text><Text style={styles.rowValue}>{normalized.status || '—'}</Text></View>
+
+        <Text style={styles.sectionTitle}>Customer</Text>
+        <View style={styles.row}><Text style={styles.rowLabel}>Name</Text><Text style={styles.rowValue}>{normalized.customerName}</Text></View>
+        <View style={styles.row}>
+          <Text style={styles.emailLabel}>Email</Text>
+          <Text style={{ ...styles.emailValue, fontSize: emailFontSize(normalized.email) }}>{normalized.email || '—'}</Text>
         </View>
-        <View style={{ width: '48%' }}>
-          <Text style={styles.sectionTitle}>Customer</Text>
-          <View style={styles.row}><Text style={styles.rowLabel}>Name</Text><Text style={styles.rowValue}>{normalized.customerName}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Email</Text><Text style={styles.rowValue}>{normalized.email || '—'}</Text></View>
-          <View style={styles.row}><Text style={styles.rowLabel}>Phone</Text><Text style={styles.rowValue}>{normalized.phone || '—'}</Text></View>
-        </View>
+        <View style={styles.row}><Text style={styles.rowLabel}>Phone</Text><Text style={styles.rowValue}>{normalized.phone || '—'}</Text></View>
       </View>
 
       <Text style={styles.sectionTitle}>Services</Text>

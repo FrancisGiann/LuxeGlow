@@ -46,10 +46,10 @@ PHP, XAMPP, MySQL, Git, Composer, the Supabase CLI, or global npm packages.
    `supabase db push`. The canonical schema and RLS policies are in
    [`database/supabase/`](database/supabase/README.md).
 3. Set Edge Function secrets for `process-notifications`, `invite-staff`, and
-   `upload-service-image`, including the server-only Cloudinary values shown in
-   [`supabase/functions/README.md`](supabase/functions/README.md). Schedule
-   `process-notifications` once per minute with the documented `x-cron-token`
-   header.
+   `upload-service-image`, including Gmail SMTP credentials on port 465 and
+   server-only Cloudinary values shown in [`supabase/functions/README.md`](supabase/functions/README.md).
+   Configure the Supabase Vault secrets and run the documented scheduler SQL
+   so `process-notifications` is called once per minute with `x-cron-token`.
 4. Seed services/content and migrate existing MariaDB data using the
    read-only exporter and transactional import runbook. Do not import legacy
    password hashes directly into GoTrue; use forced reset/invitation.

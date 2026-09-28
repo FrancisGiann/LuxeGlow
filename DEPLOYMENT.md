@@ -70,13 +70,12 @@ with `supabase secrets set` (never in Vercel or tracked files):
 - `SUPABASE_URL`: Supabase Dashboard → Connect dialog → Project URL.
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase Dashboard → Settings → API Keys →
   secret service-role key. It is server-only.
-- `RESEND_API_KEY`: Resend Dashboard → API Keys. Used by
-  `reset-staff-password`.
-- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`: credentials and
-  SMTP endpoint supplied by the transactional mail provider for
-  `process-notifications`.
-- `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`: the verified sender configured with
-  that mail provider.
+- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`: the SMTP host,
+  port `465`, login, and password used by `process-notifications`. Gmail uses
+  `smtp.gmail.com` and an App Password.
+- `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`: optional sender address and display
+  name; the address defaults to `MAIL_USERNAME`.
+- `RESEND_API_KEY`: the server-only key used by `reset-staff-password`.
 - `CRON_SECRET_TOKEN`, `LOGIN_RATE_LIMIT_SECRET`: long random values generated
   by the operator; the scheduler sends the former as `x-cron-token`.
 - `AUTH_PROXY_SECRET_KEY`: Supabase Dashboard → Settings → API Keys → create a

@@ -37,6 +37,8 @@ import {
   listAdminFaqs,
   listAdminProfiles,
   listAdminServices,
+  markAppointmentArrived,
+  respondToNoShow,
   resetStaffPassword,
   rescheduleAppointment,
   saveFaq,
@@ -62,6 +64,10 @@ import {
   initialAdminTab,
   manilaDateKey,
 } from "../utils/adminAppointments";
+import {
+  canRecordAppointmentArrival,
+  findDueNoShowAppointment,
+} from "../utils/noShowAppointments";
 import {
   IconArrowRight,
   IconCalendar,
@@ -404,6 +410,16 @@ function appointmentStaffName(appointment) {
   );
 }
 
+function attendanceTimeLabel(timestamp) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila",
+  }).format(date);
+}
+
 function shiftManilaDate(date, days) {
   const [year, month, day] = String(date || "")
     .split("-")
@@ -571,10 +587,24 @@ function AppointmentDetails({
   appointment,
   onRequestStatus,
   onReschedule,
+  onMarkArrived,
+  arrivalBusy = false,
+  arrivalError = "",
   onViewInAppointments,
 }) {
+  const [arrivalClock, setArrivalClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setArrivalClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const customer = appointment.customer || {};
   const terminal = isTerminalAppointment(appointment);
+  const arrivedAtLabel = attendanceTimeLabel(appointment.arrived_at);
+  const arrivalAvailable = canRecordAppointmentArrival(
+    appointment,
+    arrivalClock,
+  );
+  const hasArrivalTime = Number.isFinite(Date.parse(appointment.start_at));
   return (
     <>
       <div className="flex items-start justify-between gap-4">
@@ -623,6 +653,12 @@ function AppointmentDetails({
             {appointmentStaffName(appointment)}
           </span>
         </p>
+        {appointment.arrived_at && (
+          <p className="mt-2 text-sm font-semibold text-success" role="status">
+            Person arrived
+            {arrivedAtLabel ? ` · ${arrivedAtLabel}` : ""}
+          </p>
+        )}
         {appointment.staff_id && appointment.staff_rating_count > 0 && (
           <p className="mt-2 text-sm text-ink-600">
             Published staff rating:{" "}
@@ -672,6 +708,30 @@ function AppointmentDetails({
         </p>
       ) : (
         <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5">
+          {appointment.status === "Confirmed" &&
+            !appointment.arrived_at &&
+            onMarkArrived && (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  className="min-h-11"
+                  loading={arrivalBusy}
+                  disabled={!arrivalAvailable}
+                  onClick={() => onMarkArrived(appointment)}
+                >
+                  Person arrived
+                </Button>
+                {!arrivalAvailable && (
+                  <p className="basis-full text-xs leading-relaxed text-ink-500" role="status">
+                    {hasArrivalTime
+                      ? "Arrival can be recorded starting 15 minutes before the scheduled start."
+                      : "Arrival is unavailable because the scheduled start time could not be loaded."}
+                  </p>
+                )}
+              </>
+            )}
           <Button
             type="button"
             size="sm"
@@ -695,6 +755,14 @@ function AppointmentDetails({
           ))}
         </div>
       )}
+      {arrivalError && (
+        <p
+          className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
+          role="alert"
+        >
+          {arrivalError}
+        </p>
+      )}
       {onViewInAppointments && (
         <div className="mt-5 border-t border-line pt-5">
           <Button
@@ -712,7 +780,7 @@ function AppointmentDetails({
   );
 }
 
-function AppointmentInspector({ appointment, onRequestStatus, onReschedule }) {
+function AppointmentInspector({ appointment, onRequestStatus, onReschedule, onMarkArrived, arrivalBusy, arrivalError }) {
   if (!appointment)
     return (
       <Card className="h-full p-6">
@@ -728,6 +796,9 @@ function AppointmentInspector({ appointment, onRequestStatus, onReschedule }) {
         appointment={appointment}
         onRequestStatus={onRequestStatus}
         onReschedule={onReschedule}
+        onMarkArrived={onMarkArrived}
+        arrivalBusy={arrivalBusy}
+        arrivalError={arrivalError}
       />
     </Card>
   );
@@ -851,6 +922,9 @@ function NotificationAppointmentDialog({
   onClose,
   onRequestStatus,
   onReschedule,
+  onMarkArrived,
+  arrivalBusy,
+  arrivalError,
   onViewInAppointments,
 }) {
   if (!state) return null;
@@ -887,6 +961,9 @@ function NotificationAppointmentDialog({
           appointment={appointment}
           onRequestStatus={onRequestStatus}
           onReschedule={onReschedule}
+          onMarkArrived={onMarkArrived}
+          arrivalBusy={arrivalBusy}
+          arrivalError={arrivalError}
           onViewInAppointments={onViewInAppointments}
         />
       )}
@@ -2080,6 +2157,11 @@ export function AdminPage() {
   const [statusConfirm, setStatusConfirm] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusDialogError, setStatusDialogError] = useState("");
+  const [arrivalBusyId, setArrivalBusyId] = useState(null);
+  const [arrivalError, setArrivalError] = useState(null);
+  const [noShowConfirm, setNoShowConfirm] = useState(null);
+  const [noShowBusy, setNoShowBusy] = useState(false);
+  const [noShowDialogError, setNoShowDialogError] = useState("");
   const [customerDialogError, setCustomerDialogError] = useState("");
   const [tab, setTab] = useState(() => initialAdminTab(customer?.role));
   const [appointmentFilters, setAppointmentFilters] = useState(() =>
@@ -2090,6 +2172,7 @@ export function AdminPage() {
   const historyRequestRef = useRef(0);
   const availabilityRequestRef = useRef(0);
   const notificationAppointmentRequestRef = useRef(0);
+  const noShowDismissedIdsRef = useRef(new Set());
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [availabilityDate, setAvailabilityDate] = useState(() =>
     manilaDateKey(),
@@ -2204,6 +2287,118 @@ export function AdminPage() {
   useEffect(() => {
     load(true);
   }, [load]);
+
+  useEffect(() => {
+    const checkForDueNoShows = () => {
+      const visibleCandidates = appointments.filter(
+        (appointment) =>
+          !noShowDismissedIdsRef.current.has(String(appointment?.id)),
+      );
+      const dueAppointment = findDueNoShowAppointment(visibleCandidates);
+      setNoShowConfirm((current) => {
+        if (current) {
+          const latest = appointments.find(
+            (appointment) => String(appointment?.id) === current.id,
+          );
+          if (
+            !latest ||
+            latest.status !== "Confirmed" ||
+            latest.arrived_at ||
+            latest.no_show_reviewed_at
+          ) return null;
+          return current;
+        }
+        return dueAppointment
+          ? {
+              id: String(dueAppointment.id),
+              reference: dueAppointment.reference_no,
+            }
+          : null;
+      });
+    };
+    const initialCheck = window.setTimeout(checkForDueNoShows, 0);
+    const timer = window.setInterval(checkForDueNoShows, 30_000);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(timer);
+    };
+  }, [appointments]);
+
+  const recordAppointmentArrival = async (appointment) => {
+    const current = appointments.find(
+      (item) => String(item.id) === String(appointment?.id),
+    );
+    if (
+      !current ||
+      current.status !== "Confirmed" ||
+      current.arrived_at ||
+      arrivalBusyId
+    ) return;
+    setArrivalBusyId(String(current.id));
+    setArrivalError(null);
+    setError("");
+    try {
+      const result = await markAppointmentArrived(current.id);
+      if (!result.success) throw new Error(result.error);
+      await load();
+      setNotice(`Arrival recorded for ${current.reference_no}.`);
+    } catch (arrivalActionError) {
+      const message =
+        arrivalActionError?.message || "Could not record the arrival.";
+      setArrivalError({ id: String(current.id), message });
+      setError(message);
+    } finally {
+      setArrivalBusyId(null);
+    }
+  };
+
+  const respondToNoShowPrompt = async (shouldCancel) => {
+    if (!noShowConfirm || noShowBusy) return;
+    setNoShowBusy(true);
+    setNoShowDialogError("");
+    setError("");
+    try {
+      const result = await respondToNoShow(noShowConfirm.id, shouldCancel);
+      if (!result.success) throw new Error(result.error);
+      if (result.outcome === "not_due") {
+        setNoShowDialogError(
+          "The appointment has not yet reached 15 minutes past its scheduled start according to the server clock. Try again shortly.",
+        );
+        return;
+      }
+      noShowDismissedIdsRef.current.add(noShowConfirm.id);
+      await load();
+      if (result.outcome === "cancelled") {
+        setNotice(`Appointment ${noShowConfirm.reference} was cancelled.`);
+      } else if (result.outcome === "kept") {
+        setNotice(
+          `Appointment ${noShowConfirm.reference} remains confirmed. This no-show prompt will not appear again.`,
+        );
+      } else if (result.outcome === "arrived") {
+        setNotice(
+          `Arrival was recorded for appointment ${noShowConfirm.reference}; it remains confirmed.`,
+        );
+      } else if (result.outcome === "already_reviewed") {
+        setNotice(
+          `Appointment ${noShowConfirm.reference} was already reviewed by another staff member.`,
+        );
+      } else {
+        setNotice(
+          `Appointment ${noShowConfirm.reference} changed before the no-show decision was saved.`,
+        );
+      }
+      setNoShowConfirm(null);
+      setNoShowDialogError("");
+    } catch (noShowActionError) {
+      const message =
+        noShowActionError?.message ||
+        "Could not update the no-show appointment.";
+      setNoShowDialogError(message);
+      setError(message);
+    } finally {
+      setNoShowBusy(false);
+    }
+  };
 
   const closeNotificationAppointment = useCallback(() => {
     notificationAppointmentRequestRef.current += 1;
@@ -2976,6 +3171,13 @@ export function AdminPage() {
                   appointment={selectedAppointment}
                   onRequestStatus={requestStatus}
                   onReschedule={openReschedule}
+                  onMarkArrived={recordAppointmentArrival}
+                  arrivalBusy={arrivalBusyId === String(selectedAppointment?.id)}
+                  arrivalError={
+                    arrivalError?.id === String(selectedAppointment?.id)
+                      ? arrivalError.message
+                      : ""
+                  }
                 />
               </div>
             </div>
@@ -3380,8 +3582,56 @@ export function AdminPage() {
         onClose={closeNotificationAppointment}
         onRequestStatus={requestNotificationStatus}
         onReschedule={rescheduleNotificationAppointment}
+        onMarkArrived={recordAppointmentArrival}
+        arrivalBusy={arrivalBusyId === String(notificationModalAppointment?.id)}
+        arrivalError={
+          arrivalError?.id === String(notificationModalAppointment?.id)
+            ? arrivalError.message
+            : ""
+        }
         onViewInAppointments={viewNotificationAppointment}
       />
+      <AdminDialog
+        open={!!noShowConfirm}
+        title="No arrival recorded"
+        description={`${noShowConfirm?.reference || "This appointment"} started at least 15 minutes ago, and no arrival has been recorded. Closing this prompt records that you chose to keep the appointment.`}
+        closeDisabled={noShowBusy}
+        onClose={() => respondToNoShowPrompt(false)}
+      >
+        <p className="text-sm leading-relaxed text-ink-600">
+          Would you like to cancel this appointment? The customer will be
+          notified, and the time slot will become available. Keeping it dismisses
+          this no-show prompt for this appointment.
+        </p>
+        {noShowDialogError && (
+          <p
+            className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
+            role="alert"
+          >
+            {noShowDialogError}
+          </p>
+        )}
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="soft"
+            className="min-h-11"
+            disabled={noShowBusy}
+            onClick={() => respondToNoShowPrompt(false)}
+          >
+            Keep appointment
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            className="min-h-11"
+            loading={noShowBusy}
+            onClick={() => respondToNoShowPrompt(true)}
+          >
+            Cancel appointment
+          </Button>
+        </div>
+      </AdminDialog>
       <AdminDialog
         open={!!statusConfirm}
         title={statusCopy.title}

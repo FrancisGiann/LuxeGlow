@@ -67,7 +67,7 @@ export async function listAdminAppointments() {
     'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
   );
   const [appointmentResult, aggregateResult] = await Promise.all([
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_duration_minutes,total_price,status,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
     client.rpc('get_staff_rating_aggregates'),
   ]);
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');
@@ -81,10 +81,31 @@ export async function listAdminAppointments() {
 }
 
 export async function updateAppointmentStatus(appointmentId, status) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
   if (!STATUSES.includes(status)) return { success: false, error: 'Invalid appointment status.' };
   const client = await assertStaff();
   throwIfError(await client.from('appointments').update({ status }).eq('id', appointmentId), 'Could not update appointment status.');
   return { success: true };
+}
+
+export async function markAppointmentArrived(appointmentId) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
+  const client = await assertStaff();
+  const { data, error } = await client.rpc('mark_appointment_arrived', { p_appointment_id: appointmentId });
+  if (error) throw new Error(error.message || 'Could not record the arrival.');
+  return { success: true, arrived_at: data };
+}
+
+export async function respondToNoShow(appointmentId, shouldCancel) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
+  if (typeof shouldCancel !== 'boolean') return { success: false, error: 'Choose whether to keep or cancel the appointment.' };
+  const client = await assertStaff();
+  const { data, error } = await client.rpc('respond_to_no_show', {
+    p_appointment_id: appointmentId,
+    p_cancel: shouldCancel,
+  });
+  if (error) throw new Error(error.message || 'Could not update the no-show appointment.');
+  return { success: true, outcome: data };
 }
 
 export async function listAdminServices() {

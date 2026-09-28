@@ -44,8 +44,16 @@ you are migrating an existing salon database.
   Configuration; do not use a wildcard redirect.
 - Appointment status triggers create in-app notifications and an email outbox.
   `supabase/functions/process-notifications` is a service-role-only worker.
-  Configure a Supabase Scheduled Edge Function or an external scheduler to
-  POST it every minute with `x-cron-token: $CRON_SECRET_TOKEN`. It runs
+  It sends over SMTP with implicit TLS on port 465. Configure `MAIL_HOST`,
+  `MAIL_PORT=465`, `MAIL_USERNAME`, and `MAIL_PASSWORD` in Edge Function
+  secrets. For Gmail use `smtp.gmail.com` and an App Password.
+  `MAIL_FROM_ADDRESS` defaults to `MAIL_USERNAME` but can name a configured
+  sender alias. To enable delivery, store `notification_worker_project_url`
+  and `notification_worker_cron_token` in Supabase Vault, then run
+  [`schedule_notification_worker.sql`](schedule_notification_worker.sql) from
+  the SQL Editor. This installs or replaces the every-minute job that sends
+  `x-cron-token: $CRON_SECRET_TOKEN`. Check `cron.job_run_details` and
+  `net._http_response` after setup. The worker runs
   `run_appointment_maintenance`, which cancels pending appointments 15 minutes
   after their start and creates one 24-hour reminder per confirmed appointment.
 - `supabase/functions/invite-staff` is the only staff provisioning boundary;
@@ -127,8 +135,10 @@ and [password reset flow](https://supabase.com/docs/reference/javascript/auth-re
 
 Browser variables are `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and the
 hosting base path. Server/Edge variables are `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `RESEND_API_KEY`, mail sender
-settings, a random `CRON_SECRET_TOKEN`, `ALLOWED_ORIGIN`, `APP_ROUTER_BASE`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `MAIL_HOST`, `MAIL_PORT=465`,
+`MAIL_USERNAME`, `MAIL_PASSWORD`, optional mail sender settings, a random
+`CRON_SECRET_TOKEN`, `RESEND_API_KEY` for staff password recovery,
+`ALLOWED_ORIGIN`, `APP_ROUTER_BASE`,
 `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 Set the Cloudinary values only with the Supabase secrets manager:
 
