@@ -1,15 +1,31 @@
 const NO_SHOW_GRACE_PERIOD_MS = 15 * 60 * 1000;
-const ARRIVAL_EARLY_WINDOW_MS = 15 * 60 * 1000;
+const MANILA_CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  calendar: 'gregory',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function manilaCalendarDate(timestamp) {
+  if (!Number.isFinite(timestamp)) return null;
+  const parts = MANILA_CALENDAR_DATE_FORMATTER.formatToParts(timestamp);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 export function canRecordAppointmentArrival(appointment, now = Date.now()) {
   const nowMs = now instanceof Date ? now.getTime() : Number(now);
   const startMs = Date.parse(appointment?.start_at);
+  const todayInManila = manilaCalendarDate(nowMs);
+  const appointmentDateInManila = manilaCalendarDate(startMs);
   return Boolean(
     Number.isFinite(nowMs) &&
       Number.isFinite(startMs) &&
+      todayInManila &&
+      todayInManila === appointmentDateInManila &&
       appointment?.status === 'Confirmed' &&
-      !appointment.arrived_at &&
-      nowMs >= startMs - ARRIVAL_EARLY_WINDOW_MS,
+      !appointment.arrived_at,
   );
 }
 

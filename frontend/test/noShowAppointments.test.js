@@ -7,10 +7,19 @@ import {
 
 const now = Date.parse('2026-09-28T04:15:00.000Z');
 
-test('arrival can be recorded within 15 minutes of start and not for a future or ineligible booking', () => {
-  const confirmed = { status: 'Confirmed', start_at: '2026-09-28T04:30:00.000Z' };
-  assert.equal(canRecordAppointmentArrival(confirmed, now), true);
-  assert.equal(canRecordAppointmentArrival(confirmed, now - 1), false);
+test('arrival can be recorded any time on the scheduled Manila calendar date', () => {
+  const arrivalNow = Date.parse('2026-09-27T16:15:00.000Z');
+  const confirmed = { status: 'Confirmed', start_at: '2026-09-28T23:30:00+08:00' };
+  assert.equal(canRecordAppointmentArrival(confirmed, arrivalNow), true);
+  assert.equal(canRecordAppointmentArrival(confirmed, new Date(arrivalNow)), true);
+  assert.equal(
+    canRecordAppointmentArrival(confirmed, Date.parse('2026-09-27T15:59:59.999Z')),
+    false,
+  );
+  assert.equal(
+    canRecordAppointmentArrival(confirmed, Date.parse('2026-09-28T16:00:00.000Z')),
+    false,
+  );
   assert.equal(canRecordAppointmentArrival({ ...confirmed, status: 'Pending' }, now), false);
   assert.equal(canRecordAppointmentArrival({ ...confirmed, arrived_at: '2026-09-28T04:14:00Z' }, now), false);
   assert.equal(canRecordAppointmentArrival({ ...confirmed, start_at: 'invalid' }, now), false);

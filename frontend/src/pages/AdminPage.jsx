@@ -726,7 +726,7 @@ function AppointmentDetails({
                 {!arrivalAvailable && (
                   <p className="basis-full text-xs leading-relaxed text-ink-500" role="status">
                     {hasArrivalTime
-                      ? "Arrival can be recorded starting 15 minutes before the scheduled start."
+                      ? "Arrival can only be recorded on the appointment’s calendar date in Manila time."
                       : "Arrival is unavailable because the scheduled start time could not be loaded."}
                   </p>
                 )}
