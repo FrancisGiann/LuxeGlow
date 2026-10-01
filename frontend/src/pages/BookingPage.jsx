@@ -98,8 +98,11 @@ export function BookingPage() {
   const availabilityRequestRef = useRef(0);
   const availabilitySelectionVersionRef = useRef(0);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewStep, setReviewStep] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState(null);
+  const dateInputRef = useRef(null);
 
   useEffect(() => { let alive = true; getServices().then((data) => alive && setServices(Array.isArray(data) ? data : [])).catch(() => alive && setServicesError('Could not load the treatment menu.')); getBookableStaff().then((data) => alive && setStaff(Array.isArray(data) ? data : [])).catch(() => alive && setStaffError('Could not load available team members.')); return () => { alive = false; }; }, []);
   useEffect(() => {
@@ -116,9 +119,11 @@ export function BookingPage() {
     setSelectedIds((current) => current.includes(requested) ? current : [...current, requested]);
   }, [location.search, services]);
   useEffect(() => {
-    if (success || isAuthenticated) return;
-    writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time });
-  }, [date, isAuthenticated, selectedIds, selectedStaffId, success, time]);
+    if (success || status === 'loading') return;
+    const continueToReview = reviewStep || (isAuthenticated && readDraft().reviewStep === true);
+    if (continueToReview !== reviewStep) setReviewStep(continueToReview);
+    writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time, reviewStep: continueToReview });
+  }, [date, isAuthenticated, reviewStep, selectedIds, selectedStaffId, status, success, time]);
   const selectedServices = useMemo(() => (services || []).filter((service) => selectedIds.includes(service.id)), [services, selectedIds]);
   const selectedStaff = useMemo(() => (staff || []).find((member) => member.id === selectedStaffId), [staff, selectedStaffId]);
   const totalMinutes = selectedServices.reduce((sum, service) => sum + (service.minutes || 0), 0);
@@ -172,31 +177,85 @@ export function BookingPage() {
     toast("That time doesn't fit your updated choices. Choose another available time.", 'info');
   }, [slots, slotsLoading, time, toast]);
 
-  const submit = async (event) => {
-    event.preventDefault(); setFormError('');
-    if (!selectedIds.length) return setFormError('Select at least one service.');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayISO() || date > maxISO()) return setFormError('Choose a date within the next 60 days.');
-    if (!time) return setFormError('Pick an available time slot.');
-    if (slotsLoading) return setFormError('Availability is still loading. Wait, then confirm an open time.');
-    if (!hasAvailableSelectedTime) return setFormError('Choose an open time from the current availability list.');
+  const validateBooking = () => {
+    const errors = {};
+    if (!selectedIds.length) errors.services = 'Select at least one service.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < todayISO() || date > maxISO()) errors.date = 'Choose a date within the next 60 days.';
+    if (!time) errors.time = 'Pick an available time slot.';
+    else if (slotsLoading) errors.time = 'Availability is still loading. Wait, then try again.';
+    else if (!hasAvailableSelectedTime) errors.time = 'Choose an open time from the current availability list.';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      const first = errors.services ? 'booking-services-heading' : errors.date ? 'booking-date' : 'booking-times-heading';
+      requestAnimationFrame(() => document.getElementById(first)?.focus());
+      return false;
+    }
+    return true;
+  };
+  const submit = (event) => {
+    event.preventDefault();
+    setFormError('');
+    if (!validateBooking()) return;
     if (!isAuthenticated || status !== 'authenticated') {
-      writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time });
+      writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time, reviewStep: true });
       try { window.sessionStorage.setItem('luxeglow-auth-return', '/book'); } catch { /* Storage may be blocked. */ }
       openAuth('login');
-      toast('Sign in to finish your booking request. Your choices are saved.', 'info');
+      toast('Sign in to review your booking. Your choices are saved.', 'info');
       return;
     }
+    setReviewStep(true);
+    writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time, reviewStep: true });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const confirmBooking = async () => {
+    setFormError('');
+    if (!isAuthenticated || status !== 'authenticated') {
+      setReviewStep(false);
+      openAuth('login');
+      return;
+    }
+    if (!validateBooking()) { setReviewStep(false); return; }
     const selectionVersion = availabilitySelectionVersionRef.current;
     setSubmitting(true);
     try {
+      const latestSlots = await getAvailableSlots(date, totalMinutes || 30, selectedStaffId);
+      if (selectionVersion !== availabilitySelectionVersionRef.current) {
+        setFormError('Your choices changed. Review them again before confirming.');
+        setReviewStep(false);
+        return;
+      }
+      setSlots(latestSlots);
+      if (!latestSlots.some((slot) => slot.time === time && slot.available)) {
+        setFieldErrors((current) => ({ ...current, time: 'That time is no longer available. Choose another open time.' }));
+        setFormError('That time is no longer available. Edit your choices and select another time.');
+        setReviewStep(false);
+        toast('That slot was just taken. Pick a new time.', 'error');
+        return;
+      }
       const result = await createAppointment({ serviceIds: selectedIds, staffId: selectedStaffId, date, time });
-      if (result.success) { const createdAt = new Date().toISOString(); try { window.sessionStorage.removeItem(BOOKING_DRAFT_KEY); window.sessionStorage.removeItem('luxeglow-auth-return'); } catch { /* Storage may be blocked. */ } setSuccess({ reference: result.appointment_id, customer, summary: { staffName: result.staff_name || selectedStaff?.name || 'Assigned team member', services: selectedServices.map((service) => service.name).join(', '), serviceItems: selectedServices.map((service) => ({ name: service.name, price: service.price })), rawDate: date, rawTime: time, date: prettyDate, time, total: totalPrice, createdAt } }); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-      else { setFormError(result.error || 'Booking failed. Please try again.'); if (/no longer available/i.test(result.error || '')) { setTime(''); toast('That slot was just taken. Pick a new time.', 'error'); loadAvailability(selectedStaffId, date, totalMinutes || 30, selectionVersion); } }
-    } catch (error) { setFormError(error.message || 'Could not place the booking.'); } finally { setSubmitting(false); }
+      if (result.success) {
+        const createdAt = new Date().toISOString();
+        try { window.sessionStorage.removeItem(BOOKING_DRAFT_KEY); window.sessionStorage.removeItem('luxeglow-auth-return'); } catch { /* Storage may be blocked. */ }
+        setSuccess({ reference: result.appointment_id, customer, summary: { staffName: result.staff_name || selectedStaff?.name || 'Assigned team member', services: selectedServices.map((service) => service.name).join(', '), serviceItems: selectedServices.map((service) => ({ name: service.name, price: service.price })), rawDate: date, rawTime: time, date: prettyDate, time, total: totalPrice, createdAt } });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setFormError(result.error || 'Booking failed. Please try again.');
+        if (/no longer available/i.test(result.error || '')) {
+          setReviewStep(false);
+          setFieldErrors((current) => ({ ...current, time: 'That time is no longer available. Choose another open time.' }));
+          loadAvailability(selectedStaffId, date, totalMinutes || 30, selectionVersion);
+        }
+      }
+    } catch (error) {
+      setFormError(error.message || 'Could not place the booking.');
+    } finally {
+      setSubmitting(false);
+    }
   };
-  const resetForm = () => { setSuccess(null); setSelectedIds([]); setSelectedStaffId(''); setDate(''); setTime(''); invalidateAvailability(); setFormError(''); };
+  const editBooking = () => { setReviewStep(false); writeDraft({ serviceIds: selectedIds, staffId: selectedStaffId || null, date, time, reviewStep: false }); setFormError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const resetForm = () => { setSuccess(null); setReviewStep(false); setFieldErrors({}); setSelectedIds([]); setSelectedStaffId(''); setDate(''); setTime(''); invalidateAvailability(); setFormError(''); };
   if (success) return <div className="mx-auto max-w-6xl"><BookingSuccess reference={success.reference} summary={success.summary} customer={success.customer} onBookAnother={resetForm} /></div>;
-  const canSubmit = Boolean(selectedIds.length > 0 && date && hasAvailableSelectedTime && !slotsLoading && !submitting);
+  if (reviewStep) return <main className="mx-auto max-w-3xl px-5 py-8 sm:px-8 lg:py-12"><Card className="p-5 sm:p-8"><CardHeader title="Review your booking" subtitle="Confirm these details before sending your request to the salon." /><dl className="mt-6 divide-y divide-line border-y border-line text-sm"><div className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr]"><dt className="text-ink-500">Name</dt><dd className="font-semibold text-ink-900">{customer?.full_name || [customer?.first_name, customer?.last_name].filter(Boolean).join(' ') || '—'}</dd></div><div className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr]"><dt className="text-ink-500">Email</dt><dd className="break-all font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr]"><dt className="text-ink-500">Services</dt><dd><ul className="space-y-2">{selectedServices.map((service) => <li key={service.id} className="flex justify-between gap-4"><span className="font-semibold text-ink-900">{service.name}</span><span className="shrink-0">{formatPeso(service.price)}</span></li>)}</ul></dd></div><div className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr]"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || 'No preference'}</dd></div><div className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr]"><dt className="text-ink-500">Date and time</dt><dd className="font-semibold text-ink-900">{prettyDate} · {time}</dd></div><div className="flex justify-between gap-4 py-4 text-base"><dt className="font-bold text-ink-900">Service total</dt><dd className="font-display text-xl font-semibold text-brand-800">{formatPeso(totalPrice)}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 flex flex-wrap justify-end gap-3"><Button type="button" variant="soft" onClick={editBooking} disabled={submitting}>Edit choices</Button><Button type="button" onClick={confirmBooking} loading={submitting}>{submitting ? 'Checking availability…' : 'Confirm booking'}</Button></div><p className="mt-4 text-center text-xs text-ink-500">Payment is settled at the salon after staff confirmation. No time is held until your request is placed.</p></Card></main>;
   return <form onSubmit={submit} className="mx-auto max-w-[1240px] px-5 py-8 sm:px-8 lg:px-14 lg:py-12" noValidate>
     <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
       <div><h1 className="font-display text-3xl font-medium text-ink-900">Book an appointment</h1><p className="mt-2 text-sm text-ink-500">Choose a date and time first, then select services and an optional team preference. We’ll recheck availability as your choices change.</p>{!isAuthenticated && <p className="mt-3 max-w-[52ch] rounded-xl border border-gold-400 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900" role="status">You can explore availability as a guest. Sign in only when you are ready to submit; nothing is sent automatically.</p>}</div>
@@ -207,17 +266,17 @@ export function BookingPage() {
         <Card className="p-5 sm:p-7">
           <CardHeader title="Choose date and time" subtitle="Times are offered in 30-minute increments. With no services selected, we check for a 30-minute visit. Change your date, services, or team preference and we’ll recheck your time." />
           <div className="flex flex-col gap-6 pt-5">
-            <Input id="booking-date" type="date" label="Preferred date" min={todayISO()} max={maxISO()} value={date} onChange={(event) => selectDate(event.target.value)} required />
-            <div><span className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ' for any available team member'}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes || 30, availabilitySelectionVersionRef.current)} /></div>
+            <Input ref={dateInputRef} id="booking-date" type="date" label="Preferred date" min={todayISO()} max={maxISO()} value={date} error={fieldErrors.date} onChange={(event) => { selectDate(event.target.value); setFieldErrors((current) => ({ ...current, date: '' })); }} required />
+            <div><span id="booking-times-heading" tabIndex={-1} className="mb-2 block text-sm font-bold text-ink-900">Available times{selectedStaff ? ` for ${selectedStaff.name}` : ' for any available team member'}</span><SlotGrid slots={slots} loading={slotsLoading} error={slotsError} selectedTime={time} onSelect={(value) => { setTime(value); setFieldErrors((current) => ({ ...current, time: '' })); setFormError(''); }} onRetry={() => loadAvailability(selectedStaffId, date, totalMinutes || 30, availabilitySelectionVersionRef.current)} />{fieldErrors.time && <p className="mt-2 text-sm font-semibold text-danger" role="alert">{fieldErrors.time}</p>}</div>
           </div>
         </Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Select services" subtitle="Choose treatments for your visit." /><div className="pt-5"><ServiceCatalog services={services} loading={!services && !servicesError} error={servicesError} onToggle={toggleService} selectable selectedIds={selectedIds} /></div></Card>
+        <Card className="p-5 sm:p-7"><h2 id="booking-services-heading" tabIndex={-1} className="font-display text-xl font-medium text-ink-900">Select services</h2><p className="mt-1 text-sm text-ink-500">Choose treatments for your visit.</p>{fieldErrors.services && <p className="mt-3 text-sm font-semibold text-danger" role="alert">{fieldErrors.services}</p>}<div className="pt-5"><ServiceCatalog services={services} loading={!services && !servicesError} error={servicesError} onToggle={(id) => { toggleService(id); setFieldErrors((current) => ({ ...current, services: '' })); }} selectable selectedIds={selectedIds} /></div></Card>
         <Card className="p-5 sm:p-7"><CardHeader title="Choose a team preference" subtitle="Optional — leave No preference to match any available team member, or choose someone; your selected time will be rechecked." /><div className="pt-5"><StaffPicker staff={staff} loading={!staff && !staffError} error={staffError} selectedId={selectedStaffId} onSelect={selectStaff} /></div></Card>
-        <Card className="p-5 sm:p-7"><CardHeader title="Review and confirm" subtitle="Review your details and appointment choices before confirming." /><dl className="grid gap-3 pt-5 text-sm sm:grid-cols-2"><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Name</dt><dd className="truncate font-semibold text-ink-900">{customer?.full_name || customer?.first_name || '—'}</dd></div><div className="flex justify-between gap-4 border-b border-line pb-3 sm:col-span-2"><dt className="text-ink-500">Email</dt><dd className="truncate font-semibold text-ink-900">{customer?.email || '—'}</dd></div><div className="flex justify-between gap-4 pb-1 sm:col-span-2"><dt className="text-ink-500">Team member</dt><dd className="font-semibold text-ink-900">{selectedStaff?.name || 'No preference'}</dd></div></dl>{formError && <p className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{formError}</p>}<div className="mt-6 hidden lg:block"><Button type="submit" size="lg" block disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Payment is settled at the salon after staff confirmation.</p></div></Card>
+        <Card className="p-5 sm:p-7"><CardHeader title="Next step" subtitle="Review your name, services, and appointment time before confirming." /><div className="mt-5 hidden lg:block"><Button type="submit" size="lg" block>{isAuthenticated ? 'Review booking' : 'Sign in to review'}</Button><p className="mt-3 flex items-center justify-center gap-2 text-xs text-ink-500"><IconCalendar size={13} />Nothing is booked until you confirm on the review screen.</p></div></Card>
       </div>
       <div className="hidden lg:block"><Summary selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
     </div>
     <div className="mt-6 lg:hidden"><Summary compact selectedServices={selectedServices} totalPrice={totalPrice} totalMinutes={totalMinutes} prettyDate={prettyDate} time={time} staffName={selectedStaff?.name} /></div>
-    <div className="sticky bottom-0 z-20 -mx-5 mt-6 border-t border-line bg-canvas/95 px-5 py-4 backdrop-blur-sm sm:-mx-8 sm:px-8 lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg" disabled={!canSubmit} loading={submitting}>{submitting ? 'Placing booking…' : isAuthenticated ? 'Confirm booking' : 'Sign in to finalize'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
+    <div className="sticky bottom-0 z-20 -mx-5 mt-6 border-t border-line bg-canvas/95 px-5 py-4 backdrop-blur-sm sm:-mx-8 sm:px-8 lg:hidden"><div className="mb-2 flex justify-between text-sm"><span className="font-semibold text-ink-900">{selectedIds.length} service{selectedIds.length === 1 ? '' : 's'}</span><span className="font-display font-semibold text-brand-800">{formatPeso(totalPrice)}</span></div><Button type="submit" block size="lg">{isAuthenticated ? 'Review booking' : 'Sign in to review'}</Button>{formError && <p className="mt-2 text-center text-xs font-semibold text-danger">{formError}</p>}</div>
   </form>;
 }

@@ -47,6 +47,7 @@ const NOTIFICATION_KINDS = new Set([
   'reminder',
   'cancelled',
   'completed',
+  'rescheduled',
   'welcome',
   'password_changed',
 ]);
@@ -56,6 +57,7 @@ const BOOKING_NOTIFICATION_KINDS = new Set([
   'reminder',
   'cancelled',
   'completed',
+  'rescheduled',
 ]);
 const NOTIFICATION_PRESENTATION = {
   pending: { label: 'BOOKING REQUEST', background: '#f3eadc', color: '#796323' },
@@ -63,6 +65,7 @@ const NOTIFICATION_PRESENTATION = {
   reminder: { label: 'APPOINTMENT REMINDER', background: '#f2ecf1', color: '#5a1846' },
   cancelled: { label: 'APPOINTMENT CANCELLED', background: '#f7ebea', color: '#8a3b39' },
   completed: { label: 'VISIT COMPLETE', background: '#f2ecf1', color: '#5a1846' },
+  rescheduled: { label: 'APPOINTMENT RESCHEDULED', background: '#f2ecf1', color: '#5a1846' },
   welcome: { label: 'WELCOME', background: '#f2ecf1', color: '#5a1846' },
   password_changed: { label: 'ACCOUNT SECURITY', background: '#f2ecf1', color: '#5a1846' },
 };
@@ -204,6 +207,42 @@ Deno.serve(async (request) => {
   let failed = 0;
   for (const job of jobs || []) {
     try {
+      if (job.kind === 'reminder') {
+        const { data: queuedJob, error: queuedJobError } = await admin
+          .from('notification_outbox')
+          .select('id')
+          .eq('id', job.id)
+          .maybeSingle();
+        if (queuedJobError) throw queuedJobError;
+        if (!queuedJob) continue;
+
+        const { data: appointment, error: appointmentError } = await admin
+          .from('appointments')
+          .select('start_at,status')
+          .eq('id', job.appointment_id)
+          .maybeSingle();
+        if (appointmentError) throw appointmentError;
+        const startAt = Date.parse(appointment?.start_at || '');
+        const now = Date.now();
+        const reminderPayload = job.payload && typeof job.payload === 'object' && !Array.isArray(job.payload)
+          ? job.payload
+          : {};
+        const expectedStartEpoch = Number(reminderPayload.scheduled_start_epoch);
+        const stale = appointment?.status !== 'Confirmed'
+          || !Number.isFinite(startAt)
+          || startAt < now
+          || startAt > now + 25 * 60 * 60 * 1000
+          || startAt - 24 * 60 * 60 * 1000 > now
+          || (Number.isFinite(expectedStartEpoch) && Math.floor(startAt / 1000) !== expectedStartEpoch);
+        if (stale) {
+          const { error: skipError } = await admin
+            .from('notification_outbox')
+            .update({ sent_at: new Date(now).toISOString(), claimed_at: null, last_error: null })
+            .eq('id', job.id);
+          if (skipError) throw skipError;
+          continue;
+        }
+      }
       const { data: profile, error: profileError } = await admin.from('profiles').select('email,first_name').eq('id', job.recipient_id).single();
       if (profileError || !profile?.email) throw new Error('Recipient profile is missing an email');
       await sendNotificationEmail({

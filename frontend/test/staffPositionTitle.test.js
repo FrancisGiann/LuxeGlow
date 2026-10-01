@@ -74,9 +74,9 @@ test('admin exposes an accessible free-text editor and booking picker omits an u
   assert.match(adminPage, /Position title is unchanged\./);
   assert.match(adminPage, /position_title: nextTitle/);
   assert.match(adminPage, /function StaffPositionTitleEditor\(\{ staffMember, canManage, onSaved \}\)/);
-  assert.match(adminPage, /type: 'position_title_saved'/);
+  assert.match(adminPage, /type: ["']position_title_saved["']/);
   assert.match(adminPage, /position_title: action\.position_title/);
-  assert.equal((adminPage.match(/setNotice\('Position title saved\.'/g) || []).length, 1);
+  assert.equal((adminPage.match(/setNotice\(["']Position title saved\.["']\)/g) || []).length, 1);
   assert.doesNotMatch(adminPage, /CustomEvent|admin-staff-profile-updated/);
   assert.match(adminPage, /profile\.position_title &&/);
   assert.match(bookingPage, /member\.position_title &&/);
@@ -94,10 +94,10 @@ test('staff rows prioritize position titles, keep ratings in the inspector, and 
   assert.ok(row.indexOf('{name}') < row.indexOf('{profile.position_title}') && row.indexOf('{profile.position_title}') < row.indexOf('{profile.email}'));
   assert.match(row, /text-sm font-semibold text-brand-800/);
   assert.doesNotMatch(row, /rating_count|average_rating|published rating|No ratings yet/);
-  assert.match(row, /const accountStatus = !profile\.is_active \? 'Inactive' : profile\.accepts_appointments \? 'Bookable' : 'Appointments off'/);
+  assert.match(row, /const accountStatus = !profile\.is_active\s*\?\s*["']Inactive["']\s*:\s*profile\.accepts_appointments\s*\?\s*["']Bookable["']\s*:\s*["']Appointments off["']/);
   assert.equal((row.match(/rounded-full/g) || []).length, 1);
   assert.match(row, /Account status: \$\{accountStatus\}/);
   assert.doesNotMatch(row, /Accepts appointments/);
-  assert.match(row, /<span className="min-w-0">[\s\S]*?\{profile\.email\}<\/span>\s*<\/span>\s*<span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">/);
+  assert.match(row, /<span className="min-w-0">[\s\S]*?\{profile\.email\}\s*<\/span>\s*<\/span>\s*<span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">/);
   assert.match(panelMatch[0], /staffMember\.rating_count[\s\S]*?staffMember\.average_rating[\s\S]*?published rating/);
 });

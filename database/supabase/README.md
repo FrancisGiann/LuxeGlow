@@ -21,6 +21,19 @@ you are migrating an existing salon database.
   Auth user, reads current service prices, locks the Manila-local date, and
   relies on a PostgreSQL exclusion constraint for race-safe interval booking.
   The browser cannot supply status, duration, or price.
+- Customer changes to future appointments use the owner-scoped
+  customer_reschedule_appointment and customer_cancel_appointment RPCs from
+  20261002000000_customer_booking_controls.sql. They lock the appointment,
+  verify ownership/status/arrival/time eligibility, enforce the current salon
+  schedule and 60-day/30-minute limits, and retain the exclusion constraint for
+  overlap protection. Customer reschedules move Confirmed appointments back
+  to Pending; cancellation reasons are stored on the appointment for staff.
+- Appointment notifications are event-based after that migration: each real
+  reschedule and each status transition can create a new in-app notification
+  and outbox job. Retries use the same persisted outbox row. A schedule change
+  clears obsolete reminders, and maintenance keys replacement reminders to
+  the current appointment start. Keep this migration byte-identical in
+  supabase/migrations/ and apply it with the rest of the Supabase migrations.
 - New staff service-image uploads go through the authenticated
   `upload-service-image` Edge Function to Cloudinary. The function validates
   JPEG/PNG/WebP bytes and a 5 MB limit, stores Cloudinary's `secure_url` in

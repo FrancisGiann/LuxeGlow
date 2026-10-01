@@ -13,7 +13,7 @@ test('customer-facing booking record labels use booking confirmation terminology
   assert.match(bookingPage, /View \/ print booking confirmation/);
   assert.match(appointmentsPage, /View \/ print booking confirmation/);
   assert.match(confirmationModal, /Booking confirmation preview/);
-  assert.match(confirmationModal, />Booking Confirmation</);
+  assert.match(confirmationModal, /hidePrint \? 'Booking Details' : 'Booking Confirmation'/);
   assert.match(confirmationModal, /Appointment record only — not proof of payment\./);
 
   for (const source of [bookingPage, appointmentsPage, confirmationModal]) {
@@ -21,10 +21,13 @@ test('customer-facing booking record labels use booking confirmation terminology
   }
 });
 
-test('completed appointment confirmation action uses the shared responsive button cell', () => {
+test('appointment actions use the shared responsive button cell', () => {
   assert.match(appointmentsPage, /import \{ Button \} from ['"]\.\.\/\.\.\/components\/ui\/Button['"]/);
   assert.match(appointmentsPage, /lg:grid-cols-\[minmax\(0,1\.15fr\)_minmax\(0,1fr\)_auto_minmax\(0,auto\)\]/);
-  assert.match(appointmentsPage, /flex w-full justify-start lg:justify-end/);
-  assert.match(appointmentsPage, /<Button type="button" variant="soft" size="sm"[^>]*whitespace-nowrap w-full lg:w-auto/);
+  assert.match(appointmentsPage, /flex w-full flex-wrap justify-start gap-2 lg:justify-end/);
+  assert.match(appointmentsPage, /View booking details/);
+  assert.match(appointmentsPage, /Change date or time/);
+  assert.match(appointmentsPage, /Cancel booking/);
+  assert.match(appointmentsPage, /View \/ print booking confirmation/);
   assert.doesNotMatch(appointmentsPage, /inline-flex min-h-10[^>]*View \/ print receipt/);
 });

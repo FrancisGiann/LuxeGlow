@@ -67,7 +67,7 @@ export async function listAdminAppointments() {
     'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
   );
   const [appointmentResult, aggregateResult] = await Promise.all([
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
     client.rpc('get_staff_rating_aggregates'),
   ]);
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');

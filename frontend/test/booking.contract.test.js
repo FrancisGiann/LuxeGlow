@@ -52,7 +52,7 @@ test('booking migration mirror stays byte-for-byte identical', () => {
 test('booking clients and catalog do not impose an eight-service cap', () => {
   assert.doesNotMatch(endpoints, /cleanIds\.length\s*>\s*8/);
   assert.doesNotMatch(bookingPage, /current\.length\s*>=\s*8|selectedIds\.length\s*>\s*8|selectionLimit=\{8\}|one to eight|\/8/);
-  assert.match(bookingPage, /<ServiceCatalog[^>]*selectable selectedIds=\{selectedIds\}/);
+  assert.match(bookingPage, /<ServiceCatalog[\s\S]*?selectable selectedIds=\{selectedIds\}/);
   assert.match(catalog, /selectionLimit = null/);
   assert.match(catalog, /hasSelectionLimit/);
 });

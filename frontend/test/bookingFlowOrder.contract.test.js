@@ -9,18 +9,18 @@ const bookingPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/Bookin
 
 test('booking task cards follow the visible date, service, team, review sequence', () => {
   const headings = [
-    'Choose date and time',
-    'Select services',
-    'Choose a team preference',
-    'Review and confirm',
+    'title="Choose date and time"',
+    'id="booking-services-heading"',
+    'title="Choose a team preference"',
+    'title="Next step"',
   ];
-  const positions = headings.map((heading) => bookingPage.indexOf(`title="${heading}"`));
+  const positions = headings.map((heading) => bookingPage.indexOf(heading));
 
   assert.ok(positions.every((position) => position >= 0), 'all booking task cards should be present');
   assert.deepEqual(positions, [...positions].sort((left, right) => left - right));
   assert.ok(bookingPage.indexOf('<Summary') > positions.at(-1), 'the summary should remain after the task stack in source order');
+  assert.match(bookingPage, /if \(reviewStep\) return <main[\s\S]*?title="Review your booking"[\s\S]*?Confirm booking/);
 });
-
 test('availability starts at 30 minutes and preserves a time while choices are rechecked', () => {
   assert.match(bookingPage, /loadAvailability\(selectedStaffId, date, totalMinutes \|\| 30, availabilitySelectionVersionRef\.current\)/);
   assert.match(bookingPage, /Times are offered in 30-minute increments/);
@@ -42,8 +42,11 @@ test('availability starts at 30 minutes and preserves a time while choices are r
   }
 });
 
-test('booking submission requires a current available slot after availability finishes loading', () => {
+test('booking review requires a current slot and confirmation rechecks availability before creating', () => {
   assert.match(bookingPage, /const hasAvailableSelectedTime = Boolean\(time && slots\?\.some\(\(slot\) => slot\.time === time && slot\.available\)\)/);
-  assert.match(bookingPage, /const canSubmit = Boolean\([\s\S]*?hasAvailableSelectedTime && !slotsLoading && !submitting\)/);
-  assert.match(bookingPage, /if \(slotsLoading\)[\s\S]*?if \(!hasAvailableSelectedTime\)/);
+  assert.match(bookingPage, /if \(slotsLoading\) errors\.time/);
+  assert.match(bookingPage, /const confirmBooking = async \(\) =>/);
+  assert.match(bookingPage, /const latestSlots = await getAvailableSlots\(date, totalMinutes \|\| 30, selectedStaffId\)/);
+  assert.match(bookingPage, /if \(!latestSlots\.some\(\(slot\) => slot\.time === time && slot\.available\)\)/);
+  assert.match(bookingPage, /const result = await createAppointment\(/);
 });

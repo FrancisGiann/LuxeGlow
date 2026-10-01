@@ -65,7 +65,7 @@ test('ratings remain separate, bounded, and privacy-safe', () => {
   assert.match(admin, /get_staff_rating_aggregates/);
 });
 
-test('guest booking keeps a draft and requires an explicit authenticated submit', () => {
+test('guest booking draft returns to a separate review and confirmation is authenticated', () => {
   for (const contract of [
     /luxeglow-booking-draft-v1/,
     /window\.sessionStorage\.getItem\(BOOKING_DRAFT_KEY\)/,
@@ -74,12 +74,18 @@ test('guest booking keeps a draft and requires an explicit authenticated submit'
     /openAuth\('login'\)/,
     /nothing is sent automatically/,
     /if \(!isAuthenticated \|\| status !== 'authenticated'\)/,
+    /reviewStep: true/,
+    /title="Review your booking"/,
+    /Confirm booking/,
+    /const confirmBooking = async/,
     /createAppointment\(\{ serviceIds: selectedIds, staffId: selectedStaffId/,
     /result\.staff_name \|\| selectedStaff\?\.name/,
-    /Sign in to finalize/,
+    /Sign in to review/,
     /No preference/,
     /No ratings yet\./,
   ]) assert.match(bookingPage, contract);
+  const submit = bookingPage.slice(bookingPage.indexOf('const submit'), bookingPage.indexOf('const confirmBooking'));
+  assert.doesNotMatch(submit, /createAppointment\(/);
   assert.doesNotMatch(bookingPage, /useDashboard/);
 });
 
@@ -97,7 +103,7 @@ test('assigned staff ratings are required in the review flow and business hours 
   assert.match(rateVisitModal, /Please rate your team member from 1 to 5 stars/);
   assert.match(rateVisitModal, /Team member rating \(required\)/);
   assert.doesNotMatch(adminPage, /\['business_hours', 'Business hours'\]/);
-  assert.match(adminPage, /<ScheduleSettings onOpenAppointments=/);
+  assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=/);
 });
 
 test('public and admin schedule clients use validated RPC boundaries', () => {

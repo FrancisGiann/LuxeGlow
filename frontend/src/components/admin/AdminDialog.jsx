@@ -7,10 +7,15 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const closeRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
 
   useEffect(() => {
     closeRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -20,7 +25,7 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (!closeDisabled) closeRef.current();
+        if (!closeDisabledRef.current) closeRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -44,7 +49,7 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
       document.body.style.overflow = previousBodyOverflow;
       if (previouslyFocused instanceof HTMLElement && document.body.contains(previouslyFocused)) previouslyFocused.focus();
     };
-  }, [open, closeDisabled]);
+  }, [open]);
 
   if (!open) return null;
 

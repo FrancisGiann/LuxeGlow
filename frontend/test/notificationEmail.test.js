@@ -103,6 +103,7 @@ test('booking status emails include escaped booking references and kind-specific
     ['pending', 'BOOKING REQUEST'],
     ['confirmed', 'APPOINTMENT CONFIRMED'],
     ['reminder', 'APPOINTMENT REMINDER'],
+    ['rescheduled', 'APPOINTMENT RESCHEDULED'],
     ['cancelled', 'APPOINTMENT CANCELLED'],
     ['completed', 'VISIT COMPLETE'],
   ];

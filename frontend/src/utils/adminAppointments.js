@@ -57,6 +57,7 @@ export function initialAdminTab(role) {
 
 export function appointmentFilterPreset(kind, today = manilaDateKey(), appointment = null) {
   if (kind === 'pending') return { date: '', status: 'Pending', search: '' };
+  if (kind === 'history') return { date: '', status: 'history', search: '' };
   if (kind === 'all') return { date: '', status: 'all', search: '' };
   if (kind === 'appointment') {
     return { date: '', status: 'all', search: '' };
@@ -88,7 +89,8 @@ export function getAdminAppointmentQueue(appointments, filters = {}) {
   const matching = source.filter((appointment) => {
     if (!appointment || typeof appointment !== 'object') return false;
     if (date && appointment.local_date !== date) return false;
-    if (status !== 'all' && appointment.status !== status) return false;
+    if (status === 'history' && !['Completed', 'Cancelled'].includes(appointment.status)) return false;
+    if (status !== 'all' && status !== 'history' && appointment.status !== status) return false;
     return !term || searchableAppointmentText(appointment).includes(term);
   });
   return date ? sortAppointmentsByLocalTime(matching) : matching;
@@ -105,7 +107,7 @@ export function appointmentQueueEmptyMessage(totalAppointments, filters = {}) {
 }
 
 export function adminNavGroupForTab(tab) {
-  if (['overview', 'appointments', 'customers'].includes(tab)) return 'daily-work';
+  if (['overview', 'appointments', 'history', 'customers'].includes(tab)) return 'daily-work';
   if (['catalog', 'schedule'].includes(tab)) return 'salon-setup';
   if (['faqs', 'about'].includes(tab)) return 'website-content';
   return tab === 'staff' ? 'people-access' : null;

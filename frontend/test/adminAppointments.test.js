@@ -17,7 +17,8 @@ test('appointment defaults use the current Asia/Manila date and show every statu
     status: 'all',
     search: '',
   });
-  assert.equal(initialAdminTab('staff'), 'appointments');
+  assert.equal(initialAdminTab('staff'), 'overview');
+  assert.equal(initialAdminTab('head'), 'appointments');
   assert.equal(initialAdminTab('admin'), 'overview');
 });
 
@@ -72,8 +73,8 @@ test('an appointment preset clears other filters and keeps its target visible', 
   const target = { id: 'target', reference_no: 'A-1', local_date: '2026-09-11', status: 'Completed' };
   const other = { id: 'other', local_date: '2026-09-13', status: 'Pending' };
   const filters = appointmentFilterPreset('appointment', '2026-09-13', target);
-  assert.deepEqual(filters, { date: '2026-09-11', status: 'all', search: '' });
-  assert.deepEqual(getAdminAppointmentQueue([other, target], filters), [target]);
+  assert.deepEqual(filters, { date: '', status: 'all', search: '' });
+  assert.deepEqual(getAdminAppointmentQueue([other, target], filters), [other, target]);
   assert.deepEqual(appointmentFilterPreset('appointment', '2026-09-13', { local_date: 'bad-date' }), { date: '', status: 'all', search: '' });
 });
 

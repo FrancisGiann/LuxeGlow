@@ -101,6 +101,7 @@ const NAV_GROUPS = [
     items: [
       ["overview", "Overview", IconGrid],
       ["appointments", "Appointments", IconCalendar],
+      ["history", "History", IconGrid],
       ["customers", "Customers", IconUser],
     ],
   },
@@ -474,39 +475,6 @@ function noShowPromptDetails(appointment) {
   };
 }
 
-function localWeekday(date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return "";
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    weekday: "short",
-  }).format(new Date(`${date}T12:00:00+08:00`));
-}
-
-function appointmentSortKey(appointment) {
-  return `${appointment?.local_date || ""}T${appointment?.local_time || ""}`;
-}
-
-function recentBookingCompare(a, b) {
-  const aCreated = Date.parse(a?.created_at || "");
-  const bCreated = Date.parse(b?.created_at || "");
-  if (
-    Number.isFinite(aCreated) &&
-    Number.isFinite(bCreated) &&
-    aCreated !== bCreated
-  )
-    return bCreated - aCreated;
-  if (Number.isFinite(aCreated) !== Number.isFinite(bCreated))
-    return Number.isFinite(bCreated) ? 1 : -1;
-  return (
-    appointmentSortKey(b).localeCompare(appointmentSortKey(a)) ||
-    String(b?.id || "").localeCompare(String(a?.id || ""))
-  );
-}
-
-function countedBooking(appointment) {
-  return appointment?.status !== "Cancelled";
-}
-
 function PaginationControls({
   page,
   pageCount,
@@ -668,6 +636,16 @@ function AppointmentDetails({
             {appointmentStaffName(appointment)}
           </span>
         </p>
+        {appointment.customer_cancellation_reason && (
+          <div className="mt-6 border-t border-line pt-5">
+            <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
+              Customer cancellation reason
+            </h3>
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-700">
+              {appointment.customer_cancellation_reason}
+            </p>
+          </div>
+        )}
         {appointment.arrived_at && (
           <p className="mt-2 text-sm font-semibold text-success" role="status">
             Person arrived
@@ -876,6 +854,7 @@ function AppointmentQueue({
                 </option>
               ),
             )}
+            <option value="history">History (completed and cancelled)</option>
           </select>
         </label>
       </div>
@@ -1958,161 +1937,64 @@ function AdminOverview({
   onOpenAppointments,
   onOpenAppointment,
 }) {
-  const today = manilaDateKey();
-  const month = today.slice(0, 7);
-  const activeAppointments = appointments.filter(countedBooking);
-  const todayBookings = activeAppointments.filter(
-    (appointment) => appointment.local_date === today,
-  );
-  const pendingRequests = appointments.filter(
-    (appointment) => appointment.status === "Pending",
-  );
-  const monthBookings = activeAppointments.filter((appointment) =>
-    String(appointment.local_date || "").startsWith(month),
-  );
-  const weekendBookings = monthBookings.filter((appointment) =>
-    ["Sat", "Sun"].includes(localWeekday(appointment.local_date)),
-  );
-  const recentBookings = appointments
-    .slice()
-    .sort(recentBookingCompare)
-    .slice(0, 5);
-  const popularServices = [
-    ...monthBookings.reduce((counts, appointment) => {
-      serviceNames(appointment).forEach((name) =>
-        counts.set(name, (counts.get(name) || 0) + 1),
-      );
-      return counts;
-    }, new Map()),
-  ]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 5);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const upcoming = appointments
+    .filter((appointment) =>
+      ["Pending", "Confirmed"].includes(appointment.status) &&
+      Number.isFinite(Date.parse(appointment.start_at)) &&
+      Date.parse(appointment.start_at) > now,
+    )
+    .sort((left, right) =>
+      Date.parse(left.start_at) - Date.parse(right.start_at),
+    );
+  const pendingCount = upcoming.filter((appointment) => appointment.status === "Pending").length;
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm text-ink-500">
-          A live operational view for {localDateLabel(today)}. Appointment
-          totals are not payment or revenue figures.
-        </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => onOpenAppointments("today")}
-            className="rounded-xl border border-line bg-surface p-5 text-left transition-colors hover:border-brand-300 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-          >
-            <span className="block text-sm font-semibold text-ink-600">
-              Today’s bookings
-            </span>
-            <span className="mt-2 block font-display text-3xl font-medium text-brand-800">
-              {todayBookings.length}
-            </span>
-            <span className="mt-1 block text-xs text-ink-500">
-              Lucena City local date · Open today’s queue
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenAppointments("pending")}
-            className="rounded-xl border border-line bg-surface p-5 text-left transition-colors hover:border-brand-300 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-          >
-            <span className="block text-sm font-semibold text-ink-600">
-              Pending requests
-            </span>
-            <span className="mt-2 block font-display text-3xl font-medium text-brand-800">
-              {pendingRequests.length}
-            </span>
-            <span className="mt-1 block text-xs text-ink-500">
-              Awaiting staff action · Review all pending
-            </span>
-          </button>
-        </div>
-        <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-line bg-surface p-3">
-            <dt className="break-words text-ink-500">Bookings this month</dt>
-            <dd className="mt-1 break-words font-bold tabular-nums text-ink-800">
-              {monthBookings.length}
-            </dd>
-          </div>
-          <div className="min-w-0 rounded-xl border border-line bg-surface p-3">
-            <dt className="break-words text-ink-500">
-              Weekend bookings this month
-            </dt>
-            <dd className="mt-1 break-words font-bold tabular-nums text-ink-800">
-              {weekendBookings.length}
-            </dd>
-          </div>
-        </dl>
-      </div>
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="p-5 sm:p-7">
-          <CardHeader
-            title="Recent bookings"
-            subtitle="Latest appointment requests and their service snapshots."
-          />
-          {recentBookings.length ? (
-            <ul className="mt-2 divide-y divide-line">
-              {recentBookings.map((appointment) => (
-                <li key={appointment.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenAppointment(appointment)}
-                    className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-                  >
-                    <span className="min-w-0">
-                      <span className="block break-words text-sm font-bold text-ink-900">
-                        {appointment.reference_no}
-                      </span>
-                      <span className="block text-xs leading-relaxed text-ink-500">
-                        <span className="block sm:inline">
-                          {localDateLabel(appointment.local_date)} ·{" "}
-                          {appointment.local_time?.slice(0, 5) ||
-                            "Time unavailable"}
-                        </span>{" "}
-                        <span className="hidden sm:inline">·</span>{" "}
-                        <span className="block sm:inline">
-                          {appointmentStaffName(appointment)} ·{" "}
-                          {serviceNames(appointment).join(", ") ||
-                            "No services"}
-                        </span>
-                      </span>
-                    </span>
-                    <StatusPill status={appointment.status} size="sm" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="py-8 text-sm text-ink-500">No bookings yet.</p>
-          )}
-        </Card>
-        <Card className="p-5 sm:p-7">
-          <CardHeader
-            title="Popular services this month"
-            subtitle="Counted from appointment service snapshots; cancelled bookings excluded."
-          />
-          {popularServices.length ? (
-            <ol className="mt-2 divide-y divide-line">
-              {popularServices.map(([name, count]) => (
-                <li
-                  key={name}
-                  className="flex items-center justify-between gap-4 py-3"
+      <Card className="p-5 sm:p-7">
+        <CardHeader
+          title="Upcoming booking queue"
+          subtitle={`${upcoming.length} upcoming pending or confirmed appointment${upcoming.length === 1 ? "" : "s"} · ${pendingCount} awaiting confirmation`}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="soft" onClick={() => onOpenAppointments("all")}>All appointments</Button>
+              <Button type="button" size="sm" variant="soft" onClick={() => onOpenAppointments("history")}>History</Button>
+            </div>
+          }
+        />
+        {upcoming.length ? (
+          <ul className="mt-3 divide-y divide-line">
+            {upcoming.slice(0, 20).map((appointment) => (
+              <li key={appointment.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenAppointment(appointment)}
+                  className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
                 >
-                  <span className="min-w-0 truncate text-sm font-semibold text-ink-800">
-                    {name}
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-sm font-bold text-ink-900">
+                      {customerDisplayName(appointment.customer)}
+                      <span className="ml-2 break-all font-medium text-ink-500">{appointment.reference_no || "Reference unavailable"}</span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-ink-500">
+                      {localDateLabel(appointment.local_date)} · {appointment.local_time?.slice(0, 5) || "Time unavailable"} · {appointmentStaffName(appointment)} · {serviceNames(appointment).join(", ") || "No services"}
+                    </span>
                   </span>
-                  <span className="shrink-0 text-sm font-bold text-brand-800">
-                    {count} booking{count === 1 ? "" : "s"}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="py-8 text-sm text-ink-500">
-              No non-cancelled bookings this month.
-            </p>
-          )}
-        </Card>
-      </div>
+                  <StatusPill status={appointment.status} size="sm" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-10 text-center text-sm text-ink-500">No upcoming pending or confirmed appointments.</p>
+        )}
+        {upcoming.length > 20 && (
+          <p className="mt-3 border-t border-line pt-4 text-sm text-ink-500">Showing the next 20 appointments.</p>
+        )}
+      </Card>
     </div>
   );
 }
@@ -2252,7 +2134,14 @@ export function AdminPage() {
       appointmentFilterPreset(kind, manilaDateKey(), appointment),
     );
     setSelectedAppointment(kind === "appointment" ? appointment : null);
-    setTab("appointments");
+    setTab(kind === "history" ? "history" : "appointments");
+  }, [setTab]);
+  const setNavigationTab = useCallback((nextTab) => {
+    if (nextTab === "history") {
+      setAppointmentFilters(appointmentFilterPreset("history"));
+      setSelectedAppointment(null);
+    }
+    setTab(nextTab);
   }, [setTab]);
   const visibleAppointments = useMemo(
     () => getAdminAppointmentQueue(appointments, appointmentFilters),
@@ -3112,7 +3001,7 @@ export function AdminPage() {
     <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[210px_1fr]">
       <AdminRail
         tab={tab}
-        setTab={setTab}
+        setTab={setNavigationTab}
         isAdmin={customer?.role === "admin"}
         onLogout={logout}
       />
@@ -3120,7 +3009,7 @@ export function AdminPage() {
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         tab={tab}
-        setTab={setTab}
+        setTab={setNavigationTab}
         isAdmin={customer?.role === "admin"}
         onLogout={logout}
         pageTitle={pageTitle}
@@ -3208,7 +3097,7 @@ export function AdminPage() {
                 openAppointments("appointment", appointment)
               }
             />
-          ) : tab === "appointments" ? (
+          ) : tab === "appointments" || tab === "history" ? (
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]">
               <div
                 className={selectedAppointment ? "hidden xl:block" : "block"}
