@@ -180,26 +180,26 @@ export function ServiceCatalog({
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 border-b border-line pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,23rem)] lg:items-end">
-        <div>
-          <label htmlFor="service-catalog-search" className="mb-1.5 block text-sm font-semibold text-ink-900">Search treatments</label>
-          <div className="relative">
-            <IconSearch size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500" />
-            <input
-              id="service-catalog-search"
-              type="search"
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-              placeholder="Search by treatment or category"
-              autoComplete="off"
-              className="min-h-12 w-full rounded-xl border border-line bg-surface px-4 pl-11 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-            />
-          </div>
+    <div className="space-y-4">
+      <div className="space-y-2 border-b border-line pb-4">
+        <label htmlFor="service-catalog-search" className="block text-sm font-semibold text-ink-900">Search treatments</label>
+        <div className="relative">
+          <IconSearch size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500" />
+          <input
+            id="service-catalog-search"
+            type="search"
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+            placeholder="Search by treatment or category"
+            autoComplete="off"
+            className="min-h-12 w-full rounded-xl border border-line bg-surface px-4 pl-11 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
+          />
         </div>
-        <p className="text-sm leading-relaxed text-ink-500">
-          {selectable ? hasSelectionLimit ? `Select up to ${selectionLimit} treatments for this visit.` : 'Select the treatments you want for this visit.' : 'Prices and durations stay in view as you browse.'}
-        </p>
+        {selectable && hasSelectionLimit && (
+          <p className="text-xs leading-relaxed text-ink-500">
+            Select up to {selectionLimit} treatments for this visit.
+          </p>
+        )}
       </div>
 
       {loading && <LoadingCatalog />}
