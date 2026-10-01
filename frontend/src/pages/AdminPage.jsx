@@ -13,6 +13,8 @@ import { Button } from "../components/ui/Button";
 import { StatusPill } from "../components/ui/StatusPill";
 import { Spinner } from "../components/ui/Spinner";
 import { AdminDialog } from "../components/admin/AdminDialog";
+import { useToast } from "../components/ui/Toast";
+import { useToastControls } from "../components/ui/ToastControls";
 import { StaffNotificationBell } from "../components/admin/StaffNotificationBell";
 import { ScheduleSettings } from "../components/admin/ScheduleSettings";
 import { formatPeso } from "../utils/format";
@@ -457,6 +459,19 @@ function localDateLabel(date) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(`${date}T12:00:00+08:00`));
+}
+
+function noShowPromptDetails(appointment) {
+  return {
+    id: String(appointment.id),
+    reference: appointment.reference_no || "Reference unavailable",
+    customerName:
+      [appointment.customer?.first_name, appointment.customer?.last_name]
+        .filter(Boolean)
+        .join(" ") || "Customer details unavailable",
+    date: localDateLabel(appointment.local_date),
+    time: appointment.local_time?.slice(0, 5) || "Time unavailable",
+  };
 }
 
 function localWeekday(date) {
@@ -2104,6 +2119,11 @@ function AdminOverview({
 
 export function AdminPage() {
   const { customer, logout } = useAuth();
+  const toast = useToast();
+  const { clearScope: clearToastScope } = useToastControls();
+  const toastScopePrefix = useId();
+  const workspaceMountedRef = useRef(false);
+  const tabGenerationRef = useRef(0);
   const [appointments, setAppointments] = useState([]);
   const [services, setServices] = useState([]);
   const [faqs, setFaqs] = useState([]);
@@ -2116,7 +2136,6 @@ export function AdminPage() {
     useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [serviceForm, setServiceForm] = useState({
     id: "",
@@ -2163,7 +2182,38 @@ export function AdminPage() {
   const [noShowBusy, setNoShowBusy] = useState(false);
   const [noShowDialogError, setNoShowDialogError] = useState("");
   const [customerDialogError, setCustomerDialogError] = useState("");
-  const [tab, setTab] = useState(() => initialAdminTab(customer?.role));
+  const [tab, setTabState] = useState(() => initialAdminTab(customer?.role));
+  const tabRef = useRef(tab);
+  const noticeGeneration = tabGenerationRef.current;
+  const setTab = useCallback((nextTab) => {
+    const next = typeof nextTab === "function" ? nextTab(tabRef.current) : nextTab;
+    const previous = tabRef.current;
+    if (next !== previous) {
+      tabRef.current = next;
+      tabGenerationRef.current += 1;
+      clearToastScope(`${toastScopePrefix}:${previous}`);
+      if (next !== "appointments") setNoShowConfirm(null);
+    }
+    setTabState(next);
+  }, [clearToastScope, toastScopePrefix]);
+  const setNotice = (message) => {
+    if (
+      !workspaceMountedRef.current ||
+      tabRef.current !== tab ||
+      tabGenerationRef.current !== noticeGeneration
+    ) return;
+    const scope = `${toastScopePrefix}:${tab}`;
+    if (!message) {
+      clearToastScope(scope);
+      return;
+    }
+    toast(message, "success", {
+      duration: 5000,
+      scope,
+      dismissible: true,
+      replaceScope: true,
+    });
+  };
   const [appointmentFilters, setAppointmentFilters] = useState(() =>
     createInitialAppointmentFilters(),
   );
@@ -2187,13 +2237,23 @@ export function AdminPage() {
   const [staffActionBusy, setStaffActionBusy] = useState(false);
   const [staffActionError, setStaffActionError] = useState("");
 
+  useEffect(() => {
+    workspaceMountedRef.current = true;
+    return () => {
+      workspaceMountedRef.current = false;
+      NAV_ITEMS.forEach(([key]) => {
+        clearToastScope(`${toastScopePrefix}:${key}`);
+      });
+    };
+  }, [clearToastScope, toastScopePrefix]);
+
   const openAppointments = useCallback((kind = "today", appointment = null) => {
     setAppointmentFilters(
       appointmentFilterPreset(kind, manilaDateKey(), appointment),
     );
     setSelectedAppointment(kind === "appointment" ? appointment : null);
     setTab("appointments");
-  }, []);
+  }, [setTab]);
   const visibleAppointments = useMemo(
     () => getAdminAppointmentQueue(appointments, appointmentFilters),
     [appointments, appointmentFilters],
@@ -2290,31 +2350,47 @@ export function AdminPage() {
 
   useEffect(() => {
     const checkForDueNoShows = () => {
+      if (
+        tab !== "appointments" ||
+        statusConfirm ||
+        reschedule ||
+        notificationAppointmentModal
+      ) {
+        if (noShowConfirm) {
+          setNoShowConfirm(null);
+          setNoShowDialogError("");
+        }
+        return;
+      }
+      if (noShowConfirm) {
+        const latest = appointments.find(
+          (appointment) => String(appointment?.id) === noShowConfirm.id,
+        );
+        const stillDue = latest && findDueNoShowAppointment([latest]);
+        if (!stillDue) {
+          setNoShowConfirm(null);
+          setNoShowDialogError("");
+          return;
+        }
+        const details = noShowPromptDetails(latest);
+        const changed = Object.keys(details).some(
+          (key) => details[key] !== noShowConfirm[key],
+        );
+        if (changed) {
+          setNoShowConfirm(details);
+          setNoShowDialogError("");
+        }
+        return;
+      }
       const visibleCandidates = appointments.filter(
         (appointment) =>
           !noShowDismissedIdsRef.current.has(String(appointment?.id)),
       );
       const dueAppointment = findDueNoShowAppointment(visibleCandidates);
-      setNoShowConfirm((current) => {
-        if (current) {
-          const latest = appointments.find(
-            (appointment) => String(appointment?.id) === current.id,
-          );
-          if (
-            !latest ||
-            latest.status !== "Confirmed" ||
-            latest.arrived_at ||
-            latest.no_show_reviewed_at
-          ) return null;
-          return current;
-        }
-        return dueAppointment
-          ? {
-              id: String(dueAppointment.id),
-              reference: dueAppointment.reference_no,
-            }
-          : null;
-      });
+      if (dueAppointment) {
+        setNoShowDialogError("");
+        setNoShowConfirm(noShowPromptDetails(dueAppointment));
+      }
     };
     const initialCheck = window.setTimeout(checkForDueNoShows, 0);
     const timer = window.setInterval(checkForDueNoShows, 30_000);
@@ -2322,7 +2398,15 @@ export function AdminPage() {
       window.clearTimeout(initialCheck);
       window.clearInterval(timer);
     };
-  }, [appointments]);
+  }, [appointments, noShowConfirm, notificationAppointmentModal, reschedule, statusConfirm, tab]);
+
+  const closeNoShowPrompt = () => {
+    if (noShowConfirm?.id) {
+      noShowDismissedIdsRef.current.add(noShowConfirm.id);
+    }
+    setNoShowConfirm(null);
+    setNoShowDialogError("");
+  };
 
   const recordAppointmentArrival = async (appointment) => {
     const current = appointments.find(
@@ -2407,6 +2491,8 @@ export function AdminPage() {
 
   const openNotificationAppointment = useCallback(
     async (notification) => {
+      setNoShowConfirm(null);
+      setNoShowDialogError("");
       const appointmentId = String(notification?.appointment_id || "").trim();
       const requestId = notificationAppointmentRequestRef.current + 1;
       notificationAppointmentRequestRef.current = requestId;
@@ -2523,6 +2609,8 @@ export function AdminPage() {
       return;
     setError("");
     setStatusDialogError("");
+    setNoShowConfirm(null);
+    setNoShowDialogError("");
     setStatusConfirm({
       id: current.id,
       reference: current.reference_no,
@@ -2755,6 +2843,8 @@ export function AdminPage() {
   const openReschedule = (appointment) => {
     setError("");
     setRescheduleDialogError("");
+    setNoShowConfirm(null);
+    setNoShowDialogError("");
     setReschedule({
       id: appointment.id,
       reference: appointment.reference_no,
@@ -3101,14 +3191,6 @@ export function AdminPage() {
               role="alert"
             >
               {error}
-            </p>
-          )}
-          {notice && (
-            <p
-              className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success"
-              role="status"
-            >
-              {notice}
             </p>
           )}
           {loading ? (
@@ -3594,14 +3676,32 @@ export function AdminPage() {
       <AdminDialog
         open={!!noShowConfirm}
         title="No arrival recorded"
-        description={`${noShowConfirm?.reference || "This appointment"} started at least 15 minutes ago, and no arrival has been recorded. Closing this prompt records that you chose to keep the appointment.`}
+        description={`No arrival is recorded for ${noShowConfirm?.reference || "this appointment"}.`}
         closeDisabled={noShowBusy}
-        onClose={() => respondToNoShowPrompt(false)}
+        onClose={closeNoShowPrompt}
       >
-        <p className="text-sm leading-relaxed text-ink-600">
-          Would you like to cancel this appointment? The customer will be
-          notified, and the time slot will become available. Keeping it dismisses
-          this no-show prompt for this appointment.
+        <dl className="divide-y divide-line rounded-xl border border-line bg-canvas px-4">
+          <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3">
+            <dt className="text-sm text-ink-500">Customer</dt>
+            <dd className="text-right text-sm font-semibold text-ink-900">{noShowConfirm?.customerName}</dd>
+          </div>
+          <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3">
+            <dt className="text-sm text-ink-500">Reference</dt>
+            <dd className="text-right text-sm font-semibold text-ink-900">{noShowConfirm?.reference}</dd>
+          </div>
+          <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3">
+            <dt className="text-sm text-ink-500">Scheduled</dt>
+            <dd className="text-right text-sm font-semibold text-ink-900">
+              {noShowConfirm?.date} · {noShowConfirm?.time} (Manila)
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-4 text-sm leading-relaxed text-ink-600">
+          The scheduled start was at least 15 minutes ago. Keep it to record
+          your review, or cancel it to notify the customer and release the time.
+          If it remains unreviewed without a recorded arrival, it will be
+          cancelled automatically 24 hours after its scheduled start. Closing
+          this notice leaves the appointment unchanged.
         </p>
         {noShowDialogError && (
           <p

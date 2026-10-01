@@ -31,6 +31,12 @@ test('no-show prompt becomes due exactly 15 minutes after the stored start insta
   assert.equal(findDueNoShowAppointment([appointment], now - 1), null);
 });
 
+test('no-show prompt only considers appointments scheduled for today in Manila', () => {
+  const appointment = { id: 'yesterday', status: 'Confirmed', start_at: '2026-09-27T15:00:00.000Z' };
+  const nextManilaDay = Date.parse('2026-09-28T16:00:00.000Z');
+  assert.equal(findDueNoShowAppointment([appointment], nextManilaDay), null);
+});
+
 test('no-show candidates exclude pending, terminal, arrived, reviewed, and invalid timestamps', () => {
   const candidates = [
     null,
