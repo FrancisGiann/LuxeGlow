@@ -53,9 +53,18 @@ you are migrating an existing salon database.
   [`schedule_notification_worker.sql`](schedule_notification_worker.sql) from
   the SQL Editor. This installs or replaces the every-minute job that sends
   `x-cron-token: $CRON_SECRET_TOKEN`. Check `cron.job_run_details` and
-  `net._http_response` after setup. The worker runs
-  `run_appointment_maintenance`, which cancels pending appointments 15 minutes
-  after their start and creates one 24-hour reminder per confirmed appointment.
+  `net._http_response` after setup. The every-minute schedule is required for
+  automatic appointment expiry; the migration does not install it. The worker
+  must be fully configured, including SMTP, because it returns an error before
+  maintenance when its delivery configuration is incomplete.
+  `run_appointment_maintenance` cancels Pending appointments 15 minutes after
+  their start, cancels Confirmed appointments with no recorded arrival or
+  explicit Keep review 24 hours after their start, and creates one 24-hour
+  reminder per confirmed appointment. A staff Keep decision records
+  `no_show_reviewed_at` and exempts that appointment from automatic cancellation.
+  After setup, confirm `process-notifications` is active in `cron.job`, inspect
+  recent `cron.job_run_details`, and verify matching `net._http_response`
+  entries return HTTP 200.
 - `supabase/functions/invite-staff` is the only staff provisioning boundary;
   `reset-staff-password` is the corresponding recovery boundary. Both verify
   an active admin, call the Auth Admin API with the service-role key, and keep

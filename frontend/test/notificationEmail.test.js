@@ -43,6 +43,23 @@ test('scheduler setup invokes the worker every minute using Vault-held credentia
   assert.doesNotMatch(schedule, /re_[A-Za-z0-9]{20,}|sb_secret_[A-Za-z0-9_-]{20,}/);
 });
 
+test('scheduled no-show expiry uses the service-role worker and preserves notification safeguards', () => {
+  const migration = read('supabase/migrations/20261001000000_auto_cancel_unreviewed_confirmed_appointments.sql');
+  const mirror = read('database/supabase/migrations/20261001000000_auto_cancel_unreviewed_confirmed_appointments.sql');
+  const schema = read('supabase/migrations/20260827000000_initial.sql');
+  const trigger = schema.match(/create or replace function public\.enqueue_appointment_notification\(\)[\s\S]*?as \$\$([\s\S]*?)\$\$;/)?.[1] || '';
+  const workerMaintenanceCall = workerSource.indexOf("admin.rpc('run_appointment_maintenance')");
+  const workerConfigurationGuard = workerSource.indexOf('!serviceKey || !supabaseUrl || !cronSecret || !smtpConfigured');
+
+  assert.equal(mirror, migration);
+  assert.match(migration, /where status = 'Confirmed'[\s\S]*?and arrived_at is null[\s\S]*?and no_show_reviewed_at is null[\s\S]*?and start_at <= p_now - interval '24 hours'/i);
+  assert.match(migration, /return v_cancelled \+ v_no_show_cancelled/i);
+  assert.match(trigger, /if session_user in \('postgres', 'supabase_admin'\) then[\s\S]*?return new;/);
+  assert.doesNotMatch(trigger, /auth\.role\(\).*service_role/);
+  assert.ok(workerConfigurationGuard >= 0 && workerMaintenanceCall > workerConfigurationGuard);
+  assert.match(workerSource.slice(workerMaintenanceCall), /admin\.rpc\('claim_notification_outbox'/);
+});
+
 test('worker requires SSL SMTP on port 465 and supports Gmail sender fallback', () => {
   assert.match(workerSource, /import nodemailer from 'npm:nodemailer'/);
   assert.match(workerSource, /const smtpPort = smtpPortValue \? Number\(smtpPortValue\) : 465/);

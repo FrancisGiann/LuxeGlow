@@ -77,6 +77,11 @@ Edge Function's `CRON_SECRET_TOKEN`). Run
 in the Supabase SQL Editor; it enables `pg_cron`, `pg_net`, and Vault, then
 installs or replaces a once-per-minute job. The script contains no credentials.
 The token must match the Edge Function secret exactly.
+This scheduled Edge Function must remain configured with its SMTP secrets: it
+checks delivery configuration before calling `run_appointment_maintenance`,
+which also cancels unreviewed Confirmed appointments with no recorded arrival
+24 hours after their scheduled start. The database migration defines that
+maintenance behavior but does not install the cron schedule.
 You can also use GitHub Actions, Cloudflare Cron, or another secret-aware
 scheduler. To smoke-test the deployed worker manually:
 
