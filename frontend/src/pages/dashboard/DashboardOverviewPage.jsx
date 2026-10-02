@@ -52,7 +52,7 @@ export function DashboardOverviewPage() {
   return (
     <div className="mx-auto max-w-[900px]">
       <div className="mb-8">
-        <h2 className="font-display text-3xl font-medium text-ink-900">Welcome back, {customer?.first_name || 'friend'}.</h2>
+        <h2 className="font-display text-3xl font-medium text-ink-900">Welcome{customer?.first_name ? `, ${customer.first_name}` : ''}.</h2>
         <p className="mt-2 text-ink-500">Your next visit and the actions you use most.</p>
       </div>
       <NextAppointment />

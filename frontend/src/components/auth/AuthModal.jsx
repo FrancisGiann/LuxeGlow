@@ -105,7 +105,7 @@ export function AuthModal() {
       const res = await login(f.get('email'), f.get('password'));
       if (res.ok) {
         if (isStaffRole(res.role)) {
-          toast('Welcome back, staff!', 'success');
+          toast('Signed in successfully.', 'success');
           navigate('/admin', { replace: true });
         } else {
           finishAndGoDashboard();
@@ -153,7 +153,7 @@ export function AuthModal() {
         setResendForEmail(resendKey);
         setResendIn(res.retryAfter);
       }
-      if (res.ok) toast('A new verification email has been sent.', 'info');
+      if (res.ok) toast('Verification email requested. Check your inbox and spam folder.', 'info');
       else toast(res.error || 'Could not resend the verification email right now.', 'error');
     } catch {
       toast('Could not resend the verification email right now. Please try again.', 'error');
@@ -248,7 +248,7 @@ export function AuthModal() {
           <p className="mt-1 text-center text-sm text-ink-500">
             {modalView === 'login' && 'Sign in to your account.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
-            {modalView === 'verify' && 'Check your inbox for a verification email.'}
+            {modalView === 'verify' && 'Verify this email address to continue.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
             {modalView === 'forgot-reset' && (passwordSetup?.ready ? 'Use the secure link, or enter the code if your email provides one.' : passwordSetup?.type === 'recovery' ? 'Open the reset link, or enter the recovery code from that email.' : 'Open the invitation or reset link from your email before choosing a password.')}
             {modalView === 'password-success' && (inviteCompletion ? 'Your staff account is ready for secure sign-in.' : 'Choose where to sign in next.')}
@@ -376,23 +376,23 @@ export function AuthModal() {
           {modalView === 'verify' && (
             <div className="mt-6 flex flex-col items-center gap-5">
               <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Link sent to</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Email address</p>
                 <p className="mt-0.5 text-sm font-semibold text-brand-800">{verifyEmail}</p>
               </div>
 
               <div className="py-4 text-center">
-                <h3 className="mb-2 text-lg font-bold text-ink-900">Click the link to continue.</h3>
-                <p className="text-sm text-ink-500">It verifies your address and signs you in.</p>
+                <h3 className="mb-2 text-lg font-bold text-ink-900">Check your inbox and spam folder.</h3>
+                <p className="text-sm text-ink-500">If this address needs verification, open the email link to confirm it and sign in.</p>
               </div>
 
               <div className="text-center text-sm text-ink-500">
-                Didn't get it?{' '}
+                Need a link?{' '}
                 <button type="button" onClick={handleResend} disabled={resendRemaining > 0 || resendBusy} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
                   {resendBusy ? 'Sending…' : resendRemaining > 0 ? `Resend in ${Math.floor(resendRemaining / 60)}:${String(resendRemaining % 60).padStart(2, '0')}` : 'Resend email'}
                 </button>
               </div>
               <p className="text-center text-xs text-ink-400">
-                You can safely close this window once you click the link in your email.
+                After you verify your email, you can close this window.
               </p>
             </div>
           )}
