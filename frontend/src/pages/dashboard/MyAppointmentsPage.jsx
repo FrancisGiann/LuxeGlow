@@ -28,7 +28,60 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
   const dateLabel = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const timeLabel = date.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
   const manageable = canCustomerManage(appointment);
-  return <li className="grid gap-4 border-b border-line px-1 py-5 last:border-b-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto_minmax(0,auto)] lg:items-center"><div className="flex min-w-0 items-center gap-3"><div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300">{appointment.service_image ? <img src={appointment.service_image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <IconSparkle size={17} aria-hidden="true" />}</div><div className="min-w-0"><p className="truncate font-display text-lg font-medium text-ink-900">{appointment.service}</p><p className="mt-1 break-words text-xs text-ink-500">{appointment.staff_name || 'Unassigned'} · Reference {appointment.reference_no || appointment.id} · Booked {appointment.created_at ? new Date(appointment.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '—'}</p></div></div><div className="min-w-0 text-sm"><p className="font-semibold text-ink-800">{dateLabel}</p><p className="mt-1 text-xs text-ink-500">{timeLabel}</p></div><div className="flex flex-wrap items-center gap-3"><StatusPill status={appointment.status} size="sm" />{appointment.has_rating ? <StarsRow rating={appointment.rating_given} /> : appointment.status === 'Completed' ? <button type="button" onClick={() => onRate(appointment.id)} className="text-xs font-bold text-blush-600 hover:text-blush-700"><IconStar size={13} filled /> Rate visit</button> : null}</div><div className="flex w-full flex-wrap justify-start gap-2 lg:justify-end">{['Pending', 'Confirmed'].includes(appointment.status) && <Button type="button" variant="soft" size="sm" className="whitespace-nowrap" onClick={() => onView(appointment)}><IconPrinter size={14} />View booking details</Button>}{appointment.status === 'Completed' && <Button type="button" variant="soft" size="sm" className="whitespace-nowrap" onClick={() => onReceipt(appointment)}><IconPrinter size={14} />View / print booking confirmation</Button>}{manageable && <><Button type="button" variant="soft" size="sm" onClick={() => onReschedule(appointment)}>Change date or time</Button><Button type="button" variant="soft" size="sm" onClick={() => onCancel(appointment)}>Cancel booking</Button></>}</div></li>;
+  const actionClassName = 'min-h-12 w-full whitespace-normal px-3.5 py-2 text-center leading-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 sm:w-auto sm:min-w-44';
+
+  return (
+    <li className="grid gap-x-6 gap-y-3 border-b border-line px-1 py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start lg:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)_auto] lg:items-center">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300">
+          {appointment.service_image ? <img src={appointment.service_image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <IconSparkle size={17} aria-hidden="true" />}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-display text-lg font-medium text-ink-900">{appointment.service}</p>
+          <p className="mt-1 break-words text-xs text-ink-500">
+            {appointment.staff_name || 'Unassigned'} · Reference {appointment.reference_no || appointment.id} · Booked {appointment.created_at ? new Date(appointment.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="min-w-0 text-sm sm:text-right lg:text-left">
+        <p className="font-semibold text-ink-800">{dateLabel}</p>
+        <p className="mt-1 text-xs text-ink-500">{timeLabel}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-1 lg:justify-self-end">
+        <StatusPill status={appointment.status} size="sm" />
+        {appointment.has_rating ? <StarsRow rating={appointment.rating_given} /> : appointment.status === 'Completed' ? (
+          <button type="button" onClick={() => onRate(appointment.id)} className="inline-flex min-h-11 items-center gap-1 text-xs font-bold text-blush-600 hover:text-blush-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
+            <IconStar size={13} filled aria-hidden="true" /> Rate visit
+          </button>
+        ) : null}
+      </div>
+
+      <div className="col-span-full flex w-full flex-wrap justify-start gap-2 sm:justify-end">
+        {['Pending', 'Confirmed'].includes(appointment.status) && (
+          <Button type="button" variant="primary" size="sm" className={actionClassName} onClick={() => onView(appointment)}>
+            <IconPrinter size={14} aria-hidden="true" /> View booking details
+          </Button>
+        )}
+        {appointment.status === 'Completed' && (
+          <Button type="button" variant="primary" size="sm" className={actionClassName} onClick={() => onReceipt(appointment)}>
+            <IconPrinter size={14} aria-hidden="true" /> View / print booking confirmation
+          </Button>
+        )}
+        {manageable && (
+          <>
+            <Button type="button" variant="soft" size="sm" className={actionClassName} onClick={() => onReschedule(appointment)}>
+              Change date or time
+            </Button>
+            <Button type="button" variant="soft" size="sm" className={`${actionClassName} border-danger/30 text-danger hover:border-danger/50 hover:bg-danger/5`} onClick={() => onCancel(appointment)}>
+              Cancel booking
+            </Button>
+          </>
+        )}
+      </div>
+    </li>
+  );
 }
 
 function RescheduleDialog({ appointment, onClose, onSave }) {

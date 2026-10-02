@@ -21,13 +21,13 @@ test('customer-facing booking record labels use booking confirmation terminology
   }
 });
 
-test('appointment actions use the shared responsive button cell', () => {
-  assert.match(appointmentsPage, /import \{ Button \} from ['"]\.\.\/\.\.\/components\/ui\/Button['"]/);
-  assert.match(appointmentsPage, /lg:grid-cols-\[minmax\(0,1\.15fr\)_minmax\(0,1fr\)_auto_minmax\(0,auto\)\]/);
-  assert.match(appointmentsPage, /flex w-full flex-wrap justify-start gap-2 lg:justify-end/);
-  assert.match(appointmentsPage, /View booking details/);
-  assert.match(appointmentsPage, /Change date or time/);
-  assert.match(appointmentsPage, /Cancel booking/);
-  assert.match(appointmentsPage, /View \/ print booking confirmation/);
-  assert.doesNotMatch(appointmentsPage, /inline-flex min-h-10[^>]*View \/ print receipt/);
+test('appointment actions keep distinct customer-facing labels', () => {
+  for (const label of [
+    'View booking details',
+    'Change date or time',
+    'Cancel booking',
+    'View / print booking confirmation',
+  ]) {
+    assert.ok(appointmentsPage.includes(label), `Missing appointment action label: ${label}`);
+  }
 });

@@ -150,8 +150,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #eee', paddingVertical: 8 },
   rowLabel: { fontSize: 12, color: '#666', width: '22%' },
   rowValue: { fontSize: 12, fontWeight: 'bold', color: '#111', width: '76%', flexShrink: 1, textAlign: 'right' },
-  emailLabel: { fontSize: 12, color: '#666', width: '12%' },
-  emailValue: { color: '#111', fontWeight: 'bold', width: '86%', flexShrink: 1, textAlign: 'left' },
   rowValueEmphasized: { fontSize: 16, fontWeight: 'bold', color: '#5a1846', width: '76%', textAlign: 'right' },
   servicesBox: { border: '1px solid #eee', borderRadius: 4, padding: 10, marginTop: 10 },
   serviceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
@@ -189,8 +187,8 @@ const ReceiptDocument = ({ normalized, appointmentDate, appointmentTime, generat
         <Text style={styles.sectionTitle}>Customer</Text>
         <View style={styles.row}><Text style={styles.rowLabel}>Name</Text><Text style={styles.rowValue}>{normalized.customerName}</Text></View>
         <View style={styles.row}>
-          <Text style={styles.emailLabel}>Email</Text>
-          <Text style={{ ...styles.emailValue, fontSize: emailFontSize(normalized.email) }}>{normalized.email || '—'}</Text>
+          <Text style={styles.rowLabel}>Email</Text>
+          <Text style={{ ...styles.rowValue, fontSize: emailFontSize(normalized.email) }}>{normalized.email || '—'}</Text>
         </View>
         <View style={styles.row}><Text style={styles.rowLabel}>Phone</Text><Text style={styles.rowValue}>{normalized.phone || '—'}</Text></View>
       </View>
