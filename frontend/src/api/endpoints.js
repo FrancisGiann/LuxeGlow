@@ -379,10 +379,14 @@ export async function createAppointment({ serviceIds, staffId, date, time }) {
   }
 }
 
-export async function rescheduleMyAppointment(appointmentId, date, time) {
+export async function rescheduleMyAppointment(appointmentId, date, time, reason) {
+  const cleanReason = String(reason || '').trim();
   const match = String(time || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
   if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !match) {
     return { success: false, error: 'Choose a valid date and 30-minute time.' };
+  }
+  if (!cleanReason || cleanReason.length > 500) {
+    return { success: false, error: 'Enter a rescheduling reason between 1 and 500 characters.' };
   }
   let hours = Number(match[1]);
   if (match[3]) {
@@ -395,6 +399,7 @@ export async function rescheduleMyAppointment(appointmentId, date, time) {
     p_appointment_id: appointmentId,
     p_date: date,
     p_time: localTime,
+    p_reason: cleanReason,
   }), 'Could not reschedule your appointment.');
   return { success: true, appointment: data };
 }

@@ -87,10 +87,12 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
 function RescheduleDialog({ appointment, onClose, onSave }) {
   const [date, setDate] = useState(appointment.raw_date);
   const [time, setTime] = useState('');
+  const [reason, setReason] = useState('');
   const [slots, setSlots] = useState([]);
   const [loadedDate, setLoadedDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [reasonError, setReasonError] = useState('');
   const loading = loadedDate !== date;
   useEffect(() => {
     let alive = true;
@@ -101,16 +103,29 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
   }, [appointment.staff_id, appointment.total_duration_minutes, date]);
   const save = async (event) => {
     event.preventDefault();
+    const cleanReason = reason.trim();
+    if (!cleanReason || cleanReason.length > 500) {
+      setReasonError('Enter a reason between 1 and 500 characters.');
+      return;
+    }
     if (!time || busy) return;
     setBusy(true);
     setError('');
-    try { await onSave(appointment, date, time); }
+    setReasonError('');
+    try { await onSave(appointment, date, time, cleanReason); }
     catch (failure) { setError(failure.message || 'Could not reschedule this appointment.'); }
     finally { setBusy(false); }
   };
   return <AdminDialog open title="Change appointment time" description="Choose a new date and an available start time. Your request will return to Pending for salon confirmation." onClose={onClose} closeDisabled={busy} size="wide">
     <form onSubmit={save} className="space-y-4">
       <label className="block text-sm font-semibold text-ink-900">New date<input type="date" required min={manilaDate()} max={maxBookingDate()} value={date} onChange={(event) => { setDate(event.target.value); setTime(''); }} className="mt-1 block min-h-11 w-full rounded-xl border border-line bg-surface px-4 text-sm" /></label>
+      <div>
+        <label htmlFor="reschedule-reason" className="block text-sm font-semibold text-ink-900">Reason for rescheduling</label>
+        <textarea id="reschedule-reason" required maxLength={500} rows={3} value={reason} aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? 'reschedule-reason-error reschedule-reason-count' : 'reschedule-reason-hint reschedule-reason-count'} onChange={(event) => { setReason(event.target.value); if (reasonError && event.target.value.trim()) setReasonError(''); }} className="mt-1 block w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm" />
+        <p id="reschedule-reason-hint" className="mt-1 text-xs text-ink-500">The salon can see this reason with the appointment details.</p>
+        <p id="reschedule-reason-count" className="text-right text-xs text-ink-500" aria-live="polite" aria-atomic="true">{reason.trim().length}/500</p>
+        {reasonError && <p id="reschedule-reason-error" className="mt-1 text-sm font-semibold text-danger" role="alert">{reasonError}</p>}
+      </div>
       <div>
         <p className="mb-2 text-sm font-semibold text-ink-900">Available times</p>
         {loading ? <p className="py-5 text-sm text-ink-500" role="status">Checking availability…</p> : error && !slots.length ? <p className="text-sm text-danger" role="alert">{error}</p> : slots.filter((slot) => slot.available).length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.filter((slot) => slot.available).map((slot) => <button key={slot.time} type="button" aria-pressed={time === slot.time} onClick={() => setTime(slot.time)} className={`min-h-11 rounded-lg border px-2 text-sm font-bold ${time === slot.time ? 'border-brand-800 bg-brand-800 text-white' : 'border-line bg-surface text-ink-700 hover:border-brand-400'}`}>{slot.time}</button>)}</div> : <p className="text-sm text-ink-500">No times are available for this date.</p>}
@@ -150,12 +165,12 @@ export function MyAppointmentsPage() {
   const [tab, setTab] = useState('upcoming'); const [rateFor, setRateFor] = useState(null); const [receiptFor, setReceiptFor] = useState(null);
   const [rescheduleFor, setRescheduleFor] = useState(null); const [cancelFor, setCancelFor] = useState(null);
   const groups = useMemo(() => classifyAppointments(appointments), [appointments]); const visible = groups[tab];
-  const saveReschedule = async (appointment, date, time) => {
-    const result = await rescheduleMyAppointment(appointment.id, date, time);
+  const saveReschedule = async (appointment, date, time, reason) => {
+    const result = await rescheduleMyAppointment(appointment.id, date, time, reason);
     if (!result.success) throw new Error(result.error);
     await refresh();
     setRescheduleFor(null);
-    toast('Appointment rescheduled. It is pending salon confirmation.', 'success');
+    toast('New time requested. It is pending salon confirmation.', 'success');
   };
   const saveCancellation = async (appointment, reason) => {
     const result = await cancelMyAppointment(appointment.id, reason);

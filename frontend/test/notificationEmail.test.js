@@ -123,6 +123,27 @@ test('booking status emails include escaped booking references and kind-specific
   }
 });
 
+test('cancellation and customer reschedule reasons are delivered through their notification messages', () => {
+  const cancelled = buildNotificationEmail({
+    ...baseEmail,
+    job: { id: 130, kind: 'cancelled', payload: { title: 'Appointment cancelled', message: 'Your appointment LG-130 has been cancelled. Reason: My schedule changed.' } },
+  });
+  const customerReschedule = buildNotificationEmail({
+    ...baseEmail,
+    job: { id: 131, kind: 'rescheduled', payload: { title: 'Appointment rescheduled', message: 'Your appointment LG-131 has been rescheduled to October 10, 2026 at 10:00 AM Manila time and is pending salon confirmation. Reason: I need a later time.' } },
+  });
+  const staffReschedule = buildNotificationEmail({
+    ...baseEmail,
+    job: { id: 132, kind: 'rescheduled', payload: { title: 'Appointment rescheduled', message: 'The salon changed your appointment LG-132 to October 10, 2026 at 10:00 AM Manila time.' } },
+  });
+
+  assert.match(cancelled.text, /Reason: My schedule changed\./);
+  assert.match(customerReschedule.text, /pending salon confirmation\. Reason: I need a later time\./);
+  assert.match(customerReschedule.html, /Reason: I need a later time\./);
+  assert.match(staffReschedule.text, /The salon changed your appointment/);
+  assert.doesNotMatch(staffReschedule.text, /I need a later time|Reason:/);
+});
+
 test('welcome and password notices use account styling without booking details', () => {
   const welcome = buildNotificationEmail({
     ...baseEmail,

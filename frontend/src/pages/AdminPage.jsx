@@ -646,6 +646,16 @@ function AppointmentDetails({
             </p>
           </div>
         )}
+        {appointment.customer_reschedule_reason && (
+          <div className="mt-6 border-t border-line pt-5">
+            <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
+              Latest customer reschedule reason
+            </h3>
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-700">
+              {appointment.customer_reschedule_reason}
+            </p>
+          </div>
+        )}
         {appointment.arrived_at && (
           <p className="mt-2 text-sm font-semibold text-success" role="status">
             Person arrived

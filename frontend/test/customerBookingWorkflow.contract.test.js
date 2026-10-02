@@ -13,6 +13,8 @@ const adminApi = read('frontend/src/api/admin.js');
 const adminPage = read('frontend/src/pages/AdminPage.jsx');
 const migration = read('supabase/migrations/20261002000000_customer_booking_controls.sql');
 const migrationMirror = read('database/supabase/migrations/20261002000000_customer_booking_controls.sql');
+const rescheduleReasonMigration = read('supabase/migrations/20261002010000_customer_reschedule_reason.sql');
+const rescheduleReasonMigrationMirror = read('database/supabase/migrations/20261002010000_customer_reschedule_reason.sql');
 const worker = read('supabase/functions/process-notifications/index.ts');
 
 test('booking selections survive sign-in and only the review action creates an appointment', () => {
@@ -74,4 +76,17 @@ test('reschedule and repeated status events queue new notifications and replace 
   assert.match(adminPage, /Customer cancellation reason/);
   assert.match(worker, /const stale = appointment\?\.status !== 'Confirmed'/);
   assert.match(worker, /expectedStartEpoch/);
+});
+
+test('forward migration requires owned reschedule reasons and exposes them to staff', () => {
+  assert.equal(rescheduleReasonMigrationMirror, rescheduleReasonMigration);
+  assert.match(rescheduleReasonMigration, /add column if not exists customer_reschedule_reason text/);
+  assert.match(rescheduleReasonMigration, /customer_reschedule_reason is null[\s\S]*?regexp_replace\(customer_reschedule_reason, '\^\[\[:space:\]\]\+\|\[\[:space:\]\]\+\$', '', 'g'\)[\s\S]*?between 1 and 500/);
+  assert.match(rescheduleReasonMigration, /drop function if exists public\.customer_reschedule_appointment\(uuid, date, time\)/);
+  assert.match(rescheduleReasonMigration, /customer_reschedule_appointment\(\s*p_appointment_id uuid,\s*p_date date,\s*p_time time,\s*p_reason text/);
+  assert.match(rescheduleReasonMigration, /where a\.id = p_appointment_id and a\.customer_id = v_user\s+for update/);
+  assert.match(rescheduleReasonMigration, /insert into public\.notification_outbox\(appointment_id, recipient_id, kind, payload\)[\s\S]*?values \(\s*new\.id,\s*new\.customer_id,\s*v_type,/);
+  assert.match(adminApi, /customer_reschedule_reason/);
+  assert.match(adminPage, /Latest customer reschedule reason/);
+  assert.match(endpoints, /p_reason: cleanReason/);
 });
