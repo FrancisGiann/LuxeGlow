@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { IconX } from '../icons';
 
-export function AdminDialog({ open, title, description, onClose, closeDisabled = false, size = 'default', children }) {
+export function AdminDialog({ open, title, description, onClose, closeDisabled = false, size = 'default', returnFocusRef, fallbackFocusRef, children }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
@@ -20,6 +20,8 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
   useEffect(() => {
     if (!open) return undefined;
     const previouslyFocused = document.activeElement;
+    const returnFocusTarget = returnFocusRef?.current;
+    const fallbackFocusTarget = fallbackFocusRef?.current;
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (event) => {
@@ -47,9 +49,24 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = previousBodyOverflow;
-      if (previouslyFocused instanceof HTMLElement && document.body.contains(previouslyFocused)) previouslyFocused.focus();
+      const isAvailableFocusTarget = (element) =>
+        element instanceof HTMLElement &&
+        element !== document.body &&
+        element !== document.documentElement &&
+        document.body.contains(element);
+      if (returnFocusRef) {
+        if (isAvailableFocusTarget(returnFocusTarget)) {
+          returnFocusTarget.focus();
+        } else if (isAvailableFocusTarget(fallbackFocusTarget)) {
+          fallbackFocusTarget.focus();
+        }
+      } else if (isAvailableFocusTarget(previouslyFocused)) {
+        previouslyFocused.focus();
+      } else if (isAvailableFocusTarget(fallbackFocusTarget)) {
+        fallbackFocusTarget.focus();
+      }
     };
-  }, [open]);
+  }, [open, fallbackFocusRef, returnFocusRef]);
 
   if (!open) return null;
 

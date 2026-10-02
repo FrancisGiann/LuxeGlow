@@ -9,40 +9,56 @@ import {
   manilaDateKey,
 } from '../src/utils/adminAppointments.js';
 
-test('appointment defaults use the current Asia/Manila date and show every status', () => {
+test('appointment defaults show active appointments across every date', () => {
   const justAfterManilaMidnight = new Date('2026-09-12T16:05:00.000Z');
   assert.equal(manilaDateKey(justAfterManilaMidnight), '2026-09-13');
-  assert.deepEqual(createInitialAppointmentFilters(justAfterManilaMidnight), {
-    date: '2026-09-13',
-    status: 'all',
+  assert.deepEqual(createInitialAppointmentFilters(), {
+    date: '',
+    status: 'active',
     search: '',
   });
-  assert.equal(initialAdminTab('staff'), 'overview');
+  assert.deepEqual(appointmentFilterPreset('today', '2026-09-13'), {
+    date: '2026-09-13',
+    status: 'active',
+    search: '',
+  });
+  assert.deepEqual(appointmentFilterPreset('active'), {
+    date: '',
+    status: 'active',
+    search: '',
+  });
   assert.equal(initialAdminTab('head'), 'appointments');
-  assert.equal(initialAdminTab('admin'), 'overview');
+  assert.equal(initialAdminTab('admin'), 'appointments');
+  assert.equal(initialAdminTab('customer'), 'overview');
 });
 
 test('appointment search is case-insensitive across reference, customer, service, and assigned staff fields', () => {
   const appointment = {
     reference_no: 'AST-1042',
+    status: 'Confirmed',
     customer: { first_name: 'Mae', last_name: 'Santos', email: 'mae@example.com', phone: '+639171234567' },
     services: [{ service_name: 'Gel Manicure' }],
     staff: { first_name: 'Rina', last_name: 'Lopez' },
   };
   for (const search of ['ast-1042', 'MAE', 'SANTOS', 'MAE@EXAMPLE.COM', '+639171234567', 'gel manicure', 'rina lopez']) {
-    assert.deepEqual(getAdminAppointmentQueue([appointment], { date: '', status: 'all', search }), [appointment], search);
+    assert.deepEqual(getAdminAppointmentQueue([appointment], { date: '', status: 'active', search }), [appointment], search);
   }
   assert.deepEqual(getAdminAppointmentQueue([appointment], { search: 'not present' }), []);
 });
 
-test('date and status filters compose without changing the all-dates API order', () => {
+test('active filters include overdue pending and confirmed appointments across every date in API order', () => {
   const newest = { id: 'newest', local_date: '2026-09-13', status: 'Pending' };
-  const older = { id: 'older', local_date: '2026-09-12', status: 'Pending' };
-  const confirmed = { id: 'confirmed', local_date: '2026-09-13', status: 'Confirmed' };
-  const apiOrder = [newest, older, confirmed];
-  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'all' }), apiOrder);
-  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'Pending' }), [newest, older]);
-  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '2026-09-13', status: 'Pending' }), [newest]);
+  const overdue = { id: 'overdue', local_date: '2026-09-12', status: 'Pending' };
+  const confirmed = { id: 'confirmed', local_date: '2026-09-10', status: 'Confirmed' };
+  const completed = { id: 'completed', local_date: '2026-09-13', status: 'Completed' };
+  const cancelled = { id: 'cancelled', local_date: '2026-09-13', status: 'Cancelled' };
+  const apiOrder = [newest, overdue, confirmed, completed, cancelled];
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, createInitialAppointmentFilters()), [newest, overdue, confirmed]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'Pending' }), [newest, overdue]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '2026-09-13', status: 'active' }), [newest]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'history' }), [completed, cancelled]);
+  assert.deepEqual(appointmentFilterPreset('history'), { date: '', status: 'history', search: '' });
+  assert.deepEqual(appointmentFilterPreset('all'), { date: '', status: 'all', search: '' });
 });
 
 test('selected-day queues sort valid local times and preserve source order for ties and invalid times', () => {

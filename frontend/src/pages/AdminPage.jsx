@@ -526,10 +526,10 @@ function AppointmentRow({ appointment, selected, onSelect }) {
     <li className="border-b border-line last:border-b-0">
       <button
         type="button"
-        onClick={() => onSelect(appointment)}
+        onClick={(event) => onSelect(appointment, event.currentTarget)}
         className={`w-full block py-4 text-left leading-relaxed transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 ${selected ? "bg-blush-50" : "hover:bg-canvas"}`}
       >
-        <div className="grid min-h-20 items-center gap-3 sm:grid-cols-[0.9fr_1.3fr_minmax(0,1fr)_auto]">
+        <div className="grid min-h-20 items-center gap-3 sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
           <div className="flex justify-between sm:contents">
             <span className="min-w-0">
               <span className="block font-display text-base font-medium leading-snug text-ink-900">
@@ -543,15 +543,9 @@ function AppointmentRow({ appointment, selected, onSelect }) {
               <StatusPill status={appointment.status} size="sm" />
             </span>
           </div>
-          <span className="min-w-0 overflow-hidden">
-            <span className="block break-words text-sm font-bold leading-snug text-ink-900">
+          <span className="min-w-0 break-words">
+            <span className="block text-sm font-bold leading-snug text-ink-900">
               {customer.first_name} {customer.last_name}
-            </span>
-            <span className="block break-all text-xs leading-snug text-ink-500">
-              {customer.email || "No email"}
-            </span>
-            <span className="block break-words text-xs leading-snug text-ink-500">
-              {appointmentStaffName(appointment)}
             </span>
           </span>
           <span className="min-w-0 break-words text-sm leading-snug text-ink-600">
@@ -783,50 +777,47 @@ function AppointmentDetails({
   );
 }
 
-function AppointmentInspector({ appointment, onRequestStatus, onReschedule, onMarkArrived, arrivalBusy, arrivalError }) {
-  if (!appointment)
-    return (
-      <Card className="h-full p-6">
-        <p className="text-sm leading-relaxed text-ink-500">
-          Select an appointment to inspect its customer, services, status, or
-          reschedule action.
-        </p>
-      </Card>
-    );
-  return (
-    <Card className="h-full p-6">
-      <AppointmentDetails
-        appointment={appointment}
-        onRequestStatus={onRequestStatus}
-        onReschedule={onReschedule}
-        onMarkArrived={onMarkArrived}
-        arrivalBusy={arrivalBusy}
-        arrivalError={arrivalError}
-      />
-    </Card>
-  );
-}
-
 function AppointmentQueue({
   appointments,
   filters,
   totalAppointments,
   selectedAppointment,
+  filtersExpanded,
+  headingRef,
+  onToggleFilters,
   onFilterChange,
   onAllDates,
+  onToday,
   onReset,
   onSelectAppointment,
 }) {
+  const statusLabel = filters.status === "active"
+    ? "Active bookings"
+    : filters.status === "history"
+      ? "History (completed and cancelled)"
+      : filters.status === "all"
+        ? "All statuses"
+        : filters.status;
+  const filterSummary = [
+    statusLabel,
+    filters.date || "All dates",
+    filters.search.trim() ? `Search “${filters.search.trim()}”` : "",
+  ].filter(Boolean).join(" · ");
+
   return (
     <Card className="overflow-hidden p-5 sm:p-7">
-      <CardHeader
-        title="Appointments"
-        subtitle="Search and filter booking requests. Dates and times use Asia/Manila."
-      />
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1.4fr)_minmax(10rem,0.8fr)_minmax(10rem,0.8fr)]">
-        <label className="text-sm font-semibold text-ink-900">
-          <span className="invisible">Search appointments</span>
-          <span className="relative block mt-1">
+      <div className="border-b border-line pb-5">
+        <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-ink-900">
+          Appointments
+        </h2>
+        <p className="mt-0.5 text-sm text-ink-500">
+          Search and update bookings across all dates. Times use Asia/Manila.
+        </p>
+      </div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="min-w-0 flex-1 text-sm font-semibold text-ink-900">
+          <span className="sr-only">Search appointments</span>
+          <span className="relative block">
             <IconSearch
               size={17}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500"
@@ -840,6 +831,21 @@ function AppointmentQueue({
             />
           </span>
         </label>
+        <button
+          type="button"
+          aria-expanded={filtersExpanded}
+          aria-controls="appointment-filter-fields"
+          onClick={onToggleFilters}
+          className="min-h-11 shrink-0 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
+        >
+          Filters{filtersExpanded ? " · Hide" : ""}
+        </button>
+      </div>
+      <div
+        id="appointment-filter-fields"
+        hidden={!filtersExpanded}
+        className="mt-4 grid gap-3 border-b border-line pb-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto_auto_auto]"
+      >
         <label className="text-sm font-semibold text-ink-900">
           Date
           <input
@@ -856,6 +862,7 @@ function AppointmentQueue({
             onChange={(event) => onFilterChange("status", event.target.value)}
             className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
+            <option value="active">Active (pending and confirmed)</option>
             <option value="all">All statuses</option>
             {["Pending", "Confirmed", "Completed", "Cancelled"].map(
               (status) => (
@@ -867,35 +874,38 @@ function AppointmentQueue({
             <option value="history">History (completed and cancelled)</option>
           </select>
         </label>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-4">
-        <p
-          className="text-sm font-semibold text-ink-600"
-          role="status"
-          aria-live="polite"
+        <button
+          type="button"
+          onClick={onAllDates}
+          className="min-h-11 self-end rounded-lg px-3 text-sm font-semibold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
         >
-          {appointments.length} of {totalAppointments} appointment
-          {totalAppointments === 1 ? "" : "s"}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onAllDates}
-            className="min-h-11 rounded-lg px-3 text-sm font-semibold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-          >
-            All dates
-          </button>
-          <button
-            type="button"
-            onClick={onReset}
-            className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-          >
-            Reset to today
-          </button>
-        </div>
+          All dates
+        </button>
+        <button
+          type="button"
+          onClick={onToday}
+          className="min-h-11 self-end rounded-lg px-3 text-sm font-semibold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          className="min-h-11 self-end rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
+        >
+          Reset filters
+        </button>
       </div>
-      <div className="mt-3 hidden min-h-12 items-center gap-2 border-b border-line bg-canvas py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 sm:grid sm:grid-cols-[0.9fr_1.3fr_1fr_auto]">
-        <span>Time</span>
+      <div className="mt-4 flex flex-col gap-1 border-b border-line pb-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <p className="min-w-0 break-words font-semibold text-ink-700" role="status" aria-live="polite">
+          {filterSummary}
+        </p>
+        <p className="shrink-0 text-ink-500">
+          {appointments.length} of {totalAppointments} appointment{totalAppointments === 1 ? "" : "s"}
+        </p>
+      </div>
+      <div className="mt-3 hidden min-h-12 items-center gap-2 border-b border-line bg-canvas py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 sm:grid sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
+        <span>Date &amp; time</span>
         <span>Customer</span>
         <span>Services</span>
         <span className="sm:text-right">Status</span>
@@ -2086,6 +2096,7 @@ export function AdminPage() {
       clearToastScope(`${toastScopePrefix}:${previous}`);
       if (next !== "appointments") setNoShowConfirm(null);
     }
+    if (next !== "appointments") setSelectedAppointment(null);
     setTabState(next);
   }, [clearToastScope, toastScopePrefix]);
   const setNotice = (message) => {
@@ -2111,6 +2122,9 @@ export function AdminPage() {
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuTriggerRef = useRef(null);
+  const appointmentQueueHeadingRef = useRef(null);
+  const appointmentReturnFocusRef = useRef(null);
+  const [appointmentFiltersExpanded, setAppointmentFiltersExpanded] = useState(false);
   const historyRequestRef = useRef(0);
   const availabilityRequestRef = useRef(0);
   const notificationAppointmentRequestRef = useRef(0);
@@ -2139,9 +2153,10 @@ export function AdminPage() {
     };
   }, [clearToastScope, toastScopePrefix]);
 
-  const openAppointments = useCallback((kind = "today", appointment = null) => {
+  const openAppointments = useCallback((kind = "active", appointment = null) => {
+    appointmentReturnFocusRef.current = null;
     setAppointmentFilters(
-      appointmentFilterPreset(kind, manilaDateKey(), appointment),
+      appointmentFilterPreset(kind, manilaDateKey()),
     );
     setSelectedAppointment(kind === "appointment" ? appointment : null);
     setTab(kind === "history" ? "history" : "appointments");
@@ -2150,12 +2165,27 @@ export function AdminPage() {
     if (nextTab === "history") {
       setAppointmentFilters(appointmentFilterPreset("history"));
       setSelectedAppointment(null);
+    } else if (nextTab === "appointments") {
+      setAppointmentFilters(appointmentFilterPreset("active"));
+      setSelectedAppointment(null);
     }
     setTab(nextTab);
   }, [setTab]);
   const visibleAppointments = useMemo(
     () => getAdminAppointmentQueue(appointments, appointmentFilters),
     [appointments, appointmentFilters],
+  );
+  const selectedVisibleAppointment = selectedAppointment
+    ? visibleAppointments.find(
+        (appointment) => appointment?.id === selectedAppointment.id,
+      ) || null
+    : null;
+  const appointmentDetailsOpen = Boolean(
+    selectedVisibleAppointment &&
+    !statusConfirm &&
+    !reschedule &&
+    !notificationAppointmentModal &&
+    !noShowConfirm,
   );
   const { disabled: inviteRoleDisabled } = getHeadInviteState(
     inviteForm.role,
@@ -2253,7 +2283,8 @@ export function AdminPage() {
         tab !== "appointments" ||
         statusConfirm ||
         reschedule ||
-        notificationAppointmentModal
+        notificationAppointmentModal ||
+        selectedVisibleAppointment
       ) {
         if (noShowConfirm) {
           setNoShowConfirm(null);
@@ -2297,7 +2328,7 @@ export function AdminPage() {
       window.clearTimeout(initialCheck);
       window.clearInterval(timer);
     };
-  }, [appointments, noShowConfirm, notificationAppointmentModal, reschedule, statusConfirm, tab]);
+  }, [appointments, selectedVisibleAppointment, noShowConfirm, notificationAppointmentModal, reschedule, statusConfirm, tab]);
 
   const closeNoShowPrompt = () => {
     if (noShowConfirm?.id) {
@@ -2383,9 +2414,10 @@ export function AdminPage() {
     }
   };
 
-  const closeNotificationAppointment = useCallback(() => {
+  const closeNotificationAppointment = useCallback((preserveSelection = false) => {
     notificationAppointmentRequestRef.current += 1;
     setNotificationAppointmentModal(null);
+    if (preserveSelection !== true) setSelectedAppointment(null);
   }, []);
 
   const openNotificationAppointment = useCallback(
@@ -2727,9 +2759,9 @@ export function AdminPage() {
       );
       if (!result.success) throw new Error(result.error);
       setRescheduleDialogError("");
-      setReschedule(null);
       setNotice("Appointment rescheduled.");
       await load();
+      setReschedule(null);
     } catch (rescheduleError) {
       const message =
         rescheduleError?.message || "Could not reschedule appointment.";
@@ -2757,11 +2789,11 @@ export function AdminPage() {
     setRescheduleDialogError("");
   };
   const requestNotificationStatus = (appointment, nextStatus) => {
-    closeNotificationAppointment();
+    closeNotificationAppointment(true);
     requestStatus(appointment, nextStatus);
   };
   const rescheduleNotificationAppointment = (appointment) => {
-    closeNotificationAppointment();
+    closeNotificationAppointment(true);
     openReschedule(appointment);
   };
   const requestStaffAction = (action) => {
@@ -3000,7 +3032,7 @@ export function AdminPage() {
   const viewNotificationAppointment = () => {
     if (!notificationModalAppointment) return;
     openAppointments("appointment", notificationModalAppointment);
-    closeNotificationAppointment();
+    closeNotificationAppointment(true);
   };
   const pageTitle =
     NAV_ITEMS.find(([key]) => key === tab)?.[1] ||
@@ -3108,60 +3140,37 @@ export function AdminPage() {
               }
             />
           ) : tab === "appointments" || tab === "history" ? (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]">
-              <div
-                className={selectedAppointment ? "hidden xl:block" : "block"}
-              >
-                <AppointmentQueue
-                  appointments={visibleAppointments}
-                  filters={appointmentFilters}
-                  totalAppointments={appointments.length}
-                  selectedAppointment={selectedAppointment}
-                  onFilterChange={(key, value) =>
-                    setAppointmentFilters((current) => ({
-                      ...current,
-                      [key]: value,
-                    }))
-                  }
-                  onAllDates={() =>
-                    setAppointmentFilters((current) => ({
-                      ...current,
-                      date: "",
-                    }))
-                  }
-                  onReset={() =>
-                    setAppointmentFilters(createInitialAppointmentFilters())
-                  }
-                  onSelectAppointment={setSelectedAppointment}
-                />
-              </div>
-              <div
-                className={selectedAppointment ? "block" : "hidden xl:block"}
-              >
-                <div className="mb-4 xl:hidden">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedAppointment(null)}
-                    className="flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-brand-800"
-                  >
-                    <IconArrowRight size={16} className="rotate-180" />
-                    Back to appointments
-                  </button>
-                </div>
-                <AppointmentInspector
-                  appointment={selectedAppointment}
-                  onRequestStatus={requestStatus}
-                  onReschedule={openReschedule}
-                  onMarkArrived={recordAppointmentArrival}
-                  arrivalBusy={arrivalBusyId === String(selectedAppointment?.id)}
-                  arrivalError={
-                    arrivalError?.id === String(selectedAppointment?.id)
-                      ? arrivalError.message
-                      : ""
-                  }
-                />
-              </div>
-            </div>
+            <AppointmentQueue
+              appointments={visibleAppointments}
+              filters={appointmentFilters}
+              totalAppointments={appointments.length}
+              selectedAppointment={selectedVisibleAppointment}
+              filtersExpanded={appointmentFiltersExpanded}
+              headingRef={appointmentQueueHeadingRef}
+              onToggleFilters={() => setAppointmentFiltersExpanded((open) => !open)}
+              onFilterChange={(key, value) =>
+                setAppointmentFilters((current) => ({
+                  ...current,
+                  [key]: value,
+                }))
+              }
+              onAllDates={() =>
+                setAppointmentFilters((current) => ({
+                  ...current,
+                  date: "",
+                }))
+              }
+              onToday={() =>
+                setAppointmentFilters(appointmentFilterPreset("today", manilaDateKey()))
+              }
+              onReset={() =>
+                setAppointmentFilters(createInitialAppointmentFilters())
+              }
+              onSelectAppointment={(appointment, trigger) => {
+                appointmentReturnFocusRef.current = trigger;
+                setSelectedAppointment(appointment);
+              }}
+            />
           ) : tab === "catalog" ? (
             <Card className="p-5 sm:p-7">
               <CardHeader
@@ -3573,6 +3582,30 @@ export function AdminPage() {
         onViewInAppointments={viewNotificationAppointment}
       />
       <AdminDialog
+        open={appointmentDetailsOpen}
+        title="Appointment details"
+        description="Review the booking and take the next appointment action. Times use Asia/Manila."
+        size="wide"
+        onClose={() => setSelectedAppointment(null)}
+        returnFocusRef={appointmentReturnFocusRef}
+        fallbackFocusRef={appointmentQueueHeadingRef}
+      >
+        {selectedVisibleAppointment && (
+          <AppointmentDetails
+            appointment={selectedVisibleAppointment}
+            onRequestStatus={requestStatus}
+            onReschedule={openReschedule}
+            onMarkArrived={recordAppointmentArrival}
+            arrivalBusy={arrivalBusyId === String(selectedVisibleAppointment.id)}
+            arrivalError={
+              arrivalError?.id === String(selectedVisibleAppointment.id)
+                ? arrivalError.message
+                : ""
+            }
+          />
+        )}
+      </AdminDialog>
+      <AdminDialog
         open={!!noShowConfirm}
         title="No arrival recorded"
         description={`No arrival is recorded for ${noShowConfirm?.reference || "this appointment"}.`}
@@ -3637,6 +3670,8 @@ export function AdminPage() {
         description={`${statusConfirm?.reference || "This appointment"} will move from ${statusConfirm?.from || "its current status"} to ${statusConfirm?.to || "the next status"}.`}
         closeDisabled={statusBusy}
         onClose={closeStatusDialog}
+        returnFocusRef={appointmentReturnFocusRef}
+        fallbackFocusRef={appointmentQueueHeadingRef}
       >
         <p className="text-sm leading-relaxed text-ink-600">
           {statusConfirm?.to === "Cancelled"
@@ -3678,6 +3713,8 @@ export function AdminPage() {
         description="Choose a 30-minute slot in Lucena City local time."
         closeDisabled={rescheduleBusy}
         onClose={closeReschedule}
+        returnFocusRef={appointmentReturnFocusRef}
+        fallbackFocusRef={appointmentQueueHeadingRef}
       >
         <form onSubmit={saveReschedule} className="grid gap-4">
           {rescheduleDialogError && (

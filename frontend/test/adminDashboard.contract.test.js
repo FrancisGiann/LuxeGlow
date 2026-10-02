@@ -14,7 +14,7 @@ const scheduleSettings = read('frontend/src/components/admin/ScheduleSettings.js
 
 test('staff and administrators land in their role-appropriate dashboard section', () => {
   assert.match(adminUtilities, /export function initialAdminTab\(role\)/);
-  assert.match(adminUtilities, /return role === 'head' \? 'appointments' : 'overview';/);
+  assert.match(adminUtilities, /return role === 'head' \|\| role === 'admin' \? 'appointments' : 'overview';/);
   assert.match(adminPage, /useState\(\(\) => initialAdminTab\(customer\?\.role\)\)/);
 });
 
@@ -45,7 +45,7 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
   assert.match(adminPage, /Activation controls sign-in; “Accepts appointments”\s+separately controls eligibility for new customer bookings/);
 });
 
-test('overview shows the upcoming operational queue and history has a dedicated navigation filter', () => {
+test('overview stays optional and history has a dedicated navigation filter', () => {
   const overview = adminPage.slice(adminPage.indexOf('function AdminOverview'), adminPage.indexOf('export function AdminPage'));
   assert.match(overview, /title="Upcoming booking queue"/);
   assert.match(overview, /\["Pending", "Confirmed"\]\.includes\(appointment\.status\)/);
@@ -59,6 +59,42 @@ test('overview shows the upcoming operational queue and history has a dedicated 
   assert.match(adminPage, /<StaffNotificationBell[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
   assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
 });
+
+test('appointment queue keeps its search and summary visible while secondary filters collapse', () => {
+  const queue = adminPage.slice(adminPage.indexOf('function AppointmentQueue'), adminPage.indexOf('function NotificationAppointmentDialog'));
+  const row = adminPage.slice(adminPage.indexOf('function AppointmentRow'), adminPage.indexOf('function AppointmentDetails'));
+  assert.match(queue, /type="search"/);
+  assert.match(queue, /aria-expanded=\{filtersExpanded\}[\s\S]*?aria-controls="appointment-filter-fields"/);
+  assert.match(queue, /id="appointment-filter-fields"[\s\S]*?hidden=\{!filtersExpanded\}/);
+  assert.match(queue, /Active bookings/);
+  assert.match(queue, /\{filterSummary\}[\s\S]*?\{appointments\.length\} of \{totalAppointments\}/);
+  assert.match(queue, /Date &amp; time[\s\S]*?Customer[\s\S]*?Services[\s\S]*?Status/);
+  assert.match(row, /appointment\.local_time[\s\S]*?appointment\.local_date[\s\S]*?customer\.first_name[\s\S]*?serviceNames\(appointment\)[\s\S]*?appointment\.status/);
+  assert.doesNotMatch(row, /customer\.email|appointmentStaffName\(appointment\)|reference_no/);
+  assert.doesNotMatch(adminPage, /AppointmentInspector/);
+  const appointmentWorkspace = adminPage.slice(adminPage.indexOf(': tab === "appointments"'), adminPage.indexOf(': tab === "catalog"'));
+  assert.match(appointmentWorkspace, /<AppointmentQueue[\s\S]*?onSelectAppointment=/);
+  assert.doesNotMatch(appointmentWorkspace, /grid-cols-\[minmax\(0,1\.45fr\)|Inspector/);
+  assert.match(adminPage, /else if \(nextTab === "appointments"\)\s*\{\s*setAppointmentFilters\(appointmentFilterPreset\("active"\)\)/);
+  assert.match(adminUtilities, /if \(kind === 'today'\) return \{ date: isValidLocalDate\(today\) \? today : manilaDateKey\(\), status: 'active', search: '' \}/);
+});
+
+test('appointment dialogs coordinate focus, confirmation, notification close, and deferred no-show prompts', () => {
+  assert.match(adminPage, /const appointmentDetailsOpen = Boolean\([\s\S]*?!statusConfirm[\s\S]*?!reschedule[\s\S]*?!notificationAppointmentModal[\s\S]*?!noShowConfirm/);
+  assert.match(adminPage, /open=\{appointmentDetailsOpen\}[\s\S]*?returnFocusRef=\{appointmentReturnFocusRef\}[\s\S]*?fallbackFocusRef=\{appointmentQueueHeadingRef\}/);
+  assert.match(adminPage, /if \(preserveSelection !== true\) setSelectedAppointment\(null\)/);
+  assert.match(adminPage, /openAppointments\("appointment", notificationModalAppointment\);\s*closeNotificationAppointment\(true\)/);
+  assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(true\)/);
+  assert.match(adminPage, /const rescheduleNotificationAppointment = \(appointment\) => \{\s*closeNotificationAppointment\(true\)/);
+  const noShowEffect = adminPage.slice(adminPage.indexOf('const checkForDueNoShows'), adminPage.indexOf('const closeNoShowPrompt'));
+  assert.match(noShowEffect, /notificationAppointmentModal \|\|\s*selectedVisibleAppointment/);
+  const dialog = read('frontend/src/components/admin/AdminDialog.jsx');
+  assert.match(dialog, /document\.addEventListener\('keydown', handleKeyDown\)/);
+  assert.match(dialog, /event\.key === 'Escape'/);
+  assert.match(dialog, /event\.key !== 'Tab'/);
+  assert.match(dialog, /fallbackFocusTarget\.focus\(\)/);
+});
+
 test('schedule guidance remains visible while loading and preserves conflict follow-up', () => {
   assert.match(scheduleSettings, /Edits affect future availability only\. Existing appointments never move; conflicts remain here for staff follow-up\./);
   assert.match(scheduleSettings, /if \(loading\) return <div className="space-y-4"><p className="text-sm leading-relaxed text-ink-600">\{SCHEDULE_GUIDANCE\}<\/p>/);

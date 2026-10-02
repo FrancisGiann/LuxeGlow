@@ -46,8 +46,8 @@ test('notification rows activate appointment details and keep the row free of ne
   assert.match(adminPage, /notificationAppointmentModal/);
   assert.match(adminPage, /onOpenAppointments=\{\(\) => openAppointments\(["']all["']\)\}/);
   assert.match(adminPage, /onOpenAppointment=\{openNotificationAppointment\}/);
-  assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(\);\s*requestStatus\(appointment, nextStatus\);/);
-  assert.match(adminPage, /const rescheduleNotificationAppointment = \(appointment\) => \{\s*closeNotificationAppointment\(\);\s*openReschedule\(appointment\);/);
+  assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(true\);\s*requestStatus\(appointment, nextStatus\);/);
+  assert.match(adminPage, /const rescheduleNotificationAppointment = \(appointment\) => \{\s*closeNotificationAppointment\(true\);\s*openReschedule\(appointment\);/);
   assert.match(adminPage, /NotificationAppointmentDialog[\s\S]*onRequestStatus=\{requestNotificationStatus\}[\s\S]*onReschedule=\{rescheduleNotificationAppointment\}/);
   assert.match(adminPage, /View in appointments/);
   assert.match(adminPage, /role="alert"/);

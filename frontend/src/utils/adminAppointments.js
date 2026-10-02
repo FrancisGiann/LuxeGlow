@@ -40,8 +40,8 @@ export function manilaDateKey(date = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-export function createInitialAppointmentFilters(now = new Date()) {
-  return { date: manilaDateKey(now), status: 'all', search: '' };
+export function createInitialAppointmentFilters() {
+  return { date: '', status: 'active', search: '' };
 }
 
 function localTimeSeconds(value) {
@@ -52,17 +52,19 @@ function localTimeSeconds(value) {
 }
 
 export function initialAdminTab(role) {
-  return role === 'head' ? 'appointments' : 'overview';
+  return role === 'head' || role === 'admin' ? 'appointments' : 'overview';
 }
 
-export function appointmentFilterPreset(kind, today = manilaDateKey(), appointment = null) {
+export function appointmentFilterPreset(kind, today = manilaDateKey()) {
+  if (kind === 'active') return createInitialAppointmentFilters();
+  if (kind === 'today') return { date: isValidLocalDate(today) ? today : manilaDateKey(), status: 'active', search: '' };
   if (kind === 'pending') return { date: '', status: 'Pending', search: '' };
   if (kind === 'history') return { date: '', status: 'history', search: '' };
   if (kind === 'all') return { date: '', status: 'all', search: '' };
   if (kind === 'appointment') {
     return { date: '', status: 'all', search: '' };
   }
-  return { date: isValidLocalDate(today) ? today : manilaDateKey(), status: 'all', search: '' };
+  return createInitialAppointmentFilters();
 }
 
 export function sortAppointmentsByLocalTime(appointments) {
@@ -90,7 +92,8 @@ export function getAdminAppointmentQueue(appointments, filters = {}) {
     if (!appointment || typeof appointment !== 'object') return false;
     if (date && appointment.local_date !== date) return false;
     if (status === 'history' && !['Completed', 'Cancelled'].includes(appointment.status)) return false;
-    if (status !== 'all' && status !== 'history' && appointment.status !== status) return false;
+    if (status === 'active' && !['Pending', 'Confirmed'].includes(appointment.status)) return false;
+    if (!['all', 'history', 'active'].includes(status) && appointment.status !== status) return false;
     return !term || searchableAppointmentText(appointment).includes(term);
   });
   return date ? sortAppointmentsByLocalTime(matching) : matching;

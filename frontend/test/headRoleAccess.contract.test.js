@@ -30,9 +30,9 @@ test('simplified roles preserve customers and accept head/admin while retiring l
   assert.equal(isStaffRole('staff'), false);
 });
 
-test('head and customer start in the expected admin workspace sections', () => {
+test('head and administrator start in appointments while customers retain the overview fallback', () => {
   assert.equal(initialAdminTab('head'), 'appointments');
-  assert.equal(initialAdminTab('admin'), 'overview');
+  assert.equal(initialAdminTab('admin'), 'appointments');
   assert.equal(initialAdminTab('customer'), 'overview');
 });
 
