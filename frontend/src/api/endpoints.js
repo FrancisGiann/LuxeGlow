@@ -142,13 +142,24 @@ export async function registerCustomer(fields) {
 }
 
 export async function resendVerificationEmail(email) {
-  const { error } = await requireSupabase().auth.resend({ type: 'signup', email: normalizeEmail(email) });
-  if (error) return { success: false, error: error.message || 'Could not resend the verification email.' };
+  const normalizedEmail = normalizeEmail(email);
+  if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) {
+    return { success: false, error: 'Enter a valid email address.' };
+  }
+  const { error } = await requireSupabase().auth.resend({ type: 'signup', email: normalizedEmail });
+  if (error) {
+    const retryAfter = retryAfterFromError(error) || (Number(error.status) === 429 ? 60 : 0);
+    return { success: false, error: error.message || 'Could not resend the verification email.', retry_after: retryAfter };
+  }
   return { success: true, retry_after: 60 };
 }
 
 export async function requestPasswordReset(email) {
-  const { error } = await requireSupabase().auth.resetPasswordForEmail(normalizeEmail(email), {
+  const normalizedEmail = normalizeEmail(email);
+  if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) {
+    return { success: false, error: 'Enter a valid email address.' };
+  }
+  const { error } = await requireSupabase().auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo: `${window.location.origin}${passwordResetPath(import.meta.env.VITE_ROUTER_BASE || '/')}`,
   });
   if (error) return { success: false, error: error.message || 'Could not process that request.' };

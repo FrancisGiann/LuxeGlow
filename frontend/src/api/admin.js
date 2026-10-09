@@ -214,7 +214,7 @@ export async function resetStaffPassword(userId) {
   if (!/^[0-9a-f-]{36}$/i.test(String(userId))) return { success: false, error: 'Invalid staff account.' };
   const client = await assertStaff();
   const { data, error } = await client.functions.invoke('reset-staff-password', { body: { user_id: userId } });
-  if (error) throw new Error(error.message || 'Could not send password reset.');
+  if (error) throw new Error(await functionErrorMessage(error, 'Could not send password reset.'));
   return data;
 }
 
