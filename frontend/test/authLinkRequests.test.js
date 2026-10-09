@@ -19,11 +19,14 @@ let resendStatus = 200;
 let resetStatus = 200;
 let staffFunctionStatus = 200;
 let staffFunctionBody = { success: true };
+let inviteFunctionStatus = 200;
+let inviteFunctionBody = { success: true };
 let server;
 let supabase;
 let resendVerificationEmail;
 let requestPasswordReset;
 let resetStaffPassword;
+let inviteStaff;
 
 globalThis.fetch = async (input, init = {}) => {
   const url = new URL(String(input));
@@ -53,6 +56,9 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.pathname.endsWith('/functions/v1/reset-staff-password')) {
     return Response.json(staffFunctionBody, { status: staffFunctionStatus });
   }
+  if (url.pathname.endsWith('/functions/v1/invite-staff')) {
+    return Response.json(inviteFunctionBody, { status: inviteFunctionStatus });
+  }
   throw new Error(`Unexpected mocked request: ${method} ${url.pathname}`);
 };
 
@@ -70,7 +76,7 @@ before(async () => {
   });
   ({ resendVerificationEmail, requestPasswordReset } = await server.ssrLoadModule('/src/api/endpoints.js'));
   ({ supabase } = await server.ssrLoadModule('/src/lib/supabase.js'));
-  ({ resetStaffPassword } = await server.ssrLoadModule('/src/api/admin.js'));
+  ({ resetStaffPassword, inviteStaff } = await server.ssrLoadModule('/src/api/admin.js'));
 
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
@@ -88,6 +94,8 @@ beforeEach(() => {
   resetStatus = 200;
   staffFunctionStatus = 200;
   staffFunctionBody = { success: true };
+  inviteFunctionStatus = 200;
+  inviteFunctionBody = { success: true };
 });
 
 after(async () => {
@@ -170,4 +178,15 @@ test('admin password reset rejects malformed target IDs before invoking the func
   assert.equal(result.success, false);
   assert.match(result.error, /invalid staff account/i);
   assert.equal(calls.some((call) => call.path === '/functions/v1/reset-staff-password'), false);
+});
+
+test('staff invitations retain the Edge Function error message', async () => {
+  inviteFunctionStatus = 400;
+  inviteFunctionBody = { error: 'A Head is already assigned. Remove the current Head before inviting a new one.' };
+  await assert.rejects(
+    inviteStaff({ email: 'new-head@example.com', first_name: 'New', last_name: 'Head', role: 'head' }),
+    /A Head is already assigned\. Remove the current Head before inviting a new one\./,
+  );
+  const invocation = calls.find((call) => call.path === '/functions/v1/invite-staff');
+  assert.deepEqual(invocation.body, { email: 'new-head@example.com', first_name: 'New', last_name: 'Head', role: 'head' });
 });

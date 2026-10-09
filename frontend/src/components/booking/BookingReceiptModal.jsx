@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, useId } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react';
 import { IconX } from '../icons';
 import { formatLongDate, formatPeso, formatTime, toAppointmentDate } from '../../utils/format';
-import { Document, Page, Text, View, StyleSheet, PDFViewer, Font } from '@react-pdf/renderer';
+import { Button } from '../ui/Button';
+import { Document, Page, Text, View, StyleSheet, pdf, Font } from '@react-pdf/renderer';
 import notoSansRegular from '../../assets/fonts/NotoSans-Regular.ttf';
 import notoSansBold from '../../assets/fonts/NotoSans-Bold.ttf';
 
@@ -117,7 +118,7 @@ const normalizeCustomerName = (customer = {}) => {
   return [source.first_name, source.last_name].map(textValue).filter(Boolean).join(' ') || '—';
 };
 
-const normalizeReceipt = (receipt = {}) => {
+export const normalizeReceipt = (receipt = {}) => {
   const source = receipt && typeof receipt === 'object' ? receipt : {};
   const services = normalizeServices(source.services ?? source.service);
   const explicitTotal = finiteNumber(source.serviceTotal ?? source.total ?? source.price);
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 9, color: '#666' },
 });
 
-const ReceiptDocument = ({ normalized, appointmentDate, appointmentTime, generatedAt, hidePrint }) => (
+export const ReceiptDocument = ({ normalized, appointmentDate, appointmentTime, generatedAt, hidePrint }) => (
   <Document>
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
@@ -227,15 +228,30 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
+  const mountedRef = useRef(false);
+  const downloadSequenceRef = useRef(0);
+  const activeDownloadRef = useRef(null);
+  const downloadUrlRef = useRef(null);
+  const revokeTimerRef = useRef(null);
   const [generatedAt] = useState(() => new Date());
+  const [downloadState, setDownloadState] = useState({ identity: null, busy: false, error: '' });
   const normalized = useMemo(() => normalizeReceipt(receipt), [receipt]);
+  const receiptIdentity = useMemo(() => JSON.stringify({ normalized, hidePrint }), [normalized, hidePrint]);
+  const latestReceiptIdentityRef = useRef(receiptIdentity);
+  const downloadBusy = downloadState.identity === receiptIdentity && downloadState.busy;
+  const downloadError = downloadState.identity === receiptIdentity ? downloadState.error : '';
+
+  useLayoutEffect(() => {
+    latestReceiptIdentityRef.current = receiptIdentity;
+  }, [receiptIdentity]);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     previousFocusRef.current = document.activeElement;
+    mountedRef.current = true;
     document.body.style.overflow = 'hidden';
     document.body.classList.add('receipt-printing');
     closeButtonRef.current?.focus();
@@ -246,6 +262,13 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => {
+      mountedRef.current = false;
+      downloadSequenceRef.current += 1;
+      activeDownloadRef.current = null;
+      if (revokeTimerRef.current) window.clearTimeout(revokeTimerRef.current);
+      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+      revokeTimerRef.current = null;
+      downloadUrlRef.current = null;
       window.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = '';
       document.body.classList.remove('receipt-printing');
@@ -254,6 +277,52 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
       }
     };
   }, []);
+
+  const downloadPdf = async () => {
+    if (activeDownloadRef.current?.identity === receiptIdentity) return;
+    const request = ++downloadSequenceRef.current;
+    activeDownloadRef.current = { request, identity: receiptIdentity };
+    setDownloadState({ identity: receiptIdentity, busy: true, error: '' });
+    try {
+      const blob = await pdf(
+        <ReceiptDocument
+          normalized={normalized}
+          appointmentDate={formatAppointmentDate(normalized.appointmentDate, normalized.appointmentTime, normalized.dateLabel)}
+          appointmentTime={formatAppointmentTime(normalized.appointmentDate, normalized.appointmentTime, normalized.appointmentTime)}
+          generatedAt={generatedAt}
+          hidePrint={hidePrint}
+        />,
+      ).toBlob();
+      if (!mountedRef.current || activeDownloadRef.current?.request !== request || latestReceiptIdentityRef.current !== receiptIdentity) return;
+      if (revokeTimerRef.current) window.clearTimeout(revokeTimerRef.current);
+      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      downloadUrlRef.current = url;
+      const filenameReference = normalized.reference
+        .replace(/[^a-z0-9_-]+/gi, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'booking';
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${filenameReference}-booking-confirmation.pdf`;
+      link.style.display = 'none';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      revokeTimerRef.current = window.setTimeout(() => {
+        if (downloadUrlRef.current === url) downloadUrlRef.current = null;
+        URL.revokeObjectURL(url);
+        revokeTimerRef.current = null;
+      }, 30_000);
+      setDownloadState({ identity: receiptIdentity, busy: false, error: '' });
+    } catch {
+      if (mountedRef.current && activeDownloadRef.current?.request === request && latestReceiptIdentityRef.current === receiptIdentity) {
+        setDownloadState({ identity: receiptIdentity, busy: false, error: 'We couldn’t prepare the PDF. Please try again.' });
+      }
+    } finally {
+      if (activeDownloadRef.current?.request === request) activeDownloadRef.current = null;
+    }
+  };
 
   const appointmentDate = formatAppointmentDate(
     normalized.appointmentDate,
@@ -289,16 +358,73 @@ export function BookingReceiptModal({ receipt, onClose, hidePrint = false }) {
           </button>
         </div>
         
-        <div className="flex-1 overflow-hidden p-0">
-          <PDFViewer width="100%" height="100%" className="border-0">
-            <ReceiptDocument
-              normalized={normalized}
-              appointmentDate={appointmentDate}
-              appointmentTime={appointmentTime}
-              generatedAt={generatedAt}
-              hidePrint={hidePrint}
-            />
-          </PDFViewer>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <article className="mx-auto max-w-2xl rounded-xl border border-line bg-white p-5 sm:p-8">
+            <header className="border-b-2 border-brand-800 pb-4">
+              <h2 className="font-display text-2xl font-semibold text-brand-800">{normalized.salonName}</h2>
+              <p className="mt-1 text-xs uppercase tracking-wider text-ink-500">LuxeGlow Experience</p>
+              <p className="mt-4 font-display text-xl font-semibold text-ink-900">{hidePrint ? 'Booking details' : 'Booking confirmation'}</p>
+              <p className="mt-1 text-sm text-ink-500">Appointment record · Not proof of payment</p>
+            </header>
+            <section className="mt-5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-500">Booking details</h3>
+              <dl className="mt-2 divide-y divide-line text-sm">
+                {[
+                  ['Booking reference', normalized.reference || '—'],
+                  ['Appointment date', appointmentDate],
+                  ['Appointment time', appointmentTime],
+                  ['Team member', normalized.staffName],
+                  ['Booking status', normalized.status || '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2.5">
+                    <dt className="text-ink-500">{label}</dt>
+                    <dd className="min-w-0 max-w-[65%] break-words text-right font-semibold text-ink-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+            <section className="mt-5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-500">Customer</h3>
+              <dl className="mt-2 divide-y divide-line text-sm">
+                {[
+                  ['Name', normalized.customerName],
+                  ['Email', normalized.email || '—'],
+                  ['Phone', normalized.phone || '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2.5">
+                    <dt className="text-ink-500">{label}</dt>
+                    <dd className="break-all text-right font-semibold text-ink-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+            <section className="mt-5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-500">Services</h3>
+              <ul className="mt-2 divide-y divide-line rounded-lg border border-line px-3 text-sm">
+                {normalized.services.length ? normalized.services.map((service, index) => (
+                  <li key={`${service.name}-${index}`} className="flex flex-wrap justify-between gap-3 py-3">
+                    <span className="min-w-0 break-words font-semibold text-ink-900">{service.name}</span>
+                    {service.price !== null && <span className="shrink-0 text-ink-700">{formatPeso(service.price)}</span>}
+                  </li>
+                )) : <li className="py-3 text-ink-500">—</li>}
+              </ul>
+              <div className="mt-3 flex justify-between gap-3 border-t border-line pt-3 font-semibold">
+                <span>Service total</span>
+                <span className="font-display text-lg text-brand-800">{normalized.serviceTotal === null ? '—' : formatPeso(normalized.serviceTotal)}</span>
+              </div>
+            </section>
+            <footer className="mt-5 border-t border-line pt-3 text-xs text-ink-500">
+              Booking created: {formatTimestamp(normalized.createdAt)}
+              {!hidePrint && <span className="block">Generated: {formatTimestamp(generatedAt)}</span>}
+            </footer>
+          </article>
+          {downloadError && <p className="mx-auto mt-4 max-w-2xl rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger" role="alert">{downloadError}</p>}
+          <div className="mx-auto mt-4 flex max-w-2xl justify-end gap-3">
+            <Button type="button" variant="soft" onClick={() => onCloseRef.current?.()}>Close</Button>
+            <Button type="button" onClick={downloadPdf} loading={downloadBusy}>
+              {downloadBusy ? 'Preparing PDF…' : 'Download PDF'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

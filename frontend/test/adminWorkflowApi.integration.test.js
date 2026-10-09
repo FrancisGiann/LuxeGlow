@@ -1,0 +1,218 @@
+import assert from 'node:assert/strict';
+import { after, before, beforeEach, test } from 'node:test';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+
+const frontendRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
+const originalEnv = Object.fromEntries(['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'].map((key) => [key, process.env[key]]));
+const adminId = '123e4567-e89b-42d3-a456-426614174000';
+const targetId = '987e4567-e89b-42d3-a456-426614174000';
+const appointmentId = '423e4567-e89b-42d3-a456-426614174000';
+const noShowAppointmentId = '523e4567-e89b-42d3-a456-426614174000';
+const calls = [];
+const profiles = new Map();
+const faqs = new Map();
+const closures = new Map();
+const appointments = new Map();
+let uploadStatus = 200;
+let uploadBody = { success: true, mocked: true, image_url: 'https://fixture.invalid/image.webp', image_public_id: 'mock-image' };
+let server;
+let api;
+let supabase;
+
+const json = (body, status = 200) => Response.json(body, { status });
+const objectResponse = (request, rows) => {
+  const values = Array.isArray(rows) ? rows : rows ? [rows] : [];
+  if (String(request.headers.get('accept') || '').toLowerCase().includes('application/vnd.pgrst.object+json')) {
+    if (values.length !== 1) return json({ code: 'PGRST116', details: `The result contains ${values.length} rows`, message: 'JSON object requested, multiple (or no) rows returned.' }, 406);
+    return json(values[0]);
+  }
+  return json(values);
+};
+
+globalThis.fetch = async (input, init = {}) => {
+  const url = new URL(String(input));
+  const method = init.method || 'GET';
+  const request = new Request(url, init);
+  const contentType = request.headers.get('content-type') || '';
+  const body = contentType.includes('application/json') && init.body ? JSON.parse(init.body) : init.body;
+  calls.push({ method, path: url.pathname, query: url.searchParams, body, request });
+
+  if (url.pathname.endsWith('/auth/v1/user')) return json({ id: adminId, email: 'admin@example.test', user_metadata: {} });
+  if (url.pathname.endsWith('/rest/v1/profiles')) {
+    if (method === 'GET') {
+      const idFilter = url.searchParams.get('id') || '';
+      const id = idFilter.startsWith('eq.') ? idFilter.slice(3) : '';
+      return objectResponse(request, profiles.get(id));
+    }
+    if (method === 'PATCH') {
+      const idFilter = url.searchParams.get('id') || '';
+      const id = idFilter.startsWith('eq.') ? idFilter.slice(3) : '';
+      const profile = profiles.get(id);
+      if (!profile) return json([], 200);
+      Object.assign(profile, body || {});
+      return json([], 200);
+    }
+  }
+  if (url.pathname.endsWith('/rest/v1/faqs')) {
+    if (method === 'POST') {
+      const id = Number(body?.id) || Math.max(0, ...faqs.keys()) + 1;
+      const row = { is_published: true, ...faqs.get(id), ...body, id };
+      faqs.set(id, row);
+      return objectResponse(request, row);
+    }
+    if (method === 'DELETE') {
+      const idFilter = url.searchParams.get('id') || '';
+      const id = Number(idFilter.startsWith('eq.') ? idFilter.slice(3) : 0);
+      faqs.delete(id);
+      return json([], 200);
+    }
+  }
+  if (url.pathname.endsWith('/rest/v1/appointments') && method === 'PATCH') {
+    const idFilter = url.searchParams.get('id') || '';
+    const id = idFilter.startsWith('eq.') ? idFilter.slice(3) : '';
+    const appointment = appointments.get(id);
+    if (!appointment) return json([], 200);
+    Object.assign(appointment, body || {});
+    return json([], 200);
+  }
+  if (url.pathname.endsWith('/functions/v1/upload-service-image')) return json(uploadBody, uploadStatus);
+  if (url.pathname.startsWith('/rest/v1/rpc/')) {
+    const name = url.pathname.slice('/rest/v1/rpc/'.length);
+    if (name === 'get_salon_closures') return json([...closures.values()].filter((item) => item.closure_date >= body.p_from && item.closure_date <= body.p_to));
+    if (name === 'save_salon_closure') {
+      const row = { closure_date: body.p_closure_date, reason: body.p_reason };
+      closures.set(row.closure_date, row);
+      return json(row);
+    }
+    if (name === 'delete_salon_closure') { closures.delete(body.p_closure_date); return json(null); }
+    if (name === 'get_schedule_conflicts') return json([{ reference_no: 'BK-MOCK-CONFLICT', local_date: body.p_from, reason: 'Outside salon hours', status: 'Confirmed' }]);
+    if (name === 'mark_appointment_arrived') {
+      const appointment = appointments.get(body.p_appointment_id);
+      if (!appointment || appointment.status !== 'Confirmed') return json({ message: 'Only confirmed appointments can be marked arrived.' }, 400);
+      appointment.arrived_at = '2026-10-09T02:00:00.000Z';
+      return json(appointment.arrived_at);
+    }
+    if (name === 'respond_to_no_show') {
+      const appointment = appointments.get(body.p_appointment_id);
+      if (!appointment || appointment.status !== 'Confirmed') return json('not_eligible');
+      if (body.p_cancel) { appointment.status = 'Cancelled'; return json('cancelled'); }
+      appointment.no_show_reviewed_at = '2026-10-09T02:00:00.000Z';
+      return json('kept');
+    }
+    if (name === 'reschedule_appointment') {
+      const appointment = appointments.get(body.p_appointment_id);
+      if (!appointment) return json({ message: 'Appointment not found.' }, 404);
+      Object.assign(appointment, { local_date: body.p_date, local_time: `${body.p_time}:00` });
+      return json({ id: appointment.id, status: appointment.status });
+    }
+  }
+  throw new Error(`Unexpected mock request: ${method} ${url.pathname}`);
+};
+
+globalThis.window = { location: { origin: 'https://fixture.example' } };
+process.env.VITE_SUPABASE_URL = 'https://supabase.fixture.test';
+process.env.VITE_SUPABASE_ANON_KEY = 'local-fixture-anon-key';
+
+before(async () => {
+  server = await createServer({ root: frontendRoot, configFile: resolve(frontendRoot, 'vite.config.js'), server: { middlewareMode: true }, appType: 'custom' });
+  api = await server.ssrLoadModule('/src/api/admin.js');
+  ({ supabase } = await server.ssrLoadModule('/src/lib/supabase.js'));
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: adminId, exp: Math.floor(Date.now() / 1000) + 3600, role: 'authenticated' })}.abcdefgh`;
+  const { error } = await supabase.auth.setSession({ access_token: token, refresh_token: 'fixture-refresh-token' });
+  assert.equal(error, null);
+});
+
+beforeEach(() => {
+  calls.length = 0;
+  profiles.clear();
+  profiles.set(adminId, { id: adminId, role: 'admin', is_active: true });
+  profiles.set(targetId, { id: targetId, role: 'head', is_active: true, accepts_appointments: true });
+  faqs.clear();
+  faqs.set(1, { id: 1, question: 'How do I book?', answer: 'Book online.', display_order: 1, is_published: true });
+  closures.clear();
+  appointments.clear();
+  appointments.set(appointmentId, { id: appointmentId, status: 'Confirmed', arrived_at: null });
+  appointments.set(noShowAppointmentId, { id: noShowAppointmentId, status: 'Confirmed', no_show_reviewed_at: null });
+  uploadStatus = 200;
+  uploadBody = { success: true, mocked: true, image_url: 'https://fixture.invalid/image.webp', image_public_id: 'mock-image' };
+});
+
+after(async () => {
+  await server?.close();
+  globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+test('account activation and appointment access are separate scoped updates', async () => {
+  assert.deepEqual(await api.updateAdminProfile(targetId, { accepts_appointments: false }), { success: true });
+  assert.equal(profiles.get(targetId).accepts_appointments, false);
+  assert.deepEqual(await api.updateAdminProfile(targetId, { is_active: false }), { success: true });
+  assert.equal(profiles.get(targetId).is_active, false);
+  const updates = calls.filter((call) => call.path.endsWith('/profiles') && call.method === 'PATCH');
+  assert.equal(updates.length, 2);
+  assert.ok(updates.every((call) => call.query.get('id') === `eq.${targetId}`));
+});
+
+test('FAQ create, edit, and delete send scoped API requests and update fixture state', async () => {
+  const created = await api.saveFaq({ question: 'What should I bring?', answer: 'Nothing special.', display_order: 2 });
+  assert.equal(created.success, true);
+  assert.equal(faqs.size, 2);
+  const edited = await api.saveFaq({ id: 2, question: 'What should I bring?', answer: 'Come as you are.', display_order: 2 });
+  assert.equal(edited.success, true);
+  assert.equal(faqs.get(2).answer, 'Come as you are.');
+  assert.deepEqual(await api.deleteFaq(2), { success: true });
+  assert.equal(faqs.has(2), false);
+  assert.equal(calls.filter((call) => call.path.endsWith('/faqs') && call.method === 'POST').length, 2);
+  assert.equal(calls.filter((call) => call.path.endsWith('/faqs') && call.method === 'DELETE').length, 1);
+});
+
+test('date closures and conflict lookup validate ranges and preserve the selected date', async () => {
+  assert.equal((await api.saveAdminClosure('2026-12-25', 'Holiday')).success, true);
+  assert.deepEqual(await api.listAdminClosures('2026-12-01', '2026-12-31'), [{ closure_date: '2026-12-25', reason: 'Holiday' }]);
+  const conflicts = await api.listScheduleConflicts('2026-12-01', '2026-12-31');
+  assert.equal(conflicts[0].reference_no, 'BK-MOCK-CONFLICT');
+  assert.deepEqual(await api.deleteAdminClosure('2026-12-25'), { success: true });
+  assert.equal(closures.size, 0);
+  await assert.rejects(api.listAdminClosures('bad-date', '2026-12-31'), /valid closure date range/i);
+});
+
+test('arrival, no-show choices, and staff appointment transitions call their separate APIs', async () => {
+  assert.deepEqual(await api.markAppointmentArrived(appointmentId), { success: true, arrived_at: '2026-10-09T02:00:00.000Z' });
+  assert.equal(appointments.get(appointmentId).arrived_at, '2026-10-09T02:00:00.000Z');
+  assert.deepEqual(await api.respondToNoShow(noShowAppointmentId, false), { success: true, outcome: 'kept' });
+  assert.ok(appointments.get(noShowAppointmentId).no_show_reviewed_at);
+  assert.deepEqual(await api.updateAppointmentStatus(appointmentId, 'Completed'), { success: true });
+  assert.equal(appointments.get(appointmentId).status, 'Completed');
+  assert.deepEqual(await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled'), { success: true });
+  assert.equal(appointments.get(noShowAppointmentId).status, 'Cancelled');
+  assert.deepEqual(await api.rescheduleAppointment(appointmentId, '2026-10-12', '11:00'), { success: true });
+  assert.equal(appointments.get(appointmentId).local_time, '11:00:00');
+});
+
+test('service image upload validates locally and only succeeds on the explicit mocked Edge response', async () => {
+  const invalid = await api.uploadServiceImage('classic-manicure', new File(['x'], 'bad.gif', { type: 'image/gif' }));
+  assert.equal(invalid.success, false);
+  assert.equal(calls.some((call) => call.path.endsWith('/upload-service-image')), false);
+
+  const file = new File(['fake image bytes'], 'nails.webp', { type: 'image/webp' });
+  const result = await api.uploadServiceImage('classic-manicure', file);
+  assert.deepEqual(result, { success: true, image_url: 'https://fixture.invalid/image.webp', image_path: 'https://fixture.invalid/image.webp', image_public_id: 'mock-image' });
+  const request = calls.find((call) => call.path.endsWith('/upload-service-image'));
+  assert.ok(request.body instanceof FormData);
+  assert.deepEqual([...request.body.keys()], ['service_id', 'image']);
+  assert.equal(request.body.get('service_id'), 'classic-manicure');
+
+  uploadStatus = 502;
+  uploadBody = { error: 'Mock image provider unavailable.' };
+  await assert.rejects(api.uploadServiceImage('classic-manicure', file), /Mock image provider unavailable/);
+});

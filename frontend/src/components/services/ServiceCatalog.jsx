@@ -49,13 +49,13 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle, showBoo
   const category = categoryName(service);
   const typeLabel = itemTypeLabel(service);
   const rowGridClasses = showBookAction
-    ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
+    ? 'grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
     : 'grid-cols-[auto_minmax(0,1fr)_auto] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]';
 
   if (selectable) {
     return (
       <label
-        className={`group grid min-h-[68px] grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-line px-2 py-3 transition-colors sm:gap-5 sm:px-3 ${
+        className={`group grid min-h-[68px] grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 border-t border-line px-2 py-3 transition-colors sm:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] sm:gap-5 sm:px-3 ${
           selected ? 'bg-brand-50' : 'bg-surface hover:bg-blush-50'
         } ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
       >
@@ -82,7 +82,8 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle, showBoo
           <IconClock size={14} />
           {service.duration || '—'}
         </span>
-        <span className="flex items-center gap-3">
+        <span className="col-span-3 flex w-full items-center justify-between gap-3 sm:col-span-1 sm:justify-end">
+          <span className="text-xs text-ink-500 sm:hidden">Price</span>
           <span className="font-display text-base font-semibold tabular-nums text-brand-800">{formatPeso(service.price)}</span>
         </span>
       </label>
@@ -104,8 +105,14 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle, showBoo
         <IconClock size={14} />
         <span className="whitespace-nowrap">{service.duration || '—'}</span>
       </span>
-      <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>
-      {showBookAction && <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="order-4 inline-flex min-h-11 items-center rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50 sm:order-5">Book {service.name}</Link>}
+      {showBookAction ? (
+        <div className="col-span-2 flex w-full items-center justify-between gap-3 sm:col-span-1 sm:justify-self-end">
+          <span className="font-display text-base font-semibold tabular-nums text-brand-800">{formatPeso(service.price)}</span>
+          <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50">Book {service.name}</Link>
+        </div>
+      ) : (
+        <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>
+      )}
     </div>
   );
 }

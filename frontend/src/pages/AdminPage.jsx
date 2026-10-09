@@ -6,8 +6,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { logoutToPublicHome } from "../utils/manualLogout";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { StatusPill } from "../components/ui/StatusPill";
@@ -70,6 +71,18 @@ import {
   canRecordAppointmentArrival,
   findDueNoShowAppointment,
 } from "../utils/noShowAppointments";
+
+const createServiceDraft = () => ({
+  id: globalThis.crypto.randomUUID(),
+  name: "",
+  category: "",
+  subcategory: "",
+  item_type: "service",
+  price: "",
+  duration_minutes: 60,
+  description: "",
+  is_active: true,
+});
 import {
   IconArrowRight,
   IconCalendar,
@@ -1200,7 +1213,7 @@ function ServiceRow({
   );
 }
 
-function ServiceMetadataFields({ form, setForm }) {
+function ServiceMetadataFields({ form, setForm, disabled = false, isEditing = false }) {
   const typeOptions = useMemo(() => {
     const currentType = String(form.item_type || "");
     const options = serviceTypeOptions();
@@ -1258,24 +1271,24 @@ function ServiceMetadataFields({ form, setForm }) {
     setForm((current) => ({ ...current, category, subcategory }));
   };
   return (
-    <fieldset className="admin-service-form__classification grid gap-4 rounded-xl border border-line bg-canvas/60 p-4 sm:grid-cols-2">
+    <fieldset disabled={disabled} className="admin-service-form__classification grid gap-4 rounded-xl border border-line bg-canvas/60 p-4 sm:grid-cols-2">
       <legend className="px-1 font-display text-lg font-medium text-ink-900">
         Classification
       </legend>
       <p className="-mt-2 text-xs leading-relaxed text-ink-500 sm:col-span-2">
-        Choose a type first, then its category and subcategory. Legacy values
-        remain available while editing existing records.
+        Choose a type first, then its category and subcategory. Existing menu
+        choices stay available when you edit a service.
       </p>
       <label className="text-sm font-semibold text-ink-900">
         Type
         <select
-          required={!form.id}
+          required={!isEditing}
           value={form.item_type}
           onChange={updateType}
           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
         >
           <option value="">
-            {form.id ? "Legacy type not specified" : "Select a type"}
+            {isEditing ? "Existing type not specified" : "Select a type"}
           </option>
           {typeOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -1287,13 +1300,13 @@ function ServiceMetadataFields({ form, setForm }) {
       <label className="text-sm font-semibold text-ink-900">
         Category
         <select
-          required={!form.id}
+          required={!isEditing}
           value={form.category}
           onChange={updateCategory}
           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
         >
           <option value="">
-            {form.id ? "Legacy category not specified" : "Select a category"}
+            {isEditing ? "Existing category not specified" : "Select a category"}
           </option>
           {categoryOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -1305,7 +1318,7 @@ function ServiceMetadataFields({ form, setForm }) {
       <label className="text-sm font-semibold text-ink-900 sm:col-span-2">
         Subcategory
         <select
-          required={!form.id}
+          required={!isEditing}
           value={form.subcategory}
           onChange={(event) =>
             setForm((current) => ({
@@ -1316,8 +1329,8 @@ function ServiceMetadataFields({ form, setForm }) {
           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
         >
           <option value="">
-            {form.id
-              ? "Legacy subcategory not specified"
+            {isEditing
+              ? "Existing subcategory not specified"
               : "Select a subcategory"}
           </option>
           {subcategoryOptions.map((option) => (
@@ -1387,6 +1400,9 @@ function FaqRow({ faq, onSaved }) {
     is_published: faq.is_published,
   });
   const [busy, setBusy] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteBusyRef = useRef(false);
   const save = async () => {
     setBusy(true);
     try {
@@ -1400,81 +1416,131 @@ function FaqRow({ faq, onSaved }) {
     }
   };
   const remove = async () => {
-    if (!window.confirm("Delete this FAQ?")) return;
+    if (deleteBusyRef.current) return;
+    deleteBusyRef.current = true;
     setBusy(true);
+    setDeleteError("");
     try {
       const result = await deleteFaq(faq.id);
       if (!result.success) throw new Error(result.error);
+      setDeleteConfirmationOpen(false);
       onSaved();
     } catch (removeError) {
-      onSaved(removeError.message);
+      setDeleteError(removeError.message || "Could not delete this FAQ. Please try again.");
     } finally {
+      deleteBusyRef.current = false;
       setBusy(false);
     }
   };
+  const closeDeleteConfirmation = () => {
+    if (deleteBusyRef.current) return;
+    setDeleteConfirmationOpen(false);
+    setDeleteError("");
+  };
   return (
-    <li className="grid gap-3 border-b border-line py-4 last:border-b-0 sm:grid-cols-[1fr_1.4fr_auto]">
-      <input
-        value={form.question}
-        onChange={(event) =>
-          setForm((current) => ({ ...current, question: event.target.value }))
-        }
-        className="min-h-11 rounded-lg border border-line px-3 text-sm"
-        aria-label="FAQ question"
-        disabled={busy}
-      />
-      <textarea
-        value={form.answer}
-        onChange={(event) =>
-          setForm((current) => ({ ...current, answer: event.target.value }))
-        }
-        className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm"
-        aria-label="FAQ answer"
-        disabled={busy}
-      />
-      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-stretch">
+    <>
+      <li className="grid gap-3 border-b border-line py-4 last:border-b-0 sm:grid-cols-[1fr_1.4fr_auto]">
         <input
-          type="number"
-          min="0"
-          value={form.display_order}
+          value={form.question}
           onChange={(event) =>
-            setForm((current) => ({
-              ...current,
-              display_order: event.target.value,
-            }))
+            setForm((current) => ({ ...current, question: event.target.value }))
           }
-          className="min-h-10 w-20 rounded-lg border border-line px-2 text-sm"
-          aria-label="FAQ order"
+          className="min-h-11 rounded-lg border border-line px-3 text-sm"
+          aria-label="FAQ question"
           disabled={busy}
         />
-        <label className="flex items-center gap-2 text-xs font-semibold">
+        <textarea
+          value={form.answer}
+          onChange={(event) =>
+            setForm((current) => ({ ...current, answer: event.target.value }))
+          }
+          className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm"
+          aria-label="FAQ answer"
+          disabled={busy}
+        />
+        <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-stretch">
           <input
-            type="checkbox"
-            checked={form.is_published}
+            type="number"
+            min="0"
+            value={form.display_order}
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                is_published: event.target.checked,
+                display_order: event.target.value,
               }))
             }
+            className="min-h-10 w-20 rounded-lg border border-line px-2 text-sm"
+            aria-label="FAQ order"
             disabled={busy}
           />
-          Published
-        </label>
-        <Button type="button" size="sm" onClick={save} disabled={busy}>
-          Save
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="soft"
-          onClick={remove}
-          disabled={busy}
-        >
-          Delete
-        </Button>
-      </div>
-    </li>
+          <label className="flex items-center gap-2 text-xs font-semibold">
+            <input
+              type="checkbox"
+              checked={form.is_published}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  is_published: event.target.checked,
+                }))
+              }
+              disabled={busy}
+            />
+            Published
+          </label>
+          <Button type="button" size="sm" onClick={save} disabled={busy}>
+            Save
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="soft"
+            onClick={() => {
+              setDeleteError("");
+              setDeleteConfirmationOpen(true);
+            }}
+            disabled={busy}
+          >
+            Delete
+          </Button>
+        </div>
+      </li>
+      <AdminDialog
+        open={deleteConfirmationOpen}
+        title="Delete this FAQ?"
+        description={`“${form.question}” will be removed from the public FAQ list.`}
+        closeDisabled={busy}
+        onClose={closeDeleteConfirmation}
+      >
+        {deleteError && (
+          <p
+            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
+            role="alert"
+          >
+            {deleteError}
+          </p>
+        )}
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="soft"
+            className="min-h-11"
+            disabled={busy}
+            onClick={closeDeleteConfirmation}
+          >
+            Keep FAQ
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            className="min-h-11"
+            loading={busy}
+            onClick={remove}
+          >
+            Delete FAQ
+          </Button>
+        </div>
+      </AdminDialog>
+    </>
   );
 }
 
@@ -2021,6 +2087,11 @@ function AdminOverview({
 
 export function AdminPage() {
   const { customer, logout } = useAuth();
+  const navigate = useNavigate();
+  const handleLogout = useCallback(
+    () => logoutToPublicHome(navigate, logout),
+    [navigate, logout],
+  );
   const toast = useToast();
   const { clearScope: clearToastScope } = useToastControls();
   const toastScopePrefix = useId();
@@ -2039,19 +2110,11 @@ export function AdminPage() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [serviceForm, setServiceForm] = useState({
-    id: "",
-    name: "",
-    category: "",
-    subcategory: "",
-    item_type: "service",
-    price: "",
-    duration_minutes: 60,
-    description: "",
-    is_active: true,
-  });
+  const [serviceForm, setServiceForm] = useState(createServiceDraft);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const serviceSaveBusyRef = useRef(false);
   const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCategory, setServiceCategory] = useState("All categories");
   const [serviceVisibility, setServiceVisibility] = useState("active");
@@ -2597,17 +2660,7 @@ export function AdminPage() {
   };
 
   const resetServiceForm = () => {
-    setServiceForm({
-      id: "",
-      name: "",
-      category: "",
-      subcategory: "",
-      item_type: "service",
-      price: "",
-      duration_minutes: 60,
-      description: "",
-      is_active: true,
-    });
+    setServiceForm(createServiceDraft());
     setEditingServiceId(null);
     setError("");
     setNotice("");
@@ -2635,12 +2688,14 @@ export function AdminPage() {
   };
   const save = async (event) => {
     event.preventDefault();
+    if (serviceSaveBusyRef.current) return;
+    serviceSaveBusyRef.current = true;
+    setServiceBusy(true);
     setNotice("");
     try {
       const result = await saveService(
-        editingServiceId
-          ? { ...serviceForm, id: editingServiceId }
-          : serviceForm,
+        serviceForm,
+        editingServiceId ? { existingId: editingServiceId } : undefined,
       );
       if (!result.success) throw new Error(result.error);
       resetServiceForm();
@@ -2648,7 +2703,10 @@ export function AdminPage() {
       setNotice("Service saved.");
       await load();
     } catch (saveError) {
-      setError(saveError.message);
+      setError(saveError?.message || "Could not save this service. Try again.");
+    } finally {
+      serviceSaveBusyRef.current = false;
+      setServiceBusy(false);
     }
   };
   const resetInviteForm = () =>
@@ -3045,7 +3103,7 @@ export function AdminPage() {
         tab={tab}
         setTab={setNavigationTab}
         isAdmin={customer?.role === "admin"}
-        onLogout={logout}
+        onLogout={handleLogout}
       />
       <AdminMobileDrawer
         open={mobileMenuOpen}
@@ -3053,7 +3111,7 @@ export function AdminPage() {
         tab={tab}
         setTab={setNavigationTab}
         isAdmin={customer?.role === "admin"}
-        onLogout={logout}
+        onLogout={handleLogout}
         pageTitle={pageTitle}
       />
       <main className="min-w-0">
@@ -3106,7 +3164,7 @@ export function AdminPage() {
                 </Link>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="min-h-11 rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 lg:hidden"
                 >
                   Log out
@@ -3390,6 +3448,7 @@ export function AdminPage() {
                 <input
                   required
                   placeholder="Question"
+                  aria-label="New FAQ question"
                   value={newFaq.question}
                   onChange={(event) =>
                     setNewFaq((form) => ({
@@ -3402,6 +3461,7 @@ export function AdminPage() {
                 <textarea
                   required
                   placeholder="Answer"
+                  aria-label="New FAQ answer"
                   value={newFaq.answer}
                   onChange={(event) =>
                     setNewFaq((form) => ({
@@ -3780,38 +3840,32 @@ export function AdminPage() {
             ? `Edit ${serviceForm.name || "service"}`
             : "Add service"
         }
-        description="Keep the live menu details current. Existing catalog grouping metadata is preserved when you edit a service."
-        closeDisabled={false}
+        description="Add or update the service name, price, timing, and menu details."
+        closeDisabled={serviceBusy}
         onClose={() => {
+          if (serviceBusy) return;
           resetServiceForm();
           setServiceDialogOpen(false);
         }}
       >
-        <form onSubmit={save} className="admin-service-form grid gap-4">
+        <form onSubmit={save} className="admin-service-form grid gap-4" aria-busy={serviceBusy}>
           {[
-            ["id", "Service ID"],
-            ["name", "Name"],
-            ["price", "Price"],
-            ["duration_minutes", "Minutes"],
+            ["name", "Service name"],
+            ["price", "Price (₱)"],
+            ["duration_minutes", "Duration (minutes)"],
           ].map(([key, label]) => (
             <label key={key} className="text-sm font-semibold text-ink-900">
               {label}
               <input
                 required
                 value={serviceForm[key]}
-                readOnly={key === "id" && !!editingServiceId}
+                disabled={serviceBusy}
                 type={
                   key === "price" || key === "duration_minutes"
                     ? "number"
                     : "text"
                 }
-                min={
-                  key === "price"
-                    ? "0"
-                    : key === "duration_minutes"
-                      ? "5"
-                      : undefined
-                }
+                min={key === "price" ? "0" : key === "duration_minutes" ? "5" : undefined}
                 onChange={(event) =>
                   setServiceForm((form) => ({
                     ...form,
@@ -3822,10 +3876,16 @@ export function AdminPage() {
               />
             </label>
           ))}
-          <ServiceMetadataFields form={serviceForm} setForm={setServiceForm} />
+          <ServiceMetadataFields
+            form={serviceForm}
+            setForm={setServiceForm}
+            disabled={serviceBusy}
+            isEditing={Boolean(editingServiceId)}
+          />
           <label className="admin-service-form__description text-sm font-semibold text-ink-900">
             Description
             <textarea
+              disabled={serviceBusy}
               value={serviceForm.description}
               onChange={(event) =>
                 setServiceForm((form) => ({
@@ -3839,6 +3899,7 @@ export function AdminPage() {
           <label className="admin-service-form__published flex items-center gap-3 text-sm font-semibold text-ink-900">
             <input
               type="checkbox"
+              disabled={serviceBusy}
               checked={serviceForm.is_active}
               onChange={(event) =>
                 setServiceForm((form) => ({
@@ -3863,14 +3924,16 @@ export function AdminPage() {
               type="button"
               variant="soft"
               className="min-h-11"
+              disabled={serviceBusy}
               onClick={() => {
+                if (serviceBusy) return;
                 resetServiceForm();
                 setServiceDialogOpen(false);
               }}
             >
               Cancel
             </Button>
-            <Button type="submit" className="min-h-11">
+            <Button type="submit" className="min-h-11" loading={serviceBusy}>
               Save service
             </Button>
           </div>

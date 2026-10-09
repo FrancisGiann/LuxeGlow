@@ -218,23 +218,42 @@ export async function resetStaffPassword(userId) {
   return data;
 }
 
-export async function saveService(fields = {}) {
+export async function saveService(fields = {}, { existingId = null } = {}) {
   const input = fields && typeof fields === 'object' ? fields : {};
-  const id = String(input.id || '').trim();
+  const requestedId = String(existingId || input.id || '').trim();
+  const id = requestedId || globalThis.crypto?.randomUUID?.();
   const name = String(input.name || '').trim();
   const category = String(input.category || '').trim();
   const subcategory = String(input.subcategory || '').trim();
   const itemType = String(input.item_type || '').trim();
   const price = Number(input.price);
   const duration = Number(input.duration_minutes);
-  if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(id) || !name || name.length > 255 || category.length > 100 || subcategory.length > 100 || itemType.length > 30 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check service ID, name, type, category, subcategory, price, and duration.' };
+  if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(id || '')) || !name || name.length > 255 || category.length > 100 || subcategory.length > 100 || itemType.length > 30 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check the service name, type, category, subcategory, price, and duration.' };
   const client = await assertStaff();
-  const existing = throwIfError(await client.from('services').select('id,category,subcategory,item_type').eq('id', id).maybeSingle(), 'Could not verify the existing service.');
+  let existing = null;
+  if (existingId) {
+    const existingResult = await client.from('services').select('id,category,subcategory,item_type').eq('id', id).maybeSingle();
+    const noRows = existingResult.error?.code === 'PGRST116' && /0 rows/i.test(String(existingResult.error.details || ''));
+    if (!noRows) existing = throwIfError(existingResult, 'Could not verify the existing service.');
+  }
+  if (existingId && !existing) return { success: false, error: 'This service could not be found. Refresh the list and try again.' };
   const canonicalMetadata = isCanonicalServiceMetadata({ item_type: itemType, category, subcategory });
   const preservesLegacyMetadata = existing && String(existing.category || '') === category && String(existing.subcategory || '') === subcategory && String(existing.item_type || '') === itemType;
-  if (!canonicalMetadata && !preservesLegacyMetadata) return { success: false, error: 'Choose a supported type, category, and subcategory combination.' };
-  throwIfError(await client.from('services').upsert({ id, name, category: category || null, subcategory: subcategory || null, item_type: itemType || null, description: String(input.description || '').slice(0, 5000) || null, price, duration_minutes: duration, is_active: input.is_active !== false }).select().single(), 'Could not save service.');
-  return { success: true };
+  if (!canonicalMetadata && !preservesLegacyMetadata) return { success: false, error: 'Choose a supported service type, category, and subcategory combination.' };
+  const row = { id, name, category: category || null, subcategory: subcategory || null, item_type: itemType || null, description: String(input.description || '').slice(0, 5000) || null, price, duration_minutes: duration, is_active: input.is_active !== false };
+  if (existingId) {
+    const updateResult = await client.from('services').update(row).eq('id', id).select('id').maybeSingle();
+    if (updateResult.error?.code === 'PGRST116' && /0 rows/i.test(String(updateResult.error.details || ''))) {
+      return { success: false, error: 'This service could not be found. Refresh the list and try again.' };
+    }
+    const updated = throwIfError(updateResult, 'Could not save service.');
+    if (!updated) return { success: false, error: 'This service could not be found. Refresh the list and try again.' };
+    return { success: true, id };
+  }
+  const insertResult = await client.from('services').insert(row).select('id').single();
+  if (insertResult.error?.code === '23505') return { success: false, error: 'Could not create this service. Refresh the list and try again.' };
+  throwIfError(insertResult, 'Could not save service.');
+  return { success: true, id };
 }
 
 export async function uploadServiceImage(serviceId, file) {
@@ -296,7 +315,7 @@ export async function updateAdminAbout(fields) {
 export async function inviteStaff(fields) {
   const client = await assertStaff();
   const { data, error } = await client.functions.invoke('invite-staff', { body: fields });
-  if (error) throw new Error(error.message || 'Could not invite staff member.');
+  if (error) throw new Error(await functionErrorMessage(error, 'Could not invite staff member.'));
   return data;
 }
 
