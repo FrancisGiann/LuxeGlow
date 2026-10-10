@@ -742,15 +742,17 @@ function AppointmentDetails({
                 )}
               </>
             )}
-          <Button
-            type="button"
-            size="sm"
-            variant="soft"
-            className="min-h-11"
-            onClick={() => onReschedule(appointment)}
-          >
-            Reschedule
-          </Button>
+          {!appointment.arrived_at && (
+            <Button
+              type="button"
+              size="sm"
+              variant="soft"
+              className="min-h-11"
+              onClick={() => onReschedule(appointment)}
+            >
+              Reschedule
+            </Button>
+          )}
           {appointmentActions(appointment.status).map((action) => (
             <Button
               key={action.status}
@@ -2801,7 +2803,13 @@ export function AdminPage() {
     const current = appointments.find(
       (appointment) => appointment.id === reschedule.id,
     );
-    if (isTerminalAppointment(current)) {
+    if (!current || isTerminalAppointment(current)) {
+      setReschedule(null);
+      setRescheduleDialogError("");
+      return;
+    }
+    if (current.arrived_at) {
+      setError("This appointment has already been marked as arrived and cannot be rescheduled.");
       setReschedule(null);
       setRescheduleDialogError("");
       return;
@@ -2830,6 +2838,7 @@ export function AdminPage() {
     }
   };
   const openReschedule = (appointment) => {
+    if (!appointment || isTerminalAppointment(appointment) || appointment.arrived_at) return;
     setError("");
     setRescheduleDialogError("");
     setNoShowConfirm(null);
@@ -3768,7 +3777,7 @@ export function AdminPage() {
         </div>
       </AdminDialog>
       <AdminDialog
-        open={!!rescheduleTarget && !isTerminalAppointment(rescheduleTarget)}
+        open={!!rescheduleTarget && !isTerminalAppointment(rescheduleTarget) && !rescheduleTarget.arrived_at}
         title={`Reschedule ${reschedule?.reference || "appointment"}`}
         description="Choose a 30-minute slot in Lucena City local time."
         closeDisabled={rescheduleBusy}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
@@ -7,6 +7,7 @@ import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
+import { verificationCooldownSeconds, verificationRequestFeedback } from '../../utils/verificationFeedback';
 
 const VIEWS = {
   login: 'Log in',
@@ -48,17 +49,31 @@ export function AuthModal() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
   const [resendForEmail, setResendForEmail] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
+  const resendLockRef = useRef(false);
+  const resendRequestRef = useRef(0);
+  const loginEmailRef = useRef('');
+  const modalViewRef = useRef(modalView);
+
+  useLayoutEffect(() => {
+    modalViewRef.current = modalView;
+    resendRequestRef.current += 1;
+  }, [modalView]);
 
   useEffect(() => {
     setError(passwordSetup?.error || '');
+    setVerificationMessage('');
     setResetCode('');
     if (!modalView) {
       setResetEmail('');
+      setLoginEmail('');
+      loginEmailRef.current = '';
     }
   }, [modalView, passwordSetup?.error, passwordSetup?.type, passwordSetup?.userId]);
 
@@ -83,6 +98,8 @@ export function AuthModal() {
 
   const resendKey = String(verifyEmail || '').trim().toLowerCase();
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
+  const loginResendKey = String(loginEmail || '').trim().toLowerCase();
+  const loginResendRemaining = resendForEmail === loginResendKey ? resendIn : 0;
 
   const finishAndGoDashboard = () => {
     let returnPath = '';
@@ -99,6 +116,7 @@ export function AuthModal() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setVerificationMessage('');
     setBusy(true);
     const f = new FormData(e.currentTarget);
     try {
@@ -117,6 +135,38 @@ export function AuthModal() {
       setError('Something went wrong. Please try again.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleLoginResend = async () => {
+    const email = String(loginEmail || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
+      setVerificationMessage('Enter a valid email address first.');
+      return;
+    }
+    if (loginResendRemaining > 0 || resendLockRef.current) return;
+    setError('');
+    setVerificationMessage('');
+    const requestId = ++resendRequestRef.current;
+    const requestEmail = email.toLowerCase();
+    resendLockRef.current = true;
+    setResendBusy(true);
+    try {
+      const result = await resend(email);
+      setResendForEmail(requestEmail);
+      setResendIn(verificationCooldownSeconds(result));
+      if (resendRequestRef.current === requestId && modalViewRef.current === 'login' && loginEmailRef.current.trim().toLowerCase() === requestEmail) {
+        setVerificationMessage(verificationRequestFeedback(result));
+      }
+    } catch {
+      setResendForEmail(requestEmail);
+      setResendIn(60);
+      if (resendRequestRef.current === requestId && modalViewRef.current === 'login' && loginEmailRef.current.trim().toLowerCase() === requestEmail) {
+        setVerificationMessage(verificationRequestFeedback(null));
+      }
+    } finally {
+      resendLockRef.current = false;
+      setResendBusy(false);
     }
   };
 
@@ -145,19 +195,21 @@ export function AuthModal() {
   };
 
   const handleResend = async () => {
-    if (resendRemaining > 0 || resendBusy) return;
+    if (resendRemaining > 0 || resendLockRef.current) return;
+    resendLockRef.current = true;
     setResendBusy(true);
     try {
       const res = await resend();
-      if (res.retryAfter > 0) {
-        setResendForEmail(resendKey);
-        setResendIn(res.retryAfter);
-      }
+      setResendForEmail(resendKey);
+      setResendIn(verificationCooldownSeconds(res));
       if (res.ok) toast('Verification email requested. Check your inbox and spam folder.', 'info');
       else toast(res.error || 'Could not resend the verification email right now.', 'error');
     } catch {
+      setResendForEmail(resendKey);
+      setResendIn(60);
       toast('Could not resend the verification email right now. Please try again.', 'error');
     } finally {
+      resendLockRef.current = false;
       setResendBusy(false);
     }
   };
@@ -258,12 +310,16 @@ export function AuthModal() {
           {/* ── LOGIN ── */}
           {modalView === 'login' && (
             <form onSubmit={handleLogin} className="mt-6 flex flex-col gap-4" noValidate>
-              <Input id="login-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" required />
+              <Input id="login-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" value={loginEmail} onChange={(event) => { resendRequestRef.current += 1; loginEmailRef.current = event.target.value; setLoginEmail(event.target.value); setVerificationMessage(''); }} required />
               <Input id="login-password" name="password" type="password" label="Password" placeholder="••••••••" autoComplete="current-password" required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Log in</Button>
               <div className="flex flex-col items-center gap-2 pt-2 text-sm text-ink-500">
                 <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Forgot password?</button>
+                <button type="button" onClick={handleLoginResend} disabled={resendBusy || loginResendRemaining > 0} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
+                  {resendBusy ? 'Sending…' : loginResendRemaining > 0 ? `Resend in ${Math.floor(loginResendRemaining / 60)}:${String(loginResendRemaining % 60).padStart(2, '0')}` : 'Resend verification email'}
+                </button>
+                {verificationMessage && <p className="max-w-[34ch] text-center text-xs leading-relaxed text-ink-500" role="status" aria-live="polite">{verificationMessage}</p>}
                 <span>
                   New here?{' '}
                   <button type="button" onClick={() => openAuth('register')} className="font-semibold text-brand-800 hover:text-brand-900">Create an account</button>

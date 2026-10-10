@@ -10,6 +10,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (path) => readFileSync(resolve(projectRoot, path), 'utf8');
 const endpoints = read('frontend/src/api/endpoints.js');
 const authContext = read('frontend/src/context/AuthContext.jsx');
+const sessionRefresh = read('frontend/src/utils/sessionRefresh.js');
 const authModal = read('frontend/src/components/auth/AuthModal.jsx');
 const app = read('frontend/src/App.jsx');
 const publicLayout = read('frontend/src/components/layout/PublicLayout.jsx');
@@ -39,13 +40,14 @@ test('head and administrator start in appointments while customers retain the ov
 test('login, restored sessions, and route redirects recognize active head profiles', () => {
   const checkSession = endpoints.slice(endpoints.indexOf('export async function checkSession'), endpoints.indexOf('export async function loginUnified'));
   const loginUnified = endpoints.slice(endpoints.indexOf('export async function loginUnified'), endpoints.indexOf('export const loginCustomer'));
-  const refreshSession = authContext.slice(authContext.indexOf('const refreshSession ='), authContext.indexOf('useEffect(() => {\n    refreshSession();'));
+  const refreshSession = authContext.slice(authContext.indexOf('const refreshSession ='), authContext.indexOf('useEffect(() => {\n    void refreshSession'));
   assert.match(checkSession, /isSupportedProfileRole\(profile\.role\)/);
   assert.match(checkSession, /profile\.is_active !== true/);
   assert.match(loginUnified, /isSupportedProfileRole\(profile\.role\)/);
   assert.match(loginUnified, /profile\.is_active !== true/);
-  assert.match(refreshSession, /data\.loggedIn/);
-  assert.match(refreshSession, /setStatus\('authenticated'\)/);
+  assert.match(refreshSession, /sessionRefreshCoordinator\.refresh\(options\)/);
+  assert.match(sessionRefresh, /result\?\.loggedIn === true/);
+  assert.match(authContext, /onAuthenticated: \(data\) => \{\s*setCustomer\(data\.customer\);\s*setAuthStatus\('authenticated'\);/);
   assert.match(authModal, /if \(isStaffRole\(res\.role\)\)[\s\S]*?navigate\('\/admin'/);
   assert.match(app, /if \(!isStaffRole\(customer\?\.role\) \|\| customer\?\.is_active === false\)/);
   assert.match(publicLayout, /const isStaff = isStaffRole\(customer\?\.role\)/);

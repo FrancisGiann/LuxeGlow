@@ -134,7 +134,7 @@ test('sign-out without a known identity removes the current record even when its
   };
   assert.equal(clearPersistedSessionActivity(storageWithoutReadableData, undefined), true);
   assert.equal(removedKey, SESSION_ACTIVITY_STORAGE_KEY);
-  assert.match(authContext, /event === 'SIGNED_OUT'\) \{\s*clearPersistedSessionActivity\(sessionActivityStorage\(\), authenticatedUserIdRef\.current \|\| session\?\.user\?\.id\)/);
+  assert.match(authContext, /event === 'SIGNED_OUT'\) \{\s*sessionRefreshCoordinator\.markStatus\('guest'\);\s*setCustomer\(null\);\s*setAuthStatus\('guest'\);\s*clearPersistedSessionActivity\(sessionActivityStorage\(\), authenticatedUserIdRef\.current \|\| session\?\.user\?\.id\)/);
 });
 
 test('auth lifecycle restores activity, includes identity in cross-tab messages, and clears it on sign-out', () => {

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api/endpoints';
 import { authRedirect, supabase } from '../lib/supabase';
 import { passwordSetupError } from '../utils/authRedirect';
+import { createSessionRefreshCoordinator, isCurrentAuthenticatedIdentity } from '../utils/sessionRefresh';
 import {
   configuredIdleTimeout,
   clearPersistedSessionActivity,
@@ -19,6 +20,7 @@ import {
  */
 const AuthContext = createContext(null);
 const ACTIVITY_BROADCAST_INTERVAL_MS = 15 * 1000;
+const PROFILE_REFRESH_INTERVAL_MS = 60 * 1000;
 const AUTH_EVENT_STORAGE_KEY = 'luxeglow-auth-event';
 
 function sessionActivityStorage() {
@@ -68,6 +70,35 @@ export function AuthProvider({ children }) {
   const passwordRecoveryObservedRef = useRef(false);
   const authenticatedUserIdRef = useRef(null);
 
+  const setAuthStatus = useCallback((nextStatus) => {
+    setStatus(nextStatus);
+  }, []);
+
+  const [sessionRefreshCoordinator] = useState(() => createSessionRefreshCoordinator({
+    checkSession: api.checkSession,
+    onAuthenticated: (data) => {
+      setCustomer(data.customer);
+      setAuthStatus('authenticated');
+    },
+    onGuest: () => {
+      setCustomer(null);
+      setAuthStatus('guest');
+    },
+    onTransientError: (_error, { fallbackToGuest } = {}) => {
+      // Keep a verified session and its current role through temporary API
+      // failures. Only the first unresolved load falls back to guest.
+      if (fallbackToGuest) {
+        setCustomer(null);
+        setAuthStatus('guest');
+      }
+    },
+  }));
+
+  const invalidateSessionRefresh = useCallback((options) => {
+    sessionRefreshCoordinator.invalidate(options);
+  }, [sessionRefreshCoordinator]);
+  const refreshSession = useCallback((options) => sessionRefreshCoordinator.refresh(options), [sessionRefreshCoordinator]);
+
   useEffect(() => {
     authenticatedUserIdRef.current = status === 'authenticated' && customer?.id ? customer.id : null;
   }, [status, customer?.id]);
@@ -76,25 +107,30 @@ export function AuthProvider({ children }) {
     sourceRef.current = createAuthSourceId();
   }, []);
 
-  const refreshSession = useCallback(async () => {
-    try {
-      const data = await api.checkSession();
-      if (data.loggedIn) {
-        setCustomer(data.customer);
-        setStatus('authenticated');
-      } else {
-        setCustomer(null);
-        setStatus('guest');
-      }
-    } catch {
-      setCustomer(null);
-      setStatus('guest');
-    }
-  }, []);
+  useEffect(() => {
+    void refreshSession({ initial: true });
+    return () => invalidateSessionRefresh();
+  }, [refreshSession, invalidateSessionRefresh]);
 
   useEffect(() => {
-    refreshSession();
-  }, [refreshSession]);
+    if (status !== 'authenticated') return undefined;
+    const refreshWhenVisible = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+        void refreshSession();
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshSession();
+    };
+    const interval = setInterval(refreshWhenVisible, PROFILE_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [status, refreshSession]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -106,6 +142,19 @@ export function AuthProvider({ children }) {
       return true;
     };
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUserId = authenticatedUserIdRef.current;
+      const sessionUserId = session?.user?.id || null;
+      const sameAuthenticatedIdentity = isCurrentAuthenticatedIdentity(currentUserId, sessionUserId);
+      if (['INITIAL_SESSION', 'SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) {
+        invalidateSessionRefresh({ resetStatus: !sameAuthenticatedIdentity });
+        if (sameAuthenticatedIdentity) sessionRefreshCoordinator.markStatus('authenticated');
+      }
+      if (event === 'SIGNED_IN' && currentUserId && sessionUserId && !sameAuthenticatedIdentity) {
+        // Drop the previous identity's permissions while the new profile is
+        // checked. A failed lookup must not leave the prior role on screen.
+        setCustomer(null);
+        setAuthStatus('loading');
+      }
       if (event === 'PASSWORD_RECOVERY') passwordRecoveryObservedRef.current = true;
       const hasCallbackLocation = authRedirect.isResetPath && authRedirect.hasCallbackCredentials;
       if (event === 'INITIAL_SESSION') {
@@ -134,6 +183,9 @@ export function AuthProvider({ children }) {
           : '';
       if (acceptPasswordSetup(callbackType, session)) return;
       if (event === 'SIGNED_OUT') {
+        sessionRefreshCoordinator.markStatus('guest');
+        setCustomer(null);
+        setAuthStatus('guest');
         clearPersistedSessionActivity(sessionActivityStorage(), authenticatedUserIdRef.current || session?.user?.id);
         setPasswordSetup(null);
       }
@@ -142,7 +194,7 @@ export function AuthProvider({ children }) {
       setTimeout(refreshSession, 0);
     });
     return () => data.subscription.unsubscribe();
-  }, [refreshSession]);
+  }, [refreshSession, invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus]);
 
   const openAuth = useCallback((view = 'login') => {
     if (view !== 'forgot-reset') {
@@ -168,13 +220,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const applySignedOut = useCallback(({ expired = false, role = null, userId = null } = {}) => {
+  const applySignedOut = useCallback(({ expired = false, userId = null } = {}) => {
+    invalidateSessionRefresh();
+    sessionRefreshCoordinator.markStatus('guest');
     clearTimeout(idleTimerRef.current);
     clearPersistedSessionActivity(sessionActivityStorage(), userId || authenticatedUserIdRef.current);
     lastActivityRef.current = 0;
     lastActivityBroadcastRef.current = 0;
     setCustomer(null);
-    setStatus('guest');
+    setAuthStatus('guest');
     if (expired) {
       setSessionNotice('Your session expired after a period of inactivity. Please sign in again.');
       setModalView('login');
@@ -182,7 +236,7 @@ export function AuthProvider({ children }) {
       setSessionNotice('');
       setModalView(null);
     }
-  }, []);
+  }, [invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus]);
 
   useEffect(() => {
     const onMessage = (message) => {
@@ -229,6 +283,7 @@ export function AuthProvider({ children }) {
 
   const performSignOut = useCallback(async ({ expired = false } = {}) => {
     if (signOutPromiseRef.current) return signOutPromiseRef.current;
+    invalidateSessionRefresh({ resetStatus: true });
     const role = customer?.role;
     const userId = customer?.id || authenticatedUserIdRef.current;
     clearPersistedSessionActivity(sessionActivityStorage(), userId);
@@ -246,10 +301,12 @@ export function AuthProvider({ children }) {
     } finally {
       signOutPromiseRef.current = null;
     }
-  }, [customer?.id, customer?.role, broadcast, applySignedOut]);
+  }, [customer?.id, customer?.role, broadcast, applySignedOut, invalidateSessionRefresh]);
 
   /** Returns { ok, role, needsVerification } without throwing on bad credentials. */
   const login = useCallback(async (email, password) => {
+    invalidateSessionRefresh();
+    const currentUserId = authenticatedUserIdRef.current;
     const data = await api.loginCustomer(email, password);
     if (data.needs_verification) {
       setVerifyEmail(email);
@@ -257,15 +314,25 @@ export function AuthProvider({ children }) {
       return { ok: false, needsVerification: true };
     }
     if (data.success) {
+      if (!currentUserId || !isCurrentAuthenticatedIdentity(currentUserId, data.user?.id)) {
+        // A first login or account switch cannot inherit the previous guest or
+        // profile state if its follow-up profile read fails transiently.
+        if (currentUserId && data.user?.id && !isCurrentAuthenticatedIdentity(currentUserId, data.user.id)) {
+          setCustomer(null);
+          setAuthStatus('loading');
+        }
+        invalidateSessionRefresh({ resetStatus: true });
+      }
       await refreshSession();
       closeAuth();
       return { ok: true, role: data.role };
     }
     return { ok: false, error: data.error || 'Invalid email or password.' };
-  }, [refreshSession, closeAuth]);
+  }, [refreshSession, closeAuth, invalidateSessionRefresh, setAuthStatus]);
 
   /** Returns { ok, error }. On success the session enters "pending email verification". */
   const register = useCallback(async (fields) => {
+    invalidateSessionRefresh({ resetStatus: true });
     const data = await api.registerCustomer(fields);
     if (data.success) {
       if (data.needs_verification) {
@@ -278,10 +345,10 @@ export function AuthProvider({ children }) {
       return { ok: true };
     }
     return { ok: false, error: data.error || 'Registration failed.' };
-  }, [refreshSession, closeAuth]);
+  }, [refreshSession, closeAuth, invalidateSessionRefresh]);
 
-  const resend = useCallback(async () => {
-    const data = await api.resendVerificationEmail(verifyEmail);
+  const resend = useCallback(async (email = verifyEmail) => {
+    const data = await api.resendVerificationEmail(email);
     const retryAfter = Number(data.retry_after ?? data.remaining ?? 0);
     return {
       ok: !!data.success,
@@ -310,6 +377,7 @@ export function AuthProvider({ children }) {
     // the auth event clears passwordSetup. Completion copy must reflect the
     // flow that actually succeeded, not whichever login is opened next.
     const flowType = passwordSetup?.type || '';
+    invalidateSessionRefresh({ resetStatus: true });
     const data = await api.completePasswordReset({
       ...(fields && typeof fields === 'object' ? fields : {}),
       expectedUserId: passwordSetup?.userId || '',
@@ -321,7 +389,7 @@ export function AuthProvider({ children }) {
       setModalView('password-success');
     }
     return { ok: !!data.success, error: data.error, message: data.message };
-  }, [passwordSetup]);
+  }, [passwordSetup, invalidateSessionRefresh]);
 
   const logout = useCallback(() => performSignOut(), [performSignOut]);
 
