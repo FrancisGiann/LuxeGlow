@@ -5,6 +5,7 @@ import { IconAlertCircle, IconClock, IconSearch, IconSparkle } from '../icons';
 import { formatPeso } from '../../utils/format';
 import { sortServicesForDisplay } from '../../utils/services';
 import { serviceImageUrl } from '../../utils/serviceImages';
+import { selectedPackageForBooking } from '../../utils/bookingSelection';
 
 const ALL_CATEGORY = 'All';
 const PAGE_SIZE = 10;
@@ -45,7 +46,7 @@ function ServiceThumbnail({ service }) {
   );
 }
 
-function ServiceRow({ service, selectable, selected, disabled, onToggle, showBookAction = false }) {
+function ServiceRow({ service, selectable, selected, disabled, disabledReason, onToggle, showBookAction = false }) {
   const category = categoryName(service);
   const typeLabel = itemTypeLabel(service);
   const rowGridClasses = showBookAction
@@ -65,7 +66,7 @@ function ServiceRow({ service, selectable, selected, disabled, onToggle, showBoo
           disabled={disabled}
           onChange={() => onToggle(service.id)}
           className="h-7 w-7 shrink-0 cursor-pointer rounded-md border-line-strong accent-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed"
-          aria-label={`${selected ? 'Remove' : 'Select'} ${service.name}`}
+          aria-label={disabledReason || `${selected ? 'Remove' : 'Select'} ${service.name}`}
         />
         <ServiceThumbnail service={service} />
         <span className="min-w-0">
@@ -151,6 +152,7 @@ export function ServiceCatalog({
   }, [normalizedServices]);
 
   const selectedCategory = categories.includes(activeCategory) ? activeCategory : ALL_CATEGORY;
+  const selectedPackage = selectable ? selectedPackageForBooking(selectedIds, normalizedServices) : null;
 
   const searchTerm = search.trim().toLocaleLowerCase();
   const filteredServices = useMemo(
@@ -255,6 +257,7 @@ export function ServiceCatalog({
           </div>
 
           {selectable && <p className="text-xs font-semibold text-ink-500" aria-live="polite">{hasSelectionLimit ? `${selectedIds.length} of ${selectionLimit} selected` : `${selectedIds.length} selected`}</p>}
+          {selectedPackage && <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs leading-relaxed text-ink-700" role="status">Only one package can be selected per booking. {selectedPackage.name} is selected; remove it before choosing another package. You can still add services and add-ons.</p>}
 
           {!filteredServices.length ? (
             <div className="rounded-xl border border-line bg-surface">
@@ -273,8 +276,9 @@ export function ServiceCatalog({
                     </div>
                     {group.items.map((service) => {
                       const selected = selectedIds.includes(service.id);
-                      const disabled = selectable && hasSelectionLimit && !selected && selectedIds.length >= selectionLimit;
-                      return <ServiceRow key={service.id} service={service} selectable={selectable} selected={selected} disabled={disabled} onToggle={onToggle} showBookAction={showBookActions} />;
+                      const packageUnavailable = selectable && service.item_type === 'package' && selectedPackage && !selected;
+                      const disabled = packageUnavailable || (selectable && hasSelectionLimit && !selected && selectedIds.length >= selectionLimit);
+                      return <ServiceRow key={service.id} service={service} selectable={selectable} selected={selected} disabled={disabled} disabledReason={packageUnavailable ? `${service.name} is unavailable while ${selectedPackage.name} is selected. Remove the selected package first.` : undefined} onToggle={onToggle} showBookAction={showBookActions} />;
                     })}
                   </section>
                 );

@@ -53,7 +53,6 @@ import {
   updateAppointmentStatus,
   uploadServiceImage,
 } from "../api/admin";
-import { getAvailableSlots } from "../api/endpoints";
 import {
   STAFF_POSITION_TITLE_MAX_LENGTH,
   normalizeStaffPositionTitle,
@@ -138,8 +137,8 @@ const NAV_GROUPS = [
   },
   {
     id: "people-access",
-    label: "People & access",
-    items: [["staff", "Team", IconUser]],
+    label: "Accounts management",
+    items: [["staff", "Accounts", IconUser]],
     adminOnly: true,
   },
 ];
@@ -535,12 +534,18 @@ function PaginationControls({
 
 function AppointmentRow({ appointment, selected, onSelect }) {
   const customer = appointment.customer || {};
+  const statusTint = {
+    Pending: "bg-gold-50/70",
+    Confirmed: "bg-brand-50/60",
+    Completed: "bg-success/5",
+    Cancelled: "bg-danger/5",
+  }[appointment.status] || "bg-surface";
   return (
     <li className="border-b border-line last:border-b-0">
       <button
         type="button"
         onClick={(event) => onSelect(appointment, event.currentTarget)}
-        className={`w-full block py-4 text-left leading-relaxed transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 ${selected ? "bg-blush-50" : "hover:bg-canvas"}`}
+        className={`w-full block py-4 text-left leading-relaxed transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 ${selected ? "bg-blush-50" : `${statusTint} hover:bg-canvas`}`}
       >
         <div className="grid min-h-20 items-center gap-3 sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
           <div className="flex justify-between sm:contents">
@@ -796,6 +801,7 @@ function AppointmentQueue({
   appointments,
   filters,
   totalAppointments,
+  totalCompletedAppointments,
   selectedAppointment,
   filtersExpanded,
   headingRef,
@@ -809,10 +815,13 @@ function AppointmentQueue({
   const statusLabel = filters.status === "active"
     ? "Active bookings"
     : filters.status === "history"
-      ? "History (completed and cancelled)"
+      ? "History (completed visits)"
       : filters.status === "all"
         ? "All statuses"
         : filters.status;
+  const completedView = filters.status === "history" || filters.status === "Completed";
+  const displayedTotal = completedView ? totalCompletedAppointments : totalAppointments;
+  const resultLabel = completedView ? "completed visit" : "appointment";
   const filterSummary = [
     statusLabel,
     filters.date || "All dates",
@@ -886,7 +895,7 @@ function AppointmentQueue({
                 </option>
               ),
             )}
-            <option value="history">History (completed and cancelled)</option>
+            <option value="history">History (completed visits)</option>
           </select>
         </label>
         <button
@@ -916,7 +925,7 @@ function AppointmentQueue({
           {filterSummary}
         </p>
         <p className="shrink-0 text-ink-500">
-          {appointments.length} of {totalAppointments} appointment{totalAppointments === 1 ? "" : "s"}
+          {appointments.length} of {displayedTotal} {resultLabel}{displayedTotal === 1 ? "" : "s"}
         </p>
       </div>
       <div className="mt-3 hidden min-h-12 items-center gap-2 border-b border-line bg-canvas py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 sm:grid sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
@@ -1700,17 +1709,13 @@ function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
   );
 }
 
-function StaffAvailabilityPanel({
+function StaffAccountPanel({
   staffMember,
-  date,
+  appointmentDate,
   minDate,
   maxDate,
   onDateChange,
   onShiftDate,
-  slots,
-  loading,
-  error,
-  onRetry,
   appointments,
   onRequestAction,
   actionBusy,
@@ -1721,7 +1726,7 @@ function StaffAvailabilityPanel({
   const dayAppointments = appointments.filter(
     (appointment) =>
       String(appointment.staff_id || "") === selectedStaffKey &&
-      appointment.local_date === date,
+      appointment.local_date === appointmentDate,
   );
   const blockingAppointments = dayAppointments.filter((appointment) =>
     ["Pending", "Confirmed"].includes(appointment.status),
@@ -1729,14 +1734,10 @@ function StaffAvailabilityPanel({
   const otherAppointments = dayAppointments.filter(
     (appointment) => !["Pending", "Confirmed"].includes(appointment.status),
   );
-  const slotCount = slots.filter((slot) => slot.available).length;
   return (
     <Card className="p-5 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-            Daily availability
-          </p>
           <h2 className="mt-2 font-display text-2xl font-medium text-ink-900">
             {staffMember
               ? staffDisplayName(staffMember)
@@ -1745,9 +1746,9 @@ function StaffAvailabilityPanel({
           <p className="mt-1 text-sm text-ink-500">
             {staffMember
               ? bookable
-                ? "30-minute availability from the booking schedule."
+                ? "Account status and assigned appointments."
                 : "This account is not bookable for new appointments."
-              : "Select an account to inspect its schedule."}
+              : "Select an account to review its assigned appointments."}
           </p>
           {staffMember && (
             <p className="mt-2 text-xs font-semibold text-gold-600">
@@ -1856,19 +1857,19 @@ function StaffAvailabilityPanel({
         <button
           type="button"
           onClick={() => onShiftDate(-1)}
-          disabled={date <= minDate}
+          disabled={appointmentDate <= minDate}
           aria-label="Previous day"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 transition-colors hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45"
         >
           <IconArrowRight size={16} className="rotate-180" />
         </button>
         <label className="min-w-[12rem] flex-1 text-sm font-semibold text-ink-900">
-          <span className="sr-only">Availability date</span>
+          <span className="sr-only">Appointments date</span>
           <input
             type="date"
             min={minDate}
             max={maxDate}
-            value={date}
+            value={appointmentDate}
             onChange={(event) => onDateChange(event.target.value)}
             className="min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
           />
@@ -1876,7 +1877,7 @@ function StaffAvailabilityPanel({
         <button
           type="button"
           onClick={() => onShiftDate(1)}
-          disabled={date >= maxDate}
+          disabled={appointmentDate >= maxDate}
           aria-label="Next day"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 transition-colors hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45"
         >
@@ -1885,85 +1886,9 @@ function StaffAvailabilityPanel({
       </div>
       {!staffMember ? (
         <p className="py-8 text-sm text-ink-500">
-          Choose a staff account to see its 30-minute availability and assigned
-          appointments.
+          Choose an account to view its appointment history for this date.
         </p>
-      ) : !bookable ? (
-        <div
-          className="mt-5 rounded-xl border border-gold-600 bg-gold-100 px-4 py-4 text-sm text-ink-900"
-          role="status"
-        >
-          <p className="font-semibold">
-            {staffMember.is_active
-              ? "Appointments are disabled for this account."
-              : "Inactive accounts cannot receive new appointments."}
-          </p>
-          <p className="mt-1 text-ink-600">
-            An administrator can activate the account and enable “Accepts
-            appointments” before it appears to customers.
-          </p>
-        </div>
-      ) : loading ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-ink-500">
-          <Spinner size="sm" tone="brand" />
-          Loading 30-minute availability…
-        </div>
-      ) : error ? (
-        <div
-          className="mt-5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-4 text-sm text-danger"
-          role="alert"
-        >
-          <p className="font-semibold">{error}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="soft"
-            className="mt-3 min-h-11"
-            onClick={onRetry}
-          >
-            Try again
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-              30-minute availability
-            </h3>
-            <span className="text-xs font-semibold text-ink-500">
-              {slotCount} open slot{slotCount === 1 ? "" : "s"}
-            </span>
-          </div>
-          {slots.length ? (
-            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {slots.map((slot) => {
-                const status = slot.available
-                  ? "Available"
-                  : "Booked or unavailable";
-                return (
-                  <div
-                    key={slot.time}
-                    className={`min-h-11 rounded-lg border px-2 py-2 text-center text-xs font-bold ${slot.available ? "border-line bg-surface text-ink-700" : "border-line bg-canvas text-ink-400 line-through"}`}
-                    aria-label={`${slot.time}: ${status}`}
-                    title={status}
-                  >
-                    <span>{slot.time}</span>
-                    <span className="sr-only"> — {status}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p
-              className="mt-3 rounded-xl border border-gold-600 bg-gold-100 px-4 py-3 text-sm font-semibold text-ink-900"
-              role="status"
-            >
-              No 30-minute times are available on this date.
-            </p>
-          )}
-        </div>
-      )}
-      <div className="mt-6 border-t border-line pt-5">
+      ) : <div className="mt-6 border-t border-line pt-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h3 className="font-display text-lg font-medium text-ink-900">
             Assigned appointments
@@ -2015,7 +1940,7 @@ function StaffAvailabilityPanel({
             No appointments assigned to this team member on this date.
           </p>
         )}
-      </div>
+      </div>}
     </Card>
   );
 }
@@ -2191,16 +2116,12 @@ export function AdminPage() {
   const appointmentReturnFocusRef = useRef(null);
   const [appointmentFiltersExpanded, setAppointmentFiltersExpanded] = useState(false);
   const historyRequestRef = useRef(0);
-  const availabilityRequestRef = useRef(0);
   const notificationAppointmentRequestRef = useRef(0);
   const noShowDismissedIdsRef = useRef(new Set());
   const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [availabilityDate, setAvailabilityDate] = useState(() =>
+  const [appointmentsDate, setAppointmentsDate] = useState(() =>
     manilaDateKey(),
   );
-  const [availabilitySlots, setAvailabilitySlots] = useState([]);
-  const [availabilityLoading, setAvailabilityLoading] = useState(false);
-  const [availabilityError, setAvailabilityError] = useState("");
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteDialogError, setInviteDialogError] = useState("");
@@ -2552,46 +2473,8 @@ export function AdminPage() {
     () => staff.find((profile) => profile.id === selectedStaffId) || null,
     [staff, selectedStaffId],
   );
-  const availabilityMinDate = manilaDateKey();
-  const availabilityMaxDate = shiftManilaDate(availabilityMinDate, 60);
-  const loadAvailability = useCallback(() => {
-    const requestId = availabilityRequestRef.current + 1;
-    availabilityRequestRef.current = requestId;
-    if (
-      !selectedStaff ||
-      !availabilityDate ||
-      !isBookableStaff(selectedStaff)
-    ) {
-      setAvailabilitySlots([]);
-      setAvailabilityError("");
-      setAvailabilityLoading(false);
-      return Promise.resolve();
-    }
-    setAvailabilityLoading(true);
-    setAvailabilityError("");
-    return getAvailableSlots(availabilityDate, 30, selectedStaff.id)
-      .then((slots) => {
-        if (requestId === availabilityRequestRef.current)
-          setAvailabilitySlots(Array.isArray(slots) ? slots : []);
-      })
-      .catch((availabilityLoadError) => {
-        if (requestId === availabilityRequestRef.current) {
-          setAvailabilitySlots([]);
-          setAvailabilityError(
-            availabilityLoadError?.message ||
-              "Could not load this day’s availability.",
-          );
-        }
-      })
-      .finally(() => {
-        if (requestId === availabilityRequestRef.current)
-          setAvailabilityLoading(false);
-      });
-  }, [availabilityDate, selectedStaff]);
-
-  useEffect(() => {
-    loadAvailability();
-  }, [loadAvailability]);
+  const appointmentsMinDate = manilaDateKey();
+  const appointmentsMaxDate = shiftManilaDate(appointmentsMinDate, 60);
 
   const requestStatus = (appointment, nextStatus) => {
     const current = appointments.find((item) => item.id === appointment?.id);
@@ -3103,7 +2986,7 @@ export function AdminPage() {
   };
   const pageTitle =
     NAV_ITEMS.find(([key]) => key === tab)?.[1] ||
-    (tab === "staff" ? "Staff accounts" : "Overview");
+    (tab === "staff" ? "Accounts" : "Overview");
   const statusCopy = statusConfirmationCopy(statusConfirm?.to);
 
   return (
@@ -3211,6 +3094,7 @@ export function AdminPage() {
               appointments={visibleAppointments}
               filters={appointmentFilters}
               totalAppointments={appointments.length}
+              totalCompletedAppointments={appointments.filter((appointment) => appointment.status === "Completed").length}
               selectedAppointment={selectedVisibleAppointment}
               filtersExpanded={appointmentFiltersExpanded}
               headingRef={appointmentQueueHeadingRef}
@@ -3553,7 +3437,7 @@ export function AdminPage() {
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="text-sm text-ink-500">
-                    Select an account to inspect availability or change access.
+                    Select an account to review assigned appointments or change access.
                     Activation controls sign-in; “Accepts appointments”
                     separately controls eligibility for new customer bookings.
                   </p>
@@ -3570,8 +3454,8 @@ export function AdminPage() {
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
                 <Card className="p-5 sm:p-7">
                   <CardHeader
-                    title="Staff accounts"
-                    subtitle="Select an account to inspect availability, update access, or send a recovery link."
+                    title="Accounts management"
+                    subtitle="Select an account to review assigned appointments, update access, or send a recovery link."
                   />
                   <ul className="mt-2">
                     {staff.length ? (
@@ -3590,33 +3474,29 @@ export function AdminPage() {
                     )}
                   </ul>
                 </Card>
-                <StaffAvailabilityPanel
+                <StaffAccountPanel
                   staffMember={selectedStaff}
-                  date={availabilityDate}
-                  minDate={availabilityMinDate}
-                  maxDate={availabilityMaxDate}
+                  appointmentDate={appointmentsDate}
+                  minDate={appointmentsMinDate}
+                  maxDate={appointmentsMaxDate}
                   onDateChange={(nextDate) => {
                     if (
-                      /^\\d{4}-\\d{2}-\\d{2}$/.test(nextDate) &&
-                      nextDate >= availabilityMinDate &&
-                      nextDate <= availabilityMaxDate
+                      /^\d{4}-\d{2}-\d{2}$/.test(nextDate) &&
+                      nextDate >= appointmentsMinDate &&
+                      nextDate <= appointmentsMaxDate
                     )
-                      setAvailabilityDate(nextDate);
+                      setAppointmentsDate(nextDate);
                   }}
                   onShiftDate={(days) =>
-                    setAvailabilityDate((current) => {
+                    setAppointmentsDate((current) => {
                       const next = shiftManilaDate(current, days);
-                      return next < availabilityMinDate
-                        ? availabilityMinDate
-                        : next > availabilityMaxDate
-                          ? availabilityMaxDate
+                      return next < appointmentsMinDate
+                        ? appointmentsMinDate
+                        : next > appointmentsMaxDate
+                          ? appointmentsMaxDate
                           : next;
                     })
                   }
-                  slots={availabilitySlots}
-                  loading={availabilityLoading}
-                  error={availabilityError}
-                  onRetry={loadAvailability}
                   appointments={appointments}
                   onRequestAction={requestStaffAction}
                   actionBusy={staffActionBusy}

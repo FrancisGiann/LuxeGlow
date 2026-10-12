@@ -222,10 +222,25 @@ export async function getServices() {
 }
 
 export async function getReviews() {
-  const query = await requireSupabase().from('published_reviews').select('*').order('created_at', { ascending: false }).limit(20);
+  const client = requireSupabase();
+  const [query, statsQuery] = await Promise.all([
+    client.from('published_reviews').select('*').order('created_at', { ascending: false }).limit(20),
+    client.rpc('get_published_review_stats'),
+  ]);
   const data = unwrap(query, 'Could not load reviews.') || [];
   const reviews = data.map((row) => ({ review_id: row.review_id, rating: Number(row.rating), review_text: row.review_text || '', created_at: row.created_at, customer_name: row.customer_name || 'Valued Customer', service_names: row.service_names || 'Beauty Service' }));
-  return { success: true, stats: { total_reviews: reviews.length, average_rating: reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0 }, reviews };
+  if (statsQuery.error) throw asError(statsQuery.error, 'Could not load review totals. Please try again later.');
+  const stats = statsQuery.data?.[0];
+  const totalReviews = Number(stats?.total_reviews);
+  const averageRating = stats?.average_rating == null && totalReviews === 0 ? 0 : Number(stats?.average_rating);
+  if (!stats || !Number.isSafeInteger(totalReviews) || totalReviews < 0 || !Number.isFinite(averageRating) || averageRating < 0 || averageRating > 5 || (totalReviews > 0 && averageRating < 1)) {
+    throw new Error('Could not load review totals. Please try again later.');
+  }
+  return {
+    success: true,
+    stats: { total_reviews: totalReviews, average_rating: averageRating },
+    reviews,
+  };
 }
 
 export async function getFaqs() {
@@ -239,6 +254,24 @@ export async function getAbout() {
 }
 
 /* ── Customer dashboard ──────────────────────────────────────── */
+const reviewServiceLabel = (row, appointmentCreatedAt) => {
+  const service = row?.services;
+  const snapshotName = String(row?.service_name || '').trim();
+  const catalogName = String(service?.name || '').trim();
+  const name = snapshotName || catalogName;
+  const appointmentTime = Date.parse(appointmentCreatedAt || '');
+  const catalogUpdateTime = Date.parse(service?.updated_at || '');
+  const descriptionIsHistorical = Number.isFinite(appointmentTime)
+    && Number.isFinite(catalogUpdateTime)
+    && catalogUpdateTime <= appointmentTime;
+  const description = service?.item_type === 'package'
+    && catalogName === snapshotName
+    && descriptionIsHistorical
+    ? String(service.description || '').trim()
+    : '';
+  return description && description !== name ? `${name} — ${description}` : name;
+};
+
 const dashboardAppointment = (row) => {
   const services = row.appointment_services || [];
   const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews;
@@ -267,7 +300,7 @@ export async function getDashboard() {
   );
   const [profileResult, appointmentsResult, notificationsResult, appointmentStaffResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,arrived_at,total_duration_minutes,total_price,status,created_at,appointment_services(service_name,services(image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
+    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,arrived_at,total_duration_minutes,total_price,status,created_at,appointment_services(service_name,services(name,item_type,description,updated_at,image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
     client.from('user_notifications').select('id,appointment_id,type,title,message,is_read,created_at').eq('customer_id', session.user.id).order('created_at', { ascending: false }).limit(30),
     client.rpc('get_my_appointment_staff'),
   ]);
@@ -284,7 +317,7 @@ export async function getDashboard() {
       return nestedReviews.map((review) => ({ review, appointment: row }));
     })
     .sort((a, b) => Date.parse(b.review.created_at || '') - Date.parse(a.review.created_at || ''))
-    .map(({ review, appointment }) => ({ review_id: Number(review.id), appointment_id: appointment.id, rating: Number(review.rating), staff_rating: review.staff_rating == null ? null : Number(review.staff_rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((s) => s.service_name).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
+    .map(({ review, appointment }) => ({ review_id: Number(review.id), rating: Number(review.rating), staff_rating: review.staff_rating == null ? null : Number(review.staff_rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((service) => reviewServiceLabel(service, appointment.created_at)).filter(Boolean).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
   const summary = { pending_count: 0, confirmed_count: 0, completed_count: 0, cancelled_count: 0, unread_notifications: notifications.filter((n) => !n.is_read).length };
   appointments.forEach((row) => { const key = `${row.status.toLowerCase()}_count`; if (key in summary) summary[key] += 1; });
   return { success: true, customer: profilePayload(profile, session.user), summary, appointments, notifications, reviews };
@@ -309,13 +342,13 @@ export async function getRatableAppointments() {
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
   const [appointmentsResult, staffResult] = await Promise.all([
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,appointment_services(service_name),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }),
+    client.from('appointments').select('id,staff_id,local_date,local_time,created_at,appointment_services(service_name,services(name,item_type,description,updated_at)),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }),
     client.rpc('get_my_appointment_staff'),
   ]);
   const data = unwrap(appointmentsResult, 'Could not load visits.') || [];
   const staffRows = unwrap(staffResult, 'Could not load appointment staff.') || [];
   const staffNames = new Map(staffRows.map((row) => [row.appointment_id, row.display_name]));
-  return { success: true, appointments: data.filter((row) => { const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews; return !review; }).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((s) => s.service_name).join(', '), total_price: Number(row.total_price) })) };
+  return { success: true, appointments: data.filter((row) => { const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews; return !review; }).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((service) => reviewServiceLabel(service, row.created_at)).filter(Boolean).join(', ') || 'Beauty Service' })) };
 }
 
 export async function createReview(appointmentId, visitRating, staffRating = null, reviewText = '') {
@@ -372,6 +405,27 @@ export async function getAvailableSlots(date, durationMinutes, staffId) {
     const code = String(error?.code || '').toUpperCase();
     const message = String(error?.message || '').toLocaleLowerCase();
     if (code === '42883' || code === 'PGRST202' || /get_available_slots|function .* does not exist/.test(message)) throw new Error('Availability is unavailable right now. Please ask an administrator to apply the latest booking schedule update, then try again.');
+    throw error;
+  }
+}
+
+export async function getSalonDateStatus(date) {
+  const dateValue = String(date || '');
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? new Date(`${dateValue}T00:00:00.000Z`) : null;
+  if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateValue) {
+    throw new Error('Choose a valid date.');
+  }
+  try {
+    const data = unwrap(await requireSupabase().rpc('get_salon_date_status', { p_date: dateValue }), 'Could not check this date.');
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.is_closed !== 'boolean') throw new Error('Could not confirm whether the salon is open on this date.');
+    return { date: dateValue, isClosed: row.is_closed };
+  } catch (error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLocaleLowerCase();
+    if (code === '42883' || code === 'PGRST202' || /get_salon_date_status|function .* does not exist/.test(message)) {
+      throw new Error('Date availability is unavailable right now. Please try again, or contact the salon for help.');
+    }
     throw error;
   }
 }

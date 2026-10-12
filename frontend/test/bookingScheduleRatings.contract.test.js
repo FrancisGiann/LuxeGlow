@@ -78,15 +78,22 @@ test('guest booking draft returns to a separate review and confirmation is authe
     /title="Review your booking"/,
     /Confirm booking/,
     /const confirmBooking = async/,
-    /createAppointment\(\{ serviceIds: selectedIds, staffId: selectedStaffId/,
-    /result\.staff_name \|\| selectedStaff\?\.name/,
-    /Sign in to review/,
+    /createAppointment\(\{ serviceIds: selectedIdsForServices, staffId: selectedStaffId/,
+    /: 'Sign in'\}/,
+    /editingReview \? 'Save' : 'Review'/,
+    /getSalonDateStatus/,
     /No preference/,
     /No ratings yet\./,
   ]) assert.match(bookingPage, contract);
+  assert.match(bookingPage, /useDashboard\(\)/);
+  const successfulBooking = bookingPage.slice(bookingPage.indexOf('if (result.success)'), bookingPage.indexOf('} else {', bookingPage.indexOf('if (result.success)')));
+  assert.match(successfulBooking, /removeItem\(BOOKING_DRAFT_KEY\)/);
+  assert.match(successfulBooking, /refreshDashboard\(\)/);
+  assert.match(successfulBooking, /navigate\('\/dashboard\/overview', \{ replace: true \}\)/);
+  const bookingFailure = bookingPage.slice(bookingPage.indexOf('} else {', bookingPage.indexOf('if (result.success)')), bookingPage.indexOf('} catch (error)', bookingPage.indexOf('if (result.success)')));
+  assert.doesNotMatch(bookingFailure, /navigate\('\/dashboard\/overview'/);
   const submit = bookingPage.slice(bookingPage.indexOf('const submit'), bookingPage.indexOf('const confirmBooking'));
   assert.doesNotMatch(submit, /createAppointment\(/);
-  assert.doesNotMatch(bookingPage, /useDashboard/);
 });
 
 test('customer workspace keeps the approved minimal navigation and return flow', () => {

@@ -9,9 +9,10 @@ const bookingPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/Bookin
 const appointmentsPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/dashboard/MyAppointmentsPage.jsx'), 'utf8');
 const confirmationModal = readFileSync(resolve(projectRoot, 'frontend/src/components/booking/BookingReceiptModal.jsx'), 'utf8');
 
-test('customer-facing booking record labels use booking confirmation terminology', () => {
-  assert.match(bookingPage, /View \/ print booking confirmation/);
-  assert.match(appointmentsPage, /View \/ print booking confirmation/);
+test('successful bookings redirect to the dashboard and receipt printing remains on appointment history', () => {
+  assert.doesNotMatch(bookingPage, /BookingSuccess|Print booking confirmation/);
+  assert.match(bookingPage, /toast\(`Booking request sent\. Reference \$\{result\.appointment_id \|\| result\.appointment_uuid\}\.`,[\s\S]*?void refreshDashboard\(\);[\s\S]*?navigate\('\/dashboard\/overview', \{ replace: true \}\)/);
+  assert.match(appointmentsPage, /Print booking confirmation/);
   assert.match(confirmationModal, /Booking confirmation preview/);
   assert.match(confirmationModal, /hidePrint \? 'Booking Details' : 'Booking Confirmation'/);
   assert.match(confirmationModal, /Appointment record only — not proof of payment\./);
@@ -26,7 +27,7 @@ test('appointment actions keep distinct customer-facing labels', () => {
     'View booking details',
     'Change date or time',
     'Cancel booking',
-    'View / print booking confirmation',
+    'Print booking confirmation',
   ]) {
     assert.ok(appointmentsPage.includes(label), `Missing appointment action label: ${label}`);
   }

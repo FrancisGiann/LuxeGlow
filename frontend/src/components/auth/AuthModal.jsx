@@ -113,6 +113,12 @@ export function AuthModal() {
     navigate(returnPath === '/book' || window.location.pathname === '/book' ? '/book' : '/dashboard/overview', { replace: true });
   };
 
+  const handleVerificationSignIn = () => {
+    setLoginEmail(verifyEmail);
+    loginEmailRef.current = verifyEmail;
+    openAuth('login');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -438,7 +444,7 @@ export function AuthModal() {
 
               <div className="py-4 text-center">
                 <h3 className="mb-2 text-lg font-bold text-ink-900">Check your inbox and spam folder.</h3>
-                <p className="text-sm text-ink-500">If this address needs verification, open the email link to confirm it and sign in.</p>
+                <p className="text-sm text-ink-500">Open the email link to confirm this address. If you confirm on another device, return here and sign in to continue.</p>
               </div>
 
               <div className="text-center text-sm text-ink-500">
@@ -447,9 +453,7 @@ export function AuthModal() {
                   {resendBusy ? 'Sending…' : resendRemaining > 0 ? `Resend in ${Math.floor(resendRemaining / 60)}:${String(resendRemaining % 60).padStart(2, '0')}` : 'Resend email'}
                 </button>
               </div>
-              <p className="text-center text-xs text-ink-400">
-                After you verify your email, you can close this window.
-              </p>
+              <Button type="button" variant="soft" onClick={handleVerificationSignIn}>Sign in</Button>
             </div>
           )}
         </div>

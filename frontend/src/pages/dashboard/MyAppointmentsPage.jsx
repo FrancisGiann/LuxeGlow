@@ -10,11 +10,12 @@ import { StatusPill } from '../../components/ui/StatusPill';
 import { Button } from '../../components/ui/Button';
 import { RateVisitModal } from '../../components/dashboard/RateVisitModal';
 import { BookingReceiptModal } from '../../components/booking/BookingReceiptModal';
-import { classifyAppointments } from '../../utils/appointments';
+import { classifyAppointments, filterCompletedAppointmentsByDate } from '../../utils/appointments';
 import { toAppointmentDate } from '../../utils/format';
 import { IconCalendar, IconGrid, IconPrinter, IconSparkle, IconStar } from '../../components/icons';
 
-const TABS = [['upcoming', 'Upcoming'], ['recent', 'Recent'], ['history', 'History']];
+const TABS = [['upcoming', 'Upcoming'], ['history', 'History']];
+const CANCELLATION_REASONS = ['Schedule conflict', 'Change of plans', 'Booked by mistake', 'Feeling unwell', 'Other'];
 const manilaDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const maxBookingDate = () => { const [year, month, day] = manilaDate().split('-').map(Number); const date = new Date(Date.UTC(year, month - 1, day + 60)); return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`; };
 function canCustomerManage(appointment) {
@@ -66,7 +67,7 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
         )}
         {appointment.status === 'Completed' && (
           <Button type="button" variant="primary" size="sm" className={actionClassName} onClick={() => onReceipt(appointment)}>
-            <IconPrinter size={14} aria-hidden="true" /> View / print booking confirmation
+            <IconPrinter size={14} aria-hidden="true" /> Print booking confirmation
           </Button>
         )}
         {manageable && (
@@ -136,12 +137,13 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
   </AdminDialog>;
 }
 function CancelDialog({ appointment, onClose, onSave }) {
-  const [reason, setReason] = useState('');
+  const [reasonChoice, setReasonChoice] = useState('');
+  const [otherReason, setOtherReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const save = async (event) => {
     event.preventDefault();
-    const cleanReason = reason.trim();
+    const cleanReason = (reasonChoice === 'Other' ? otherReason : reasonChoice).trim();
     if (!cleanReason || cleanReason.length > 500 || busy) { setError('Enter a reason between 1 and 500 characters.'); return; }
     setBusy(true);
     setError('');
@@ -151,10 +153,11 @@ function CancelDialog({ appointment, onClose, onSave }) {
   };
   return <AdminDialog open title="Cancel appointment" description="Tell us why you need to cancel. The salon can see this reason with the appointment details." onClose={onClose} closeDisabled={busy}>
     <form onSubmit={save}>
-      <label className="block text-sm font-semibold text-ink-900">Cancellation reason<textarea required maxLength={500} rows={4} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm" /></label>
-      <p className="mt-1 text-right text-xs text-ink-500">{reason.trim().length}/500</p>
+      <label className="block text-sm font-semibold text-ink-900">Cancellation reason<select required value={reasonChoice} onChange={(event) => { setReasonChoice(event.target.value); setError(''); }} className="mt-1 block min-h-11 w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm"><option value="" disabled>Select a reason</option>{CANCELLATION_REASONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+      {reasonChoice === 'Other' && <label className="mt-3 block text-sm font-semibold text-ink-900">Please specify<textarea required maxLength={500} rows={3} value={otherReason} onChange={(event) => { setOtherReason(event.target.value); if (error && event.target.value.trim()) setError(''); }} className="mt-1 block w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm" /></label>}
+      {reasonChoice === 'Other' && <p className="mt-1 text-right text-xs text-ink-500">{otherReason.trim().length}/500</p>}
       {error && <p className="mt-3 text-sm font-semibold text-danger" role="alert">{error}</p>}
-      <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Keep appointment</Button><Button type="submit" variant="danger" loading={busy} disabled={!reason.trim()}>{busy ? 'Cancelling…' : 'Confirm cancellation'}</Button></div>
+      <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Keep appointment</Button><Button type="submit" variant="danger" loading={busy} disabled={!reasonChoice || (reasonChoice === 'Other' && !otherReason.trim())}>{busy ? 'Cancelling…' : 'Confirm cancellation'}</Button></div>
     </form>
   </AdminDialog>;
 }
@@ -164,7 +167,10 @@ export function MyAppointmentsPage() {
   const toast = useToast();
   const [tab, setTab] = useState('upcoming'); const [rateFor, setRateFor] = useState(null); const [receiptFor, setReceiptFor] = useState(null);
   const [rescheduleFor, setRescheduleFor] = useState(null); const [cancelFor, setCancelFor] = useState(null);
-  const groups = useMemo(() => classifyAppointments(appointments), [appointments]); const visible = groups[tab];
+  const [historyDate, setHistoryDate] = useState('');
+  const groups = useMemo(() => classifyAppointments(appointments), [appointments]);
+  const historyVisits = useMemo(() => filterCompletedAppointmentsByDate(groups.history, historyDate), [groups.history, historyDate]);
+  const visible = tab === 'history' ? historyVisits : groups.upcoming;
   const saveReschedule = async (appointment, date, time, reason) => {
     const result = await rescheduleMyAppointment(appointment.id, date, time, reason);
     if (!result.success) throw new Error(result.error);
@@ -179,5 +185,5 @@ export function MyAppointmentsPage() {
     setCancelFor(null);
     toast('Appointment cancelled.', 'success');
   };
-  return <div className="mx-auto max-w-[1240px]"><div className="mb-7 flex flex-wrap items-end justify-between gap-5"><div><h2 className="font-display text-3xl font-medium text-ink-900">My appointments</h2><p className="mt-2 text-sm text-ink-500">Keep track of upcoming requests and completed visits.</p></div><Link to="/dashboard/book"><Button>Book an appointment</Button></Link></div><div role="tablist" aria-label="Appointment groups" className="mb-5 flex flex-wrap gap-1 border-b border-line">{TABS.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`min-h-11 border-b-2 px-4 text-sm font-bold transition-colors ${tab === key ? 'border-brand-800 text-brand-800' : 'border-transparent text-ink-500 hover:text-ink-900'}`}>{label}<span className="ml-2 text-xs text-ink-400">{loading ? '—' : groups[key].length}</span></button>)}</div><Card className="p-5 sm:p-7">{loading && <SkeletonRows rows={4} className="py-4" />}{!loading && !visible.length && <EmptyState icon={tab === 'upcoming' ? IconCalendar : tab === 'recent' ? IconSparkle : IconGrid} title={tab === 'upcoming' ? 'No upcoming appointments' : tab === 'recent' ? 'No recent visits' : 'Nothing in history yet'} description={tab === 'upcoming' ? 'Your next booking will appear here once it is placed.' : tab === 'recent' ? 'Completed visits from the last 30 days appear here.' : 'Older and cancelled bookings stay here for your records.'} action={<Link to="/dashboard/book" className="text-sm font-bold text-brand-800">Browse treatments</Link>} />}{!loading && visible.length > 0 && <ul>{visible.map((appointment) => <AppointmentRow key={appointment.id} appointment={appointment} onRate={setRateFor} onReceipt={setReceiptFor} onView={setReceiptFor} onReschedule={setRescheduleFor} onCancel={setCancelFor} />)}</ul>}</Card>{rateFor !== null && <RateVisitModal presetAppointmentId={String(rateFor)} onClose={() => setRateFor(null)} />}{receiptFor && <BookingReceiptModal receipt={{ reference: receiptFor.reference_no || receiptFor.id, customer, service: receiptFor.service, staffName: receiptFor.staff_name, raw_date: receiptFor.raw_date, raw_time: receiptFor.raw_time, price: receiptFor.price, status: receiptFor.status, createdAt: receiptFor.created_at }} onClose={() => setReceiptFor(null)} hidePrint={receiptFor.status === 'Pending'} />}{rescheduleFor && <RescheduleDialog appointment={rescheduleFor} onClose={() => setRescheduleFor(null)} onSave={saveReschedule} />}{cancelFor && <CancelDialog appointment={cancelFor} onClose={() => setCancelFor(null)} onSave={saveCancellation} />}</div>;
+  return <div className="mx-auto max-w-[1240px]"><div className="mb-7 flex flex-wrap items-end justify-between gap-5"><div><h2 className="font-display text-3xl font-medium text-ink-900">My appointments</h2><p className="mt-2 text-sm text-ink-500">Keep track of upcoming bookings and completed visits.</p></div><Link to="/dashboard/book"><Button>Book an appointment</Button></Link></div><div role="tablist" aria-label="Appointment groups" className="mb-5 flex flex-wrap gap-1 border-b border-line">{TABS.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`min-h-11 border-b-2 px-4 text-sm font-bold transition-colors ${tab === key ? 'border-brand-800 text-brand-800' : 'border-transparent text-ink-500 hover:text-ink-900'}`}>{label}<span className="ml-2 text-xs text-ink-400">{loading ? '—' : groups[key].length}</span></button>)}</div><Card className="p-5 sm:p-7">{tab === 'history' && <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><label htmlFor="history-visit-date" className="block text-sm font-semibold text-ink-900">Filter completed visits by date<input id="history-visit-date" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-line bg-surface px-4 text-sm" /></label><p className="text-sm text-ink-500" role="status" aria-live="polite">{historyVisits.length}{historyDate ? ` of ${groups.history.length}` : ''} completed visit{historyVisits.length === 1 ? '' : 's'}</p></div>}{loading && <SkeletonRows rows={4} className="py-4" />}{!loading && !visible.length && <EmptyState icon={tab === 'upcoming' ? IconCalendar : IconGrid} title={tab === 'upcoming' ? 'No upcoming appointments' : historyDate ? 'No completed visits on this date' : 'No completed visits yet'} description={tab === 'upcoming' ? 'Your next booking will appear here once it is placed.' : historyDate ? 'Choose another date or clear the filter to see all completed visits.' : 'Completed visits will appear here after your appointment.'} action={tab === 'upcoming' ? <Link to="/dashboard/book" className="text-sm font-bold text-brand-800">Browse treatments</Link> : null} />}{!loading && visible.length > 0 && <ul>{visible.map((appointment) => <AppointmentRow key={appointment.id} appointment={appointment} onRate={setRateFor} onReceipt={setReceiptFor} onView={setReceiptFor} onReschedule={setRescheduleFor} onCancel={setCancelFor} />)}</ul>}</Card>{rateFor !== null && <RateVisitModal presetAppointmentId={String(rateFor)} onClose={() => setRateFor(null)} />}{receiptFor && <BookingReceiptModal receipt={{ reference: receiptFor.reference_no || receiptFor.id, customer, service: receiptFor.service, staffName: receiptFor.staff_name, raw_date: receiptFor.raw_date, raw_time: receiptFor.raw_time, price: receiptFor.price, status: receiptFor.status, createdAt: receiptFor.created_at }} onClose={() => setReceiptFor(null)} hidePrint={receiptFor.status === 'Pending'} />}{rescheduleFor && <RescheduleDialog appointment={rescheduleFor} onClose={() => setRescheduleFor(null)} onSave={saveReschedule} />}{cancelFor && <CancelDialog appointment={cancelFor} onClose={() => setCancelFor(null)} onSave={saveCancellation} />}</div>;
 }

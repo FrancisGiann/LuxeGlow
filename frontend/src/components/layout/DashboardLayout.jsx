@@ -15,7 +15,7 @@ const NAV_ITEMS = [
 ];
 
 const PAGE_TITLES = {
-  '/dashboard/overview': 'Overview',
+  '/dashboard/overview': 'Dashboard',
   '/dashboard/book': 'Book Appointment',
   '/dashboard/appointments': 'My Appointments',
   '/dashboard/notifications': 'Notifications',

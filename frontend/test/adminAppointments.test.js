@@ -56,7 +56,9 @@ test('active filters include overdue pending and confirmed appointments across e
   assert.deepEqual(getAdminAppointmentQueue(apiOrder, createInitialAppointmentFilters()), [newest, overdue, confirmed]);
   assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'Pending' }), [newest, overdue]);
   assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '2026-09-13', status: 'active' }), [newest]);
-  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'history' }), [completed, cancelled]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'history' }), [completed]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'Cancelled' }), [cancelled]);
+  assert.deepEqual(getAdminAppointmentQueue(apiOrder, { date: '', status: 'all' }), apiOrder);
   assert.deepEqual(appointmentFilterPreset('history'), { date: '', status: 'history', search: '' });
   assert.deepEqual(appointmentFilterPreset('all'), { date: '', status: 'all', search: '' });
 });

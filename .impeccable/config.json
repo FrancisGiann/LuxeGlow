@@ -9,6 +9,15 @@
         "value": "arial",
         "createdAt": "2026-09-28T12:50:10.576Z",
         "reason": "Agent: Arial is an intentional email-client-safe body-text fallback; Georgia provides the branded headings, and external font loading is unreliable in email clients"
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "frontend/src/pages/dashboard/MyAppointmentsPage.jsx"
+        ],
+        "createdAt": "2026-10-12T12:52:43.630Z",
+        "reason": "Agent: single-line JSX combines an unrounded active-tab bottom underline with a separate rounded date input using a neutral thin border; no element has both styling patterns."
       }
     ]
   }

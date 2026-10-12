@@ -21,7 +21,7 @@ test('booking task cards follow the visible date, service, team, review sequence
   assert.ok(bookingPage.indexOf('<Summary') > positions.at(-1), 'the summary should remain after the task stack in source order');
   assert.match(bookingPage, /if \(reviewStep\) return <main[\s\S]*?title="Review your booking"[\s\S]*?Confirm booking/);
 });
-test('availability starts at 30 minutes and preserves a time while choices are rechecked', () => {
+test('availability starts at 30 minutes, clears times on date changes, and rechecks service and staff changes', () => {
   assert.match(bookingPage, /loadAvailability\(selectedStaffId, date, totalMinutes \|\| 30, availabilitySelectionVersionRef\.current\)/);
   assert.match(bookingPage, /Times are offered in 30-minute increments/);
   assert.match(bookingPage, /With no services selected, we check for a 30-minute visit\./);
@@ -37,9 +37,9 @@ test('availability starts at 30 minutes and preserves a time while choices are r
   ];
 
   assert.ok(handlers.every(Boolean), 'service, date, and staff selection handlers should be present');
-  for (const handler of handlers) {
-    assert.doesNotMatch(handler, /setTime\(''\)/, 'selection changes should retain the selected time for revalidation');
-  }
+  assert.doesNotMatch(handlers[0], /setTime\(''\)/, 'service changes should revalidate the selected time');
+  assert.match(handlers[1], /setDate\(value\); setTime\(''\); invalidateAvailability\(\)/, 'date changes should immediately clear the selected time');
+  assert.doesNotMatch(handlers[2], /setTime\(''\)/, 'staff changes should revalidate the selected time');
 });
 
 test('booking review requires a current slot and confirmation rechecks availability before creating', () => {

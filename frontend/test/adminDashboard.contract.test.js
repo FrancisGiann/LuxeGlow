@@ -22,7 +22,7 @@ test('staff navigation is a collapsible single-open grouped accordion with an ad
   assert.match(adminPage, /id: "daily-work",\s*label: "Daily work"/);
   assert.match(adminPage, /id: "salon-setup",\s*label: "Salon setup"/);
   assert.match(adminPage, /id: "website-content",\s*label: "Website content"/);
-  assert.match(adminPage, /id: "people-access",\s*label: "People & access"[\s\S]*?adminOnly: true/);
+  assert.match(adminPage, /id: "people-access",\s*label: "Accounts management"[\s\S]*?adminOnly: true/);
   assert.match(adminNav, /NAV_GROUPS\.filter\(\(group\) => !group\.adminOnly \|\| isAdmin\)/);
   assert.match(adminNav, /aria-expanded=\{expanded\}[\s\S]*?aria-controls=\{panelId\}/);
   assert.match(adminNav, /setOpenGroup\(\(current\) =>[\s\S]*?current === group\.id \? null : group\.id/);
@@ -41,7 +41,7 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
   assert.doesNotMatch(publicLayout, /Admin dashboard/);
   assert.match(adminPage, /customer\?\.first_name \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
   assert.match(adminPage, /join\(" "\) \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
-  assert.match(adminPage, /Staff accounts/);
+  assert.match(adminPage, /title="Accounts management"/);
   assert.match(adminPage, /Activation controls sign-in; “Accepts appointments”\s+separately controls eligibility for new customer bookings/);
 });
 
@@ -55,7 +55,9 @@ test('overview stays optional and history has a dedicated navigation filter', ()
   assert.match(adminPage, /appointmentFilterPreset\("history"\)/);
   assert.match(adminPage, /tab === "appointments" \|\| tab === "history"/);
   assert.match(adminUtilities, /if \(kind === 'history'\) return \{ date: '', status: 'history', search: '' \}/);
-  assert.match(adminUtilities, /status === 'history' && !\['Completed', 'Cancelled'\]\.includes\(appointment\.status\)/);
+  assert.match(adminUtilities, /status === 'history' && appointment\.status !== 'Completed'/);
+  assert.match(adminPage, /const displayedTotal = completedView \? totalCompletedAppointments : totalAppointments/);
+  assert.match(adminPage, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/.test\(nextDate\)/);
   assert.match(adminPage, /<StaffNotificationBell[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
   assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
 });
@@ -67,7 +69,7 @@ test('appointment queue keeps its search and summary visible while secondary fil
   assert.match(queue, /aria-expanded=\{filtersExpanded\}[\s\S]*?aria-controls="appointment-filter-fields"/);
   assert.match(queue, /id="appointment-filter-fields"[\s\S]*?hidden=\{!filtersExpanded\}/);
   assert.match(queue, /Active bookings/);
-  assert.match(queue, /\{filterSummary\}[\s\S]*?\{appointments\.length\} of \{totalAppointments\}/);
+  assert.match(queue, /\{filterSummary\}[\s\S]*?\{appointments\.length\} of \{displayedTotal\}/);
   assert.match(queue, /Date &amp; time[\s\S]*?Customer[\s\S]*?Services[\s\S]*?Status/);
   assert.match(row, /appointment\.local_time[\s\S]*?appointment\.local_date[\s\S]*?customer\.first_name[\s\S]*?serviceNames\(appointment\)[\s\S]*?appointment\.status/);
   assert.doesNotMatch(row, /customer\.email|appointmentStaffName\(appointment\)|reference_no/);

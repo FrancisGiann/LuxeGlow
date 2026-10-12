@@ -9,7 +9,7 @@ function Stars({ rating }) {
 }
 
 export function ReviewsSection() {
-  const { data, loading } = useFetch(getReviews);
+  const { data, loading, error } = useFetch(getReviews);
   const stats = data?.stats;
   const reviews = data?.reviews || [];
   return (
@@ -26,8 +26,9 @@ export function ReviewsSection() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {loading && Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-48 animate-pulse rounded-2xl border border-line bg-surface" />)}
+            {!loading && error && <p className="md:col-span-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">Reviews are unavailable right now. Please check back soon.</p>}
             {!loading && reviews.slice(0, 4).map((review) => <Card as="article" hoverable key={review.review_id} className="flex flex-col gap-4 p-6"><Stars rating={review.rating} /><p className="flex-1 text-sm leading-relaxed text-ink-700">{review.review_text || 'Shared without a written note.'}</p><div className="border-t border-line pt-4"><p className="text-sm font-bold text-ink-900">{review.customer_name}</p><p className="mt-1 text-xs text-ink-500">{review.service_names}</p></div></Card>)}
-            {!loading && reviews.length === 0 && <div className="md:col-span-2"><EmptyState icon={IconStar} title="No reviews published yet" description="Feedback from completed visits will appear here when shared." /></div>}
+            {!loading && !error && reviews.length === 0 && <div className="md:col-span-2"><EmptyState icon={IconStar} title="No reviews published yet" description="Feedback from completed visits will appear here when shared." /></div>}
           </div>
         </div>
       </div>

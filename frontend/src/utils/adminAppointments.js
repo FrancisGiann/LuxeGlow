@@ -91,7 +91,7 @@ export function getAdminAppointmentQueue(appointments, filters = {}) {
   const matching = source.filter((appointment) => {
     if (!appointment || typeof appointment !== 'object') return false;
     if (date && appointment.local_date !== date) return false;
-    if (status === 'history' && !['Completed', 'Cancelled'].includes(appointment.status)) return false;
+    if (status === 'history' && appointment.status !== 'Completed') return false;
     if (status === 'active' && !['Pending', 'Confirmed'].includes(appointment.status)) return false;
     if (!['all', 'history', 'active'].includes(status) && appointment.status !== status) return false;
     return !term || searchableAppointmentText(appointment).includes(term);

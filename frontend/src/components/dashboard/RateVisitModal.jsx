@@ -5,10 +5,22 @@ import { useToast } from '../ui/Toast';
 import { Button } from '../ui/Button';
 import { Select, Textarea } from '../ui/Field';
 import { IconStar, IconX } from '../icons';
-import { formatPeso } from '../../utils/format';
 
-export function StarPicker({ value, onChange, size = 28 }) {
+export function StarPicker({ value, onChange, size = 28, readOnly = false }) {
   const [hover, setHover] = useState(0);
+  if (readOnly) {
+    const rating = Number(value);
+    const safeRating = Number.isFinite(rating) ? Math.max(0, Math.min(5, rating)) : 0;
+    return (
+      <div className="flex gap-1.5" role="img" aria-label={`${safeRating} out of 5 stars`}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span key={star} className={star <= safeRating ? 'text-gold-400' : 'text-line-strong'}>
+            <IconStar size={size} filled={star <= safeRating} />
+          </span>
+        ))}
+      </div>
+    );
+  }
   const active = hover || value;
   return (
     <div className="flex gap-1.5" role="radiogroup" aria-label="Star rating">
@@ -144,16 +156,10 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
                 >
                   {ratable.map((a) => (
                     <option key={a.appointment_id} value={a.appointment_id}>
-                      #{a.appointment_id} — {a.service_names} ({a.appointment_date}, {a.appointment_time})
+                      {a.service_names} · {a.appointment_date}, {a.appointment_time}
                     </option>
                   ))}
                 </Select>
-
-                {selected && (
-                  <p className="-mt-1 text-xs font-semibold text-brand-800">
-                    {formatPeso(selected.total_price)} · {selected.service_names}
-                  </p>
-                )}
 
                 <div className="flex flex-col items-center gap-2">
                   <span className="text-sm font-semibold text-ink-900">Your rating</span>

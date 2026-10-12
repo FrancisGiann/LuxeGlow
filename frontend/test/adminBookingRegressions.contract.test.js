@@ -46,5 +46,5 @@ test('No preference uses the nullable RPC contract and always reloads aggregate 
   assert.match(endpoints, /staff_id: row\.assigned_staff_id \|\| row\.staff_id \|\| normalizedStaffId/);
   assert.match(bookingPage, /const \[availabilityReloadKey, setAvailabilityReloadKey\] = useState\(0\);/);
   assert.match(bookingPage, /setAvailabilityReloadKey\(\(current\) => current \+ 1\)/);
-  assert.match(bookingPage, /\[date, totalMinutes, selectedStaffId, selectedIds, availabilityReloadKey\]/);
+  assert.match(bookingPage, /\[date, dateStatus\?\.date, dateStatus\?\.isClosed, dateStatusError, hasDateStatus, selectedDateClosed, totalMinutes, selectedStaffId, selectedIdsForServices, availabilityReloadKey\]/);
 });
