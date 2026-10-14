@@ -16,6 +16,7 @@ import { IconCalendar, IconGrid, IconPrinter, IconSparkle, IconStar } from '../.
 
 const TABS = [['upcoming', 'Upcoming'], ['history', 'History']];
 const CANCELLATION_REASONS = ['Schedule conflict', 'Change of plans', 'Booked by mistake', 'Feeling unwell', 'Other'];
+const RESCHEDULE_REASONS = ['Schedule conflict', 'Change of plans', 'Feeling unwell', 'Others'];
 const manilaDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const maxBookingDate = () => { const [year, month, day] = manilaDate().split('-').map(Number); const date = new Date(Date.UTC(year, month - 1, day + 60)); return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`; };
 function canCustomerManage(appointment) {
@@ -88,7 +89,8 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
 function RescheduleDialog({ appointment, onClose, onSave }) {
   const [date, setDate] = useState(appointment.raw_date);
   const [time, setTime] = useState('');
-  const [reason, setReason] = useState('');
+  const [reasonChoice, setReasonChoice] = useState('');
+  const [otherReason, setOtherReason] = useState('');
   const [slots, setSlots] = useState([]);
   const [loadedDate, setLoadedDate] = useState('');
   const [busy, setBusy] = useState(false);
@@ -104,12 +106,16 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
   }, [appointment.staff_id, appointment.total_duration_minutes, date]);
   const save = async (event) => {
     event.preventDefault();
-    const cleanReason = reason.trim();
-    if (!cleanReason || cleanReason.length > 500) {
+    if (!time || busy) return;
+    if (!RESCHEDULE_REASONS.includes(reasonChoice)) {
+      setReasonError('Choose a reason for rescheduling.');
+      return;
+    }
+    const cleanReason = reasonChoice === 'Others' ? otherReason.trim() : reasonChoice;
+    if (reasonChoice === 'Others' && (!cleanReason || cleanReason.length > 500)) {
       setReasonError('Enter a reason between 1 and 500 characters.');
       return;
     }
-    if (!time || busy) return;
     setBusy(true);
     setError('');
     setReasonError('');
@@ -117,14 +123,24 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
     catch (failure) { setError(failure.message || 'Could not reschedule this appointment.'); }
     finally { setBusy(false); }
   };
+  const invalidChoice = Boolean(reasonError) && !RESCHEDULE_REASONS.includes(reasonChoice);
+  const invalidOtherReason = Boolean(reasonError) && reasonChoice === 'Others';
+  const reasonErrorDescription = reasonError ? ' reschedule-reason-error' : '';
   return <AdminDialog open title="Change appointment time" description="Choose a new date and an available start time. Your request will return to Pending for salon confirmation." onClose={onClose} closeDisabled={busy} size="wide">
     <form onSubmit={save} className="space-y-4">
       <label className="block text-sm font-semibold text-ink-900">New date<input type="date" required min={manilaDate()} max={maxBookingDate()} value={date} onChange={(event) => { setDate(event.target.value); setTime(''); }} className="mt-1 block min-h-11 w-full rounded-xl border border-line bg-surface px-4 text-sm" /></label>
       <div>
         <label htmlFor="reschedule-reason" className="block text-sm font-semibold text-ink-900">Reason for rescheduling</label>
-        <textarea id="reschedule-reason" required maxLength={500} rows={3} value={reason} aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? 'reschedule-reason-error reschedule-reason-count' : 'reschedule-reason-hint reschedule-reason-count'} onChange={(event) => { setReason(event.target.value); if (reasonError && event.target.value.trim()) setReasonError(''); }} className="mt-1 block w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm" />
+        <select id="reschedule-reason" required value={reasonChoice} aria-invalid={invalidChoice} aria-describedby={`reschedule-reason-hint${invalidChoice ? reasonErrorDescription : ''}`} onChange={(event) => { setReasonChoice(event.target.value); setReasonError(''); }} className="mt-1 block min-h-11 w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+          <option value="" disabled>Select a reason</option>
+          {RESCHEDULE_REASONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
         <p id="reschedule-reason-hint" className="mt-1 text-xs text-ink-500">The salon can see this reason with the appointment details.</p>
-        <p id="reschedule-reason-count" className="text-right text-xs text-ink-500" aria-live="polite" aria-atomic="true">{reason.trim().length}/500</p>
+        {reasonChoice === 'Others' && <div className="mt-3">
+          <label htmlFor="reschedule-other-reason" className="block text-sm font-semibold text-ink-900">Please specify</label>
+          <textarea id="reschedule-other-reason" required maxLength={500} rows={3} value={otherReason} aria-invalid={invalidOtherReason} aria-describedby={`reschedule-reason-hint reschedule-reason-count${invalidOtherReason ? reasonErrorDescription : ''}`} onChange={(event) => { const nextReason = event.target.value; setOtherReason(nextReason); if (reasonError && nextReason.trim() && nextReason.trim().length <= 500) setReasonError(''); }} className="mt-1 block w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm" />
+          <p id="reschedule-reason-count" className="text-right text-xs text-ink-500" aria-live="polite" aria-atomic="true">{otherReason.trim().length}/500</p>
+        </div>}
         {reasonError && <p id="reschedule-reason-error" className="mt-1 text-sm font-semibold text-danger" role="alert">{reasonError}</p>}
       </div>
       <div>
@@ -132,7 +148,7 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
         {loading ? <p className="py-5 text-sm text-ink-500" role="status">Checking availability…</p> : error && !slots.length ? <p className="text-sm text-danger" role="alert">{error}</p> : slots.filter((slot) => slot.available).length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.filter((slot) => slot.available).map((slot) => <button key={slot.time} type="button" aria-pressed={time === slot.time} onClick={() => setTime(slot.time)} className={`min-h-11 rounded-lg border px-2 text-sm font-bold ${time === slot.time ? 'border-brand-800 bg-brand-800 text-white' : 'border-line bg-surface text-ink-700 hover:border-brand-400'}`}>{slot.time}</button>)}</div> : <p className="text-sm text-ink-500">No times are available for this date.</p>}
       </div>
       {error && slots.length > 0 && <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Back</Button><Button type="submit" loading={busy} disabled={!time || loading}>{busy ? 'Saving…' : 'Save new time'}</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Back</Button><Button type="submit" loading={busy} disabled={!time || loading || !reasonChoice || (reasonChoice === 'Others' && !otherReason.trim())}>{busy ? 'Saving…' : 'Save new time'}</Button></div>
     </form>
   </AdminDialog>;
 }
