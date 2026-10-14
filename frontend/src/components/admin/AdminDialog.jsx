@@ -56,14 +56,14 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
         document.body.contains(element);
       if (returnFocusRef) {
         if (isAvailableFocusTarget(returnFocusTarget)) {
-          returnFocusTarget.focus();
+          returnFocusTarget.focus({ preventScroll: true });
         } else if (isAvailableFocusTarget(fallbackFocusTarget)) {
-          fallbackFocusTarget.focus();
+          fallbackFocusTarget.focus({ preventScroll: true });
         }
       } else if (isAvailableFocusTarget(previouslyFocused)) {
-        previouslyFocused.focus();
+        previouslyFocused.focus({ preventScroll: true });
       } else if (isAvailableFocusTarget(fallbackFocusTarget)) {
-        fallbackFocusTarget.focus();
+        fallbackFocusTarget.focus({ preventScroll: true });
       }
     };
   }, [open, fallbackFocusRef, returnFocusRef]);

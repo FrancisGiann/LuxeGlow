@@ -51,10 +51,6 @@ function localTimeSeconds(value) {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-export function initialAdminTab(role) {
-  return role === 'head' || role === 'admin' ? 'appointments' : 'overview';
-}
-
 export function appointmentFilterPreset(kind, today = manilaDateKey()) {
   if (kind === 'active') return createInitialAppointmentFilters();
   if (kind === 'today') return { date: isValidLocalDate(today) ? today : manilaDateKey(), status: 'active', search: '' };
@@ -110,7 +106,7 @@ export function appointmentQueueEmptyMessage(totalAppointments, filters = {}) {
 }
 
 export function adminNavGroupForTab(tab) {
-  if (['overview', 'appointments', 'history', 'customers'].includes(tab)) return 'daily-work';
+  if (['appointments', 'history', 'customers'].includes(tab)) return 'daily-work';
   if (['catalog', 'schedule'].includes(tab)) return 'salon-setup';
   if (['faqs', 'about'].includes(tab)) return 'website-content';
   return tab === 'staff' ? 'people-access' : null;

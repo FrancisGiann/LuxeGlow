@@ -12,10 +12,10 @@ const adminUtilities = read('frontend/src/utils/adminAppointments.js');
 const publicLayout = read('frontend/src/components/layout/PublicLayout.jsx');
 const scheduleSettings = read('frontend/src/components/admin/ScheduleSettings.jsx');
 
-test('staff and administrators land in their role-appropriate dashboard section', () => {
-  assert.match(adminUtilities, /export function initialAdminTab\(role\)/);
-  assert.match(adminUtilities, /return role === 'head' \|\| role === 'admin' \? 'appointments' : 'overview';/);
-  assert.match(adminPage, /useState\(\(\) => initialAdminTab\(customer\?\.role\)\)/);
+test('the shared staff workspace starts directly in Appointments', () => {
+  assert.match(adminPage, /const \[tab, setTabState\] = useState\("appointments"\)/);
+  assert.doesNotMatch(adminPage, /initialAdminTab|function AdminOverview|tab === "overview"/);
+  assert.doesNotMatch(adminUtilities, /initialAdminTab|overview/);
 });
 
 test('staff navigation is a collapsible single-open grouped accordion with an admin-only access group', () => {
@@ -45,12 +45,12 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
   assert.match(adminPage, /Activation controls sign-in; “Accepts appointments”\s+separately controls eligibility for new customer bookings/);
 });
 
-test('overview stays optional and history has a dedicated navigation filter', () => {
-  const overview = adminPage.slice(adminPage.indexOf('function AdminOverview'), adminPage.indexOf('export function AdminPage'));
-  assert.match(overview, /title="Upcoming booking queue"/);
-  assert.match(overview, /\["Pending", "Confirmed"\]\.includes\(appointment\.status\)/);
-  assert.match(overview, /onOpenAppointment\(appointment\)/);
-  assert.match(overview, /onOpenAppointments\("history"\)/);
+test('Appointments is the unknown-tab fallback and queue props have one implementation', () => {
+  assert.match(adminPage, /NAV_ITEMS\.find\(\(\[key\]\) => key === tab\)\?\.\[1\][\s\S]*?"Appointments"/);
+  assert.match(adminPage, /const appointmentQueue = \(\s*<AppointmentQueue/);
+  assert.match(adminPage, /tab === "appointments" \|\| tab === "history" \|\| !NAV_ITEMS\.some\(\(\[key\]\) => key === tab\) \? \(\s*appointmentQueue/);
+  assert.match(adminPage, /\) : appointmentQueue\}/);
+  assert.equal((adminPage.match(/<AppointmentQueue\b/g) || []).length, 1);
   assert.match(adminPage, /\["history", "History", IconGrid\]/);
   assert.match(adminPage, /appointmentFilterPreset\("history"\)/);
   assert.match(adminPage, /tab === "appointments" \|\| tab === "history"/);
@@ -60,6 +60,26 @@ test('overview stays optional and history has a dedicated navigation filter', ()
   assert.match(adminPage, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/.test\(nextDate\)/);
   assert.match(adminPage, /<StaffNotificationBell[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
   assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
+});
+
+test('status confirmation returns to details and no-show Keep records its separate action', () => {
+  const statusDialog = adminPage.slice(
+    adminPage.indexOf('open={!!statusConfirm}'),
+    adminPage.indexOf('open={!!rescheduleTarget'),
+  );
+  const noShowDialog = adminPage.slice(
+    adminPage.indexOf('open={!!noShowConfirm}'),
+    adminPage.indexOf('open={!!statusConfirm}'),
+  );
+  assert.match(statusDialog, /Back to details/);
+  assert.doesNotMatch(statusDialog, /updateAppointmentStatus/);
+  assert.match(statusDialog, /onClick=\{closeStatusDialog\}[\s\S]*?Back to details/);
+  assert.match(statusDialog, /statusDialogError[\s\S]*?role="alert"/);
+  assert.match(noShowDialog, /onClick=\{\(\) => respondToNoShowPrompt\(false\)\}[\s\S]*?Keep appointment/);
+  assert.match(adminPage, /const closeStatusDialog = \(\) => \{\s*closeAdminStatusConfirmation\(\{[\s\S]*?setPendingStatus: setStatusConfirm,[\s\S]*?setDialogError: setStatusDialogError/);
+  assert.doesNotMatch(adminPage.slice(adminPage.indexOf('const closeStatusDialog'), adminPage.indexOf('const confirmStatus')), /setSelectedAppointment|updateAppointmentStatus/);
+  assert.match(adminPage, /const confirmStatus = \(\) => \{\s*void runAdminStatusConfirmation\(\{/);
+  assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(true\);\s*requestStatus\(appointment, nextStatus\);/);
 });
 
 test('appointment queue keeps its search and summary visible while secondary filters collapse', () => {
@@ -75,7 +95,8 @@ test('appointment queue keeps its search and summary visible while secondary fil
   assert.doesNotMatch(row, /customer\.email|appointmentStaffName\(appointment\)|reference_no/);
   assert.doesNotMatch(adminPage, /AppointmentInspector/);
   const appointmentWorkspace = adminPage.slice(adminPage.indexOf(': tab === "appointments"'), adminPage.indexOf(': tab === "catalog"'));
-  assert.match(appointmentWorkspace, /<AppointmentQueue[\s\S]*?onSelectAppointment=/);
+  assert.match(adminPage, /const appointmentQueue = \([\s\S]*?<AppointmentQueue[\s\S]*?onSelectAppointment=/);
+  assert.match(appointmentWorkspace, /appointmentQueue/);
   assert.doesNotMatch(appointmentWorkspace, /grid-cols-\[minmax\(0,1\.45fr\)|Inspector/);
   assert.match(adminPage, /else if \(nextTab === "appointments"\)\s*\{\s*setAppointmentFilters\(appointmentFilterPreset\("active"\)\)/);
   assert.match(adminUtilities, /if \(kind === 'today'\) return \{ date: isValidLocalDate\(today\) \? today : manilaDateKey\(\), status: 'active', search: '' \}/);
@@ -94,7 +115,8 @@ test('appointment dialogs coordinate focus, confirmation, notification close, an
   assert.match(dialog, /document\.addEventListener\('keydown', handleKeyDown\)/);
   assert.match(dialog, /event\.key === 'Escape'/);
   assert.match(dialog, /event\.key !== 'Tab'/);
-  assert.match(dialog, /fallbackFocusTarget\.focus\(\)/);
+  assert.match(dialog, /returnFocusTarget\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(dialog, /fallbackFocusTarget\.focus\(\{ preventScroll: true \}\)/);
 });
 
 test('schedule guidance remains visible while loading and preserves conflict follow-up', () => {

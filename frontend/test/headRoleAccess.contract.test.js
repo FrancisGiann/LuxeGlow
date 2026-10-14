@@ -3,7 +3,6 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialAdminTab } from '../src/utils/adminAppointments.js';
 import { isStaffRole, isSupportedProfileRole } from '../src/utils/roles.js';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -31,10 +30,9 @@ test('simplified roles preserve customers and accept head/admin while retiring l
   assert.equal(isStaffRole('staff'), false);
 });
 
-test('head and administrator start in appointments while customers retain the overview fallback', () => {
-  assert.equal(initialAdminTab('head'), 'appointments');
-  assert.equal(initialAdminTab('admin'), 'appointments');
-  assert.equal(initialAdminTab('customer'), 'overview');
+test('the shared head and administrator workspace initializes to Appointments', () => {
+  assert.match(adminPage, /const \[tab, setTabState\] = useState\("appointments"\)/);
+  assert.doesNotMatch(adminPage, /initialAdminTab|function AdminOverview/);
 });
 
 test('login, restored sessions, and route redirects recognize active head profiles', () => {

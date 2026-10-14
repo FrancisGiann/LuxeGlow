@@ -5,7 +5,6 @@ import {
   appointmentQueueEmptyMessage,
   createInitialAppointmentFilters,
   getAdminAppointmentQueue,
-  initialAdminTab,
   manilaDateKey,
 } from '../src/utils/adminAppointments.js';
 
@@ -27,9 +26,6 @@ test('appointment defaults show active appointments across every date', () => {
     status: 'active',
     search: '',
   });
-  assert.equal(initialAdminTab('head'), 'appointments');
-  assert.equal(initialAdminTab('admin'), 'appointments');
-  assert.equal(initialAdminTab('customer'), 'overview');
 });
 
 test('appointment search is case-insensitive across reference, customer, service, and assigned staff fields', () => {

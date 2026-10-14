@@ -123,7 +123,7 @@ test('single-package migration preserves the canonical booking RPC except for ro
 
 test('Accounts daily availability slots are removed while assigned appointment dates and times remain', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
-  const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('function AdminOverview'));
+  const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('export function AdminPage'));
   assert.doesNotMatch(adminPage, /getAvailableSlots|Daily availability|30-minute availability/);
   assert.match(accountPanel, /Appointments date/);
   assert.match(accountPanel, /Assigned appointments/);

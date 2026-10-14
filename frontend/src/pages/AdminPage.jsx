@@ -63,13 +63,16 @@ import {
   appointmentQueueEmptyMessage,
   createInitialAppointmentFilters,
   getAdminAppointmentQueue,
-  initialAdminTab,
   manilaDateKey,
 } from "../utils/adminAppointments";
 import {
   canRecordAppointmentArrival,
   findDueNoShowAppointment,
 } from "../utils/noShowAppointments";
+import {
+  closeAdminStatusConfirmation,
+  runAdminStatusConfirmation,
+} from "../utils/adminStatusConfirmation";
 
 const createServiceDraft = () => ({
   id: globalThis.crypto.randomUUID(),
@@ -111,7 +114,6 @@ const NAV_GROUPS = [
     id: "daily-work",
     label: "Daily work",
     items: [
-      ["overview", "Overview", IconGrid],
       ["appointments", "Appointments", IconCalendar],
       ["history", "History", IconGrid],
       ["customers", "Customers", IconUser],
@@ -1945,73 +1947,6 @@ function StaffAccountPanel({
   );
 }
 
-function AdminOverview({
-  appointments,
-  onOpenAppointments,
-  onOpenAppointment,
-}) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const upcoming = appointments
-    .filter((appointment) =>
-      ["Pending", "Confirmed"].includes(appointment.status) &&
-      Number.isFinite(Date.parse(appointment.start_at)) &&
-      Date.parse(appointment.start_at) > now,
-    )
-    .sort((left, right) =>
-      Date.parse(left.start_at) - Date.parse(right.start_at),
-    );
-  const pendingCount = upcoming.filter((appointment) => appointment.status === "Pending").length;
-  return (
-    <div className="space-y-6">
-      <Card className="p-5 sm:p-7">
-        <CardHeader
-          title="Upcoming booking queue"
-          subtitle={`${upcoming.length} upcoming pending or confirmed appointment${upcoming.length === 1 ? "" : "s"} · ${pendingCount} awaiting confirmation`}
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="soft" onClick={() => onOpenAppointments("all")}>All appointments</Button>
-              <Button type="button" size="sm" variant="soft" onClick={() => onOpenAppointments("history")}>History</Button>
-            </div>
-          }
-        />
-        {upcoming.length ? (
-          <ul className="mt-3 divide-y divide-line">
-            {upcoming.slice(0, 20).map((appointment) => (
-              <li key={appointment.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenAppointment(appointment)}
-                  className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-sm font-bold text-ink-900">
-                      {customerDisplayName(appointment.customer)}
-                      <span className="ml-2 break-all font-medium text-ink-500">{appointment.reference_no || "Reference unavailable"}</span>
-                    </span>
-                    <span className="mt-1 block text-xs leading-relaxed text-ink-500">
-                      {localDateLabel(appointment.local_date)} · {appointment.local_time?.slice(0, 5) || "Time unavailable"} · {appointmentStaffName(appointment)} · {serviceNames(appointment).join(", ") || "No services"}
-                    </span>
-                  </span>
-                  <StatusPill status={appointment.status} size="sm" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="py-10 text-center text-sm text-ink-500">No upcoming pending or confirmed appointments.</p>
-        )}
-        {upcoming.length > 20 && (
-          <p className="mt-3 border-t border-line pt-4 text-sm text-ink-500">Showing the next 20 appointments.</p>
-        )}
-      </Card>
-    </div>
-  );
-}
-
 export function AdminPage() {
   const { customer, logout } = useAuth();
   const navigate = useNavigate();
@@ -2067,6 +2002,7 @@ export function AdminPage() {
   const [rescheduleDialogError, setRescheduleDialogError] = useState("");
   const [statusConfirm, setStatusConfirm] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const statusBusyRef = useRef(false);
   const [statusDialogError, setStatusDialogError] = useState("");
   const [arrivalBusyId, setArrivalBusyId] = useState(null);
   const [arrivalError, setArrivalError] = useState(null);
@@ -2074,7 +2010,7 @@ export function AdminPage() {
   const [noShowBusy, setNoShowBusy] = useState(false);
   const [noShowDialogError, setNoShowDialogError] = useState("");
   const [customerDialogError, setCustomerDialogError] = useState("");
-  const [tab, setTabState] = useState(() => initialAdminTab(customer?.role));
+  const [tab, setTabState] = useState("appointments");
   const tabRef = useRef(tab);
   const noticeGeneration = tabGenerationRef.current;
   const setTab = useCallback((nextTab) => {
@@ -2499,49 +2435,33 @@ export function AdminPage() {
   };
 
   const closeStatusDialog = () => {
-    if (statusBusy) return;
-    setStatusConfirm(null);
-    setStatusDialogError("");
+    closeAdminStatusConfirmation({
+      isBusy: statusBusy,
+      busyRef: statusBusyRef,
+      setPendingStatus: setStatusConfirm,
+      setDialogError: setStatusDialogError,
+    });
   };
 
-  const confirmStatus = async () => {
-    if (!statusConfirm || statusBusy) return;
-    const current = appointments.find((item) => item.id === statusConfirm.id);
-    if (
-      !current ||
-      isTerminalAppointment(current) ||
-      !appointmentActions(current.status).some(
-        (action) => action.status === statusConfirm.to,
-      )
-    ) {
-      setStatusConfirm(null);
-      setStatusDialogError("");
-      return;
-    }
-    setStatusBusy(true);
-    setError("");
-    setStatusDialogError("");
-    try {
-      await updateAppointmentStatus(current.id, statusConfirm.to);
-      const refreshed = await load();
-      setSelectedAppointment((selected) =>
-        selected?.id === current.id
-          ? refreshed.find((item) => item.id === current.id) || null
-          : selected,
-      );
-      setNotice(
-        `Appointment ${current.reference_no} marked ${statusConfirm.to.toLowerCase()}.`,
-      );
-      setStatusDialogError("");
-      setStatusConfirm(null);
-    } catch (statusError) {
-      const message =
-        statusError?.message || "Could not update appointment status.";
-      setError(message);
-      setStatusDialogError(message);
-    } finally {
-      setStatusBusy(false);
-    }
+  const confirmStatus = () => {
+    void runAdminStatusConfirmation({
+      pendingStatus: statusConfirm,
+      appointments,
+      busyRef: statusBusyRef,
+      isTransitionAllowed: (current, nextStatus) =>
+        !isTerminalAppointment(current) &&
+        appointmentActions(current.status).some(
+          (action) => action.status === nextStatus,
+        ),
+      updateStatus: updateAppointmentStatus,
+      loadAppointments: load,
+      setBusy: setStatusBusy,
+      setPageError: setError,
+      setDialogError: setStatusDialogError,
+      setSelectedAppointment,
+      setPendingStatus: setStatusConfirm,
+      setNotice,
+    });
   };
 
   const resetServiceForm = () => {
@@ -2986,8 +2906,42 @@ export function AdminPage() {
   };
   const pageTitle =
     NAV_ITEMS.find(([key]) => key === tab)?.[1] ||
-    (tab === "staff" ? "Accounts" : "Overview");
+    (tab === "staff" ? "Accounts" : "Appointments");
   const statusCopy = statusConfirmationCopy(statusConfirm?.to);
+  const appointmentQueue = (
+    <AppointmentQueue
+      appointments={visibleAppointments}
+      filters={appointmentFilters}
+      totalAppointments={appointments.length}
+      totalCompletedAppointments={appointments.filter((appointment) => appointment.status === "Completed").length}
+      selectedAppointment={selectedVisibleAppointment}
+      filtersExpanded={appointmentFiltersExpanded}
+      headingRef={appointmentQueueHeadingRef}
+      onToggleFilters={() => setAppointmentFiltersExpanded((open) => !open)}
+      onFilterChange={(key, value) =>
+        setAppointmentFilters((current) => ({
+          ...current,
+          [key]: value,
+        }))
+      }
+      onAllDates={() =>
+        setAppointmentFilters((current) => ({
+          ...current,
+          date: "",
+        }))
+      }
+      onToday={() =>
+        setAppointmentFilters(appointmentFilterPreset("today", manilaDateKey()))
+      }
+      onReset={() =>
+        setAppointmentFilters(createInitialAppointmentFilters())
+      }
+      onSelectAppointment={(appointment, trigger) => {
+        appointmentReturnFocusRef.current = trigger;
+        setSelectedAppointment(appointment);
+      }}
+    />
+  );
 
   return (
     <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[210px_1fr]">
@@ -3081,47 +3035,8 @@ export function AdminPage() {
                 Loading workspace…
               </div>
             </Card>
-          ) : tab === "overview" ? (
-            <AdminOverview
-              appointments={appointments}
-              onOpenAppointments={openAppointments}
-              onOpenAppointment={(appointment) =>
-                openAppointments("appointment", appointment)
-              }
-            />
-          ) : tab === "appointments" || tab === "history" ? (
-            <AppointmentQueue
-              appointments={visibleAppointments}
-              filters={appointmentFilters}
-              totalAppointments={appointments.length}
-              totalCompletedAppointments={appointments.filter((appointment) => appointment.status === "Completed").length}
-              selectedAppointment={selectedVisibleAppointment}
-              filtersExpanded={appointmentFiltersExpanded}
-              headingRef={appointmentQueueHeadingRef}
-              onToggleFilters={() => setAppointmentFiltersExpanded((open) => !open)}
-              onFilterChange={(key, value) =>
-                setAppointmentFilters((current) => ({
-                  ...current,
-                  [key]: value,
-                }))
-              }
-              onAllDates={() =>
-                setAppointmentFilters((current) => ({
-                  ...current,
-                  date: "",
-                }))
-              }
-              onToday={() =>
-                setAppointmentFilters(appointmentFilterPreset("today", manilaDateKey()))
-              }
-              onReset={() =>
-                setAppointmentFilters(createInitialAppointmentFilters())
-              }
-              onSelectAppointment={(appointment, trigger) => {
-                appointmentReturnFocusRef.current = trigger;
-                setSelectedAppointment(appointment);
-              }}
-            />
+          ) : tab === "appointments" || tab === "history" || !NAV_ITEMS.some(([key]) => key === tab) ? (
+            appointmentQueue
           ) : tab === "catalog" ? (
             <Card className="p-5 sm:p-7">
               <CardHeader
@@ -3504,15 +3419,7 @@ export function AdminPage() {
                 />
               </div>
             </div>
-          ) : (
-            <AdminOverview
-              appointments={appointments}
-              onOpenAppointments={openAppointments}
-              onOpenAppointment={(appointment) =>
-                openAppointments("appointment", appointment)
-              }
-            />
-          )}
+          ) : appointmentQueue}
         </div>
       </main>
       <NotificationAppointmentDialog
@@ -3643,7 +3550,7 @@ export function AdminPage() {
             disabled={statusBusy}
             onClick={closeStatusDialog}
           >
-            Keep appointment
+            Back to details
           </Button>
           <Button
             type="button"

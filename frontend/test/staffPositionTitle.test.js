@@ -86,7 +86,7 @@ test('admin exposes an accessible free-text editor and booking picker omits an u
 test('staff rows prioritize position titles, keep ratings in the inspector, and use one concise status', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
   const rowMatch = adminPage.match(/function ProfileRow\(\{ profile, selected, onSelect \}\) \{[\s\S]*?\n\}\n\nfunction StaffPositionTitleEditor/);
-  const panelMatch = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\nfunction AdminOverview/);
+  const panelMatch = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\nexport function AdminPage/);
   assert.ok(rowMatch, 'staff row component should be present');
   assert.ok(panelMatch, 'selected staff inspector should be present');
 
