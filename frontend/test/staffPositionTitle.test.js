@@ -100,5 +100,6 @@ test('staff rows prioritize position titles, keep ratings in the inspector, and 
   assert.doesNotMatch(row, /Accepts appointments/);
   assert.match(row, /<span className="min-w-0">[\s\S]*?\{profile\.email\}\s*<\/span>\s*<\/span>\s*<span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">/);
   assert.match(panelMatch[0], /staffMember\.rating_count[\s\S]*?staffMember\.average_rating[\s\S]*?published rating/);
-  assert.match(panelMatch[0], /Appointments date[\s\S]*?Assigned appointments[\s\S]*?appointment\.local_time/);
+  assert.match(panelMatch[0], /Assigned appointments[\s\S]*?localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time/);
+  assert.doesNotMatch(panelMatch[0], /Appointments date|type="date"|Previous day|Next day/);
 });

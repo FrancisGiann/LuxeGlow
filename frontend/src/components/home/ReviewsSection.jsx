@@ -19,9 +19,9 @@ export function ReviewsSection() {
           <div>
             <SectionHeading align="left" title="Notes from completed visits." subtitle="Published feedback from customers who have shared their experience after an appointment." />
             <div className="mt-9 flex items-center gap-6 border-t border-line pt-6">
-              <div><p className="font-display text-4xl font-semibold text-brand-800">{stats ? Number(stats.average_rating).toFixed(1) : '—'}</p><Stars rating={Math.round(stats?.average_rating || 0)} /></div>
+              <div>{stats?.total_reviews > 0 ? <><p className="font-display text-4xl font-semibold text-brand-800">{Number(stats.average_rating).toFixed(1)}</p><Stars rating={Math.round(stats.average_rating)} /><p className="mt-1 text-xs text-ink-500">Average visit rating</p></> : <p className="text-sm text-ink-500">{stats ? 'No ratings yet' : '—'}</p>}</div>
               <div className="h-11 w-px bg-line" />
-              <p className="max-w-[16ch] text-sm leading-relaxed text-ink-500">{stats?.total_reviews ?? '—'} published review{stats?.total_reviews === 1 ? '' : 's'}</p>
+              <p className="max-w-[16ch] text-sm leading-relaxed text-ink-500">{stats ? `${stats.total_reviews} published review${stats.total_reviews === 1 ? '' : 's'}` : '—'}</p>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">

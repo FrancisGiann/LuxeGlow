@@ -7,7 +7,15 @@ import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
-import { verificationCooldownSeconds, verificationRequestFeedback } from '../../utils/verificationFeedback';
+import { verificationCooldownSeconds } from '../../utils/verificationFeedback';
+import {
+  changeLoginFailureEmail,
+  emptyLoginFailureState,
+  isCurrentLoginFailure,
+  normalizeLoginEmail,
+  recordLoginFailure,
+  shouldSuggestPasswordReset,
+} from '../../utils/loginRecoveryHint';
 
 const VIEWS = {
   login: 'Log in',
@@ -50,30 +58,48 @@ export function AuthModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
-  const [verificationMessage, setVerificationMessage] = useState('');
+  const [loginFailureState, setLoginFailureState] = useState(emptyLoginFailureState);
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
   const [resendForEmail, setResendForEmail] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
   const resendLockRef = useRef(false);
-  const resendRequestRef = useRef(0);
-  const loginEmailRef = useRef('');
-  const modalViewRef = useRef(modalView);
+  const loginLockRef = useRef(false);
+  const loginEmailIdentityRef = useRef('');
+  const loginIdentityGenerationRef = useRef(0);
+  const currentModalViewRef = useRef(modalView);
+  const previousModalViewRef = useRef(modalView);
+
+  const updateLoginEmail = (email) => {
+    const normalizedEmail = normalizeLoginEmail(email);
+    if (loginEmailIdentityRef.current !== normalizedEmail) {
+      loginEmailIdentityRef.current = normalizedEmail;
+      loginIdentityGenerationRef.current += 1;
+    }
+    setLoginEmail(email);
+    setLoginFailureState((current) => changeLoginFailureEmail(current, email));
+  };
 
   useLayoutEffect(() => {
-    modalViewRef.current = modalView;
-    resendRequestRef.current += 1;
+    if (currentModalViewRef.current !== modalView) {
+      currentModalViewRef.current = modalView;
+      loginIdentityGenerationRef.current += 1;
+    }
   }, [modalView]);
 
   useEffect(() => {
     setError(passwordSetup?.error || '');
-    setVerificationMessage('');
     setResetCode('');
+    if (!modalView || (modalView === 'login' && previousModalViewRef.current !== 'login')) {
+      setLoginFailureState(emptyLoginFailureState());
+    }
+    previousModalViewRef.current = modalView;
     if (!modalView) {
       setResetEmail('');
       setLoginEmail('');
-      loginEmailRef.current = '';
+      loginEmailIdentityRef.current = '';
+      loginIdentityGenerationRef.current += 1;
     }
   }, [modalView, passwordSetup?.error, passwordSetup?.type, passwordSetup?.userId]);
 
@@ -98,8 +124,13 @@ export function AuthModal() {
 
   const resendKey = String(verifyEmail || '').trim().toLowerCase();
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
-  const loginResendKey = String(loginEmail || '').trim().toLowerCase();
-  const loginResendRemaining = resendForEmail === loginResendKey ? resendIn : 0;
+  const passwordResetSuggested = shouldSuggestPasswordReset(loginFailureState, loginEmail);
+
+  const openPasswordReset = (email = loginEmail) => {
+    setError('');
+    setResetEmail(String(email || '').trim());
+    openAuth('forgot-request');
+  };
 
   const finishAndGoDashboard = () => {
     let returnPath = '';
@@ -114,65 +145,52 @@ export function AuthModal() {
   };
 
   const handleVerificationSignIn = () => {
-    setLoginEmail(verifyEmail);
-    loginEmailRef.current = verifyEmail;
+    updateLoginEmail(verifyEmail);
     openAuth('login');
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loginLockRef.current) return;
+    loginLockRef.current = true;
     setError('');
-    setVerificationMessage('');
     setBusy(true);
     const f = new FormData(e.currentTarget);
+    const submittedEmail = String(f.get('email') || '');
+    const submittedIdentityGeneration = loginIdentityGenerationRef.current;
+    const isCurrentAttempt = () => isCurrentLoginFailure(
+      { email: submittedEmail, generation: submittedIdentityGeneration },
+      { email: loginEmailIdentityRef.current, generation: loginIdentityGenerationRef.current },
+    );
     try {
-      const res = await login(f.get('email'), f.get('password'));
+      const res = await login(submittedEmail, f.get('password'));
       if (res.ok) {
+        if (isCurrentAttempt()) {
+          setLoginFailureState(emptyLoginFailureState());
+        }
         if (isStaffRole(res.role)) {
           toast('Signed in successfully.', 'success');
           navigate('/admin', { replace: true });
         } else {
           finishAndGoDashboard();
         }
-      } else if (!res.needsVerification) {
-        setError(res.error);
+      } else if (res.needsVerification) {
+        if (isCurrentAttempt()) {
+          setLoginFailureState(emptyLoginFailureState());
+        }
+      } else {
+        if (isCurrentAttempt()) {
+          setError(res.error);
+          setLoginFailureState((current) => recordLoginFailure(current, submittedEmail, res));
+        }
       }
     } catch {
-      setError('Something went wrong. Please try again.');
+      if (isCurrentAttempt()) {
+        setError('Something went wrong. Please try again.');
+      }
     } finally {
+      loginLockRef.current = false;
       setBusy(false);
-    }
-  };
-
-  const handleLoginResend = async () => {
-    const email = String(loginEmail || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
-      setVerificationMessage('Enter a valid email address first.');
-      return;
-    }
-    if (loginResendRemaining > 0 || resendLockRef.current) return;
-    setError('');
-    setVerificationMessage('');
-    const requestId = ++resendRequestRef.current;
-    const requestEmail = email.toLowerCase();
-    resendLockRef.current = true;
-    setResendBusy(true);
-    try {
-      const result = await resend(email);
-      setResendForEmail(requestEmail);
-      setResendIn(verificationCooldownSeconds(result));
-      if (resendRequestRef.current === requestId && modalViewRef.current === 'login' && loginEmailRef.current.trim().toLowerCase() === requestEmail) {
-        setVerificationMessage(verificationRequestFeedback(result));
-      }
-    } catch {
-      setResendForEmail(requestEmail);
-      setResendIn(60);
-      if (resendRequestRef.current === requestId && modalViewRef.current === 'login' && loginEmailRef.current.trim().toLowerCase() === requestEmail) {
-        setVerificationMessage(verificationRequestFeedback(null));
-      }
-    } finally {
-      resendLockRef.current = false;
-      setResendBusy(false);
     }
   };
 
@@ -316,16 +334,16 @@ export function AuthModal() {
           {/* ── LOGIN ── */}
           {modalView === 'login' && (
             <form onSubmit={handleLogin} className="mt-6 flex flex-col gap-4" noValidate>
-              <Input id="login-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" value={loginEmail} onChange={(event) => { resendRequestRef.current += 1; loginEmailRef.current = event.target.value; setLoginEmail(event.target.value); setVerificationMessage(''); }} required />
+              <Input id="login-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" value={loginEmail} onChange={(event) => updateLoginEmail(event.target.value)} required />
               <Input id="login-password" name="password" type="password" label="Password" placeholder="••••••••" autoComplete="current-password" required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
+              {passwordResetSuggested && <div className="rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center" role="status">
+                <p className="text-sm font-semibold text-brand-900">Having trouble signing in?</p>
+                <button type="button" onClick={() => openPasswordReset(loginEmail)} className="mt-1 text-sm font-bold text-brand-800 underline underline-offset-2 hover:text-brand-900">Reset your password</button>
+              </div>}
               <Button type="submit" block size="lg" loading={busy}>Log in</Button>
               <div className="flex flex-col items-center gap-2 pt-2 text-sm text-ink-500">
-                <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Forgot password?</button>
-                <button type="button" onClick={handleLoginResend} disabled={resendBusy || loginResendRemaining > 0} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
-                  {resendBusy ? 'Sending…' : loginResendRemaining > 0 ? `Resend in ${Math.floor(loginResendRemaining / 60)}:${String(loginResendRemaining % 60).padStart(2, '0')}` : 'Resend verification email'}
-                </button>
-                {verificationMessage && <p className="max-w-[34ch] text-center text-xs leading-relaxed text-ink-500" role="status" aria-live="polite">{verificationMessage}</p>}
+                <button type="button" onClick={() => openPasswordReset(loginEmail)} className="font-semibold text-brand-800 hover:text-brand-900">Forgot password?</button>
                 <span>
                   New here?{' '}
                   <button type="button" onClick={() => openAuth('register')} className="font-semibold text-brand-800 hover:text-brand-900">Create an account</button>
@@ -337,7 +355,7 @@ export function AuthModal() {
           {/* ── PASSWORD RESET REQUEST ── */}
           {modalView === 'forgot-request' && (
             <form onSubmit={handleRequestReset} className="mt-6 flex flex-col gap-4" noValidate>
-              <Input id="reset-request-email" name="email" type="email" label="Registered email address" placeholder="you@example.com" autoComplete="email" required />
+              <Input id="reset-request-email" name="email" type="email" label="Registered email address" placeholder="you@example.com" autoComplete="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy}>Email reset link</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
@@ -383,7 +401,7 @@ export function AuthModal() {
               <Button type="submit" block size="lg" loading={busy} disabled={passwordSetupBlocked}>{passwordSetup?.type === 'invite' ? 'Set password' : 'Reset password'}</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Need another reset email?{' '}
-                <button type="button" onClick={() => openAuth('forgot-request')} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
+                <button type="button" onClick={() => openPasswordReset(resetEmail)} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
                 <span className="mx-1">·</span>
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
               </p>

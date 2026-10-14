@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Select, Textarea } from '../ui/Field';
 import { IconStar, IconX } from '../icons';
 
-export function StarPicker({ value, onChange, size = 28, readOnly = false }) {
+export function StarPicker({ value, onChange, size = 28, readOnly = false, label = 'Star rating' }) {
   const [hover, setHover] = useState(0);
   if (readOnly) {
     const rating = Number(value);
@@ -23,7 +23,7 @@ export function StarPicker({ value, onChange, size = 28, readOnly = false }) {
   }
   const active = hover || value;
   return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label="Star rating">
+    <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
       {[1, 2, 3, 4, 5].map((star) => (
         <button
           key={star}
@@ -62,7 +62,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
         if (!alive) return;
         if (data.success) {
           setRatable(data.appointments);
-          if (!presetAppointmentId && data.appointments.length) {
+          if (data.appointments.length && !data.appointments.some((visit) => String(visit.appointment_id) === String(presetAppointmentId || ''))) {
             setAppointmentId(String(data.appointments[0].appointment_id));
           }
         } else setLoadError(data.error || 'Could not load your visits.');
@@ -90,15 +90,11 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
       setError('Please choose a visit to rate.');
       return;
     }
-    if (selected?.staff_id && !staffRating) {
-      setError('Please rate your team member from 1 to 5 stars.');
-      return;
-    }
     setBusy(true);
     try {
       const res = await createReview(appointmentId, rating, staffRating, text.trim());
       if (res.success) {
-        toast(res.message || 'Thank you for your feedback!');
+        toast('Thank you for your feedback. Your review will appear on the homepage after approval.');
         refresh();
         onClose();
       } else {
@@ -161,16 +157,27 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
                   ))}
                 </Select>
 
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-2 border-t border-line pt-4">
                   <span className="text-sm font-semibold text-ink-900">Your rating</span>
-                  <StarPicker value={rating} onChange={setRating} />
+                  <StarPicker value={rating} onChange={setRating} label="Your visit rating" />
                 </div>
 
-                {selected?.staff_id && <div className="flex flex-col items-center gap-2 border-t border-line pt-4">
-                  <span className="text-sm font-semibold text-ink-900">Team member rating (required)</span>
-                  <p className="text-xs text-ink-500">{selected.staff_name || 'Assigned team member'}</p>
-                  <StarPicker value={staffRating} onChange={setStaffRating} />
-                </div>}
+                {selected?.staff_id && (
+                  <details key={appointmentId} className="rounded-xl border border-line px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
+                      Rate your team member (optional)
+                    </summary>
+                    <div className="mt-4 flex flex-col items-center gap-2">
+                      <p className="text-xs text-ink-500">{selected.staff_name || 'Assigned team member'}</p>
+                      <StarPicker value={staffRating} onChange={setStaffRating} label={`Optional rating for ${selected.staff_name || 'team member'}`} />
+                      {staffRating !== null && (
+                        <button type="button" onClick={() => setStaffRating(null)} className="min-h-11 text-xs font-semibold text-ink-500 underline underline-offset-2 hover:text-ink-900">
+                          Clear staff rating
+                        </button>
+                      )}
+                    </div>
+                  </details>
+                )}
 
                 <Textarea
                   id="rate-text"

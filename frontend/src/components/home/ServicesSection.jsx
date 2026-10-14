@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useFetch } from '../../hooks/useFetch';
 import { Card, SectionHeading } from '../ui/Card';
 import { EmptyState, SkeletonRows } from '../ui/EmptyState';
-import { IconAlertCircle, IconClock, IconSparkle, IconStar } from '../icons';
+import { IconAlertCircle, IconClock, IconSparkle } from '../icons';
 import { curateHomepageServices } from '../../utils/services';
 import { isStaffRole } from '../../utils/roles';
 import { serviceImageUrl } from '../../utils/serviceImages';
@@ -24,12 +24,11 @@ function ServiceCard({ service, isStaff }) {
         <div className="flex flex-col justify-center p-5">
           <div className="flex items-start justify-between gap-3">
             <h3 className="font-display text-xl font-medium leading-tight text-ink-900">{service.name}</h3>
-            {service.rating > 0 && <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-gold-600"><IconStar size={12} filled />{Number(service.rating).toFixed(1)}</span>}
           </div>
           {service.description && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-500">{service.description}</p>}
           <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg font-semibold text-brand-800">₱{Number(service.price).toLocaleString('en-PH')}</span>
-            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>{isStaff ? <Link to="/admin" className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Staff workspace</Link> : <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book {service.name}</Link>}</span>
+            <span className="flex items-center gap-3"><span className="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><IconClock size={14} />{service.duration || '—'}</span>{isStaff ? <Link to="/admin" className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Staff workspace</Link> : <Link to={`/book?service=${encodeURIComponent(service.id)}`} aria-label={`Book ${service.name}`} className="text-xs font-bold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900">Book</Link>}</span>
           </div>
         </div>
       </div>

@@ -40,7 +40,19 @@ export function mergeStaffNotifications(current, incoming) {
     const notification = normalizeStaffNotification(row);
     if (!notification || !Number.isSafeInteger(notification.id) || notification.id < 1) return;
     const existing = byId.get(notification.id);
-    byId.set(notification.id, existing ? { ...existing, ...notification, is_read: existing.is_read || notification.is_read } : notification);
+    if (!existing) {
+      byId.set(notification.id, notification);
+      return;
+    }
+    const incomingTime = notificationSortValue(notification);
+    const existingTime = notificationSortValue(existing);
+    if (incomingTime > existingTime) {
+      byId.set(notification.id, { ...existing, ...notification, is_read: notification.is_read });
+    } else if (incomingTime < existingTime) {
+      byId.set(notification.id, { ...notification, ...existing, is_read: existing.is_read });
+    } else {
+      byId.set(notification.id, { ...notification, ...existing, is_read: existing.is_read || notification.is_read });
+    }
   });
   return [...byId.values()]
     .sort((a, b) => notificationSortValue(b) - notificationSortValue(a) || b.id - a.id)

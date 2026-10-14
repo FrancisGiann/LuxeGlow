@@ -4,8 +4,10 @@ import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
 import { normalizeStaffNotification, STAFF_NOTIFICATION_LIMIT } from '../utils/staffNotifications';
 import { isStaffRole, isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
+import { isValidReviewPublicationUpdate, normalizeReviewModerationRows } from '../utils/reviewModeration';
 
 const STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+const REVIEW_MODERATION_PAGE_SIZE = 25;
 
 function isMissingHomepageCurationError(error) {
   if (!error) return false;
@@ -120,6 +122,45 @@ export async function listAdminServices() {
 export async function listAdminFaqs() {
   const client = await assertStaff();
   return throwIfError(await client.from('faqs').select('*').order('display_order').order('id'), 'Could not load FAQs.') || [];
+}
+
+export async function listAdminReviewModeration({ isPublished = false, page = 1 } = {}) {
+  if (typeof isPublished !== 'boolean' || !Number.isSafeInteger(page) || page < 1) {
+    throw new Error('Choose a valid review status and page.');
+  }
+  const client = await assertAdmin();
+  const from = (page - 1) * REVIEW_MODERATION_PAGE_SIZE;
+  const result = await client.from('reviews').select(
+    'id,rating,staff_rating,review_text,is_published,created_at,profiles!reviews_customer_id_fkey(first_name,last_name),appointments!reviews_appointment_id_fkey(local_date,local_time,staff_id,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name))',
+    { count: 'exact' },
+  )
+    .eq('is_published', isPublished)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, from + REVIEW_MODERATION_PAGE_SIZE - 1);
+  const rows = throwIfError(result, 'Could not load review approvals.') || [];
+  return {
+    reviews: normalizeReviewModerationRows(rows),
+    total: Number.isSafeInteger(result.count) && result.count >= 0 ? result.count : rows.length,
+    pageSize: REVIEW_MODERATION_PAGE_SIZE,
+  };
+}
+
+export async function setAdminReviewPublication(reviewId, isPublished) {
+  if (!isValidReviewPublicationUpdate(reviewId, isPublished)) {
+    return { success: false, error: 'Choose a valid review and publication status.' };
+  }
+  const client = await assertAdmin();
+  const result = await client.from('reviews')
+    .update({ is_published: isPublished })
+    .eq('id', reviewId)
+    .select('id,is_published')
+    .maybeSingle();
+  const saved = throwIfError(result, 'Could not update review publication.');
+  if (!saved || saved.is_published !== isPublished) {
+    return { success: false, error: 'This review is no longer available.' };
+  }
+  return { success: true, is_published: saved.is_published };
 }
 
 export async function saveFaq(fields) {

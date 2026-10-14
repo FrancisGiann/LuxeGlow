@@ -4,6 +4,7 @@ import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import { passwordResetPath } from '../utils/authRedirect';
 import { isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
+import { isRatableVisit, normalizeReviewRating } from '../utils/reviewRatings';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -30,12 +31,23 @@ export const isMissingServiceCatalogMetadataError = (error) => {
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const LOGIN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOGIN_EMAIL_MAX_LENGTH = 320;
+const LOGIN_PASSWORD_MAX_LENGTH = 1024;
 
 function retryAfterFromError(error) {
   const headers = error?.context?.headers;
   const value = typeof headers?.get === 'function' ? headers.get('Retry-After') : headers?.['Retry-After'] || headers?.['retry-after'];
   const seconds = Number(value);
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 0;
+}
+
+async function functionErrorPayload(error) {
+  const response = error?.context;
+  if (typeof response?.clone !== 'function') return null;
+  try {
+    return await response.clone().json();
+  } catch {
+    return null;
+  }
 }
 
 async function loginThroughGateway(mode, email, password) {
@@ -53,7 +65,19 @@ async function loginThroughGateway(mode, email, password) {
     }
     const status = Number(error?.context?.status || error?.status || 0);
     if (status === 429) return { success: false, rate_limited: true, retry_after: retryAfterFromError(error), error: 'Too many sign-in attempts. Please try again later.' };
-    if (status === 401) return { success: false, error: 'Invalid email or password.' };
+    if (status === 401) {
+      const payload = await functionErrorPayload(error);
+      if (payload?.invalid_credentials === true && payload.error === 'Invalid email or password.') {
+        return { success: false, invalid_credentials: true, error: 'Invalid email or password.' };
+      }
+      if (payload?.needs_verification === true && payload.error === 'Verify your email address to continue.') {
+        return { success: false, needs_verification: true, error: payload.error };
+      }
+      if (payload?.error === 'Invalid email or password.') {
+        return { success: false, error: 'Invalid email or password.' };
+      }
+      return { success: false, error: 'Unable to sign in right now. Please try again later.' };
+    }
     return { success: false, error: 'Unable to sign in right now. Please try again later.' };
   } catch {
     return { success: false, error: 'Unable to sign in right now. Please try again later.' };
@@ -106,9 +130,15 @@ export async function checkSession() {
 
 export async function loginUnified(email, password) {
   const normalizedEmail = normalizeEmail(email);
-  if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) return { success: false, error: 'Invalid email or password.' };
+  const passwordValue = typeof password === 'string' ? password : '';
+  if (
+    !LOGIN_EMAIL_PATTERN.test(normalizedEmail) ||
+    normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH ||
+    !passwordValue ||
+    passwordValue.length > LOGIN_PASSWORD_MAX_LENGTH
+  ) return { success: false, error: 'Invalid email or password.' };
   const client = requireSupabase();
-  const gateway = await loginThroughGateway('customer', normalizedEmail, password);
+  const gateway = await loginThroughGateway('customer', normalizedEmail, passwordValue);
   if (!gateway.success) return gateway;
   const { data: profile, error: profileError } = await client.from('profiles').select('role,is_active').eq('id', gateway.user.id).maybeSingle();
   if (profileError || !profile || profile.is_active !== true || !isSupportedProfileRole(profile.role)) {
@@ -214,7 +244,7 @@ export async function getServices() {
       id: row.id, name: row.name, category: row.category, subcategory: row.subcategory, item_type: row.item_type,
       display_order: Number(row.display_order || 0), description: row.description,
       price: Number(row.price), duration: formatDuration(row.duration_minutes), minutes: Number(row.duration_minutes),
-      rating: Number(row.rating || 0), image_path: row.image_path ? publicServiceImage(row.image_path) : '',
+      image_path: row.image_path ? publicServiceImage(row.image_path) : '',
     };
     if (hasHomepageCurationColumn) service.is_homepage_featured = row.is_homepage_featured === true;
     return service;
@@ -317,7 +347,7 @@ export async function getDashboard() {
       return nestedReviews.map((review) => ({ review, appointment: row }));
     })
     .sort((a, b) => Date.parse(b.review.created_at || '') - Date.parse(a.review.created_at || ''))
-    .map(({ review, appointment }) => ({ review_id: Number(review.id), rating: Number(review.rating), staff_rating: review.staff_rating == null ? null : Number(review.staff_rating), review_text: review.review_text || '', service_names: (appointment.appointment_services || []).map((service) => reviewServiceLabel(service, appointment.created_at)).filter(Boolean).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
+    .map(({ review, appointment }) => ({ review_id: Number(review.id), rating: Number(review.rating), staff_rating: review.staff_rating == null ? null : normalizeReviewRating(review.staff_rating), review_text: review.review_text || '', staff_name: staffNames.get(appointment.id) || (appointment.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (appointment.appointment_services || []).map((service) => reviewServiceLabel(service, appointment.created_at)).filter(Boolean).join(', ') || 'Beauty Service', created_at: new Date(review.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) }));
   const summary = { pending_count: 0, confirmed_count: 0, completed_count: 0, cancelled_count: 0, unread_notifications: notifications.filter((n) => !n.is_read).length };
   appointments.forEach((row) => { const key = `${row.status.toLowerCase()}_count`; if (key in summary) summary[key] += 1; });
   return { success: true, customer: profilePayload(profile, session.user), summary, appointments, notifications, reviews };
@@ -342,23 +372,26 @@ export async function getRatableAppointments() {
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
   const [appointmentsResult, staffResult] = await Promise.all([
-    client.from('appointments').select('id,staff_id,local_date,local_time,created_at,appointment_services(service_name,services(name,item_type,description,updated_at)),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }),
+    client.from('appointments').select('id,staff_id,status,local_date,local_time,created_at,appointment_services(service_name,services(name,item_type,description,updated_at)),reviews(id)').eq('customer_id', user.id).eq('status', 'Completed').order('local_date', { ascending: false }),
     client.rpc('get_my_appointment_staff'),
   ]);
   const data = unwrap(appointmentsResult, 'Could not load visits.') || [];
   const staffRows = unwrap(staffResult, 'Could not load appointment staff.') || [];
   const staffNames = new Map(staffRows.map((row) => [row.appointment_id, row.display_name]));
-  return { success: true, appointments: data.filter((row) => { const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews; return !review; }).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((service) => reviewServiceLabel(service, row.created_at)).filter(Boolean).join(', ') || 'Beauty Service' })) };
+  return { success: true, appointments: data.filter(isRatableVisit).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((service) => reviewServiceLabel(service, row.created_at)).filter(Boolean).join(', ') || 'Beauty Service' })) };
 }
 
 export async function createReview(appointmentId, visitRating, staffRating = null, reviewText = '') {
   const client = requireSupabase();
   const user = (await client.auth.getUser()).data.user;
   if (!user) throw Object.assign(new Error('Not logged in'), { status: 401 });
-  const value = Number(visitRating);
-  const staffValue = staffRating === null || staffRating === undefined || staffRating === '' ? null : Number(staffRating);
-  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId)) || !Number.isInteger(value) || value < 1 || value > 5 || (staffValue !== null && (!Number.isInteger(staffValue) || staffValue < 1 || staffValue > 5)) || String(reviewText || '').length > 2000) return { success: false, error: 'Enter a visit rating from 1 to 5, a 1–5 staff rating when a team member was assigned, and keep the review under 2,000 characters.' };
-  const data = unwrap(await client.from('reviews').insert({ appointment_id: appointmentId, customer_id: user.id, rating: value, staff_rating: staffValue, review_text: String(reviewText || '').trim() }).select('id').single(), 'Could not submit your review.');
+  const visitValue = normalizeReviewRating(visitRating);
+  const hasStaffRating = staffRating !== null && staffRating !== undefined && staffRating !== '';
+  const staffValue = hasStaffRating ? normalizeReviewRating(staffRating) : null;
+  const appointmentKey = typeof appointmentId === 'string' ? appointmentId : '';
+  const normalizedReviewText = typeof reviewText === 'string' ? reviewText.trim() : reviewText == null ? '' : null;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(appointmentKey) || visitValue === null || (hasStaffRating && staffValue === null) || normalizedReviewText === null || normalizedReviewText.length > 2000) return { success: false, error: 'Enter a visit rating from 1 to 5, an optional staff rating from 1 to 5, and keep the review under 2,000 characters.' };
+  const data = unwrap(await client.from('reviews').insert({ appointment_id: appointmentId, customer_id: user.id, rating: visitValue, staff_rating: staffValue, review_text: normalizedReviewText, is_published: false }).select('id').single(), 'Could not submit your review.');
   return { success: true, review_id: data.id };
 }
 

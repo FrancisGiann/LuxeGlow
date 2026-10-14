@@ -57,7 +57,8 @@ test('Appointments is the unknown-tab fallback and queue props have one implemen
   assert.match(adminUtilities, /if \(kind === 'history'\) return \{ date: '', status: 'history', search: '' \}/);
   assert.match(adminUtilities, /status === 'history' && appointment\.status !== 'Completed'/);
   assert.match(adminPage, /const displayedTotal = completedView \? totalCompletedAppointments : totalAppointments/);
-  assert.match(adminPage, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/.test\(nextDate\)/);
+  const staffPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('export function AdminPage'));
+  assert.doesNotMatch(staffPanel, /Appointments date|type="date"|Previous day|Next day/);
   assert.match(adminPage, /<StaffNotificationBell[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
   assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("all"\)\}/);
 });

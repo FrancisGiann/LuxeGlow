@@ -109,7 +109,7 @@ function ServiceRow({ service, selectable, selected, disabled, disabledReason, o
       {showBookAction ? (
         <div className="col-span-2 flex w-full items-center justify-between gap-3 sm:col-span-1 sm:justify-self-end">
           <span className="font-display text-base font-semibold tabular-nums text-brand-800">{formatPeso(service.price)}</span>
-          <Link to={`/book?service=${encodeURIComponent(service.id)}`} className="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50">Book {service.name}</Link>
+          <Link to={`/book?service=${encodeURIComponent(service.id)}`} aria-label={`Book ${service.name}`} className="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg border border-brand-300 px-3 text-xs font-bold text-brand-800 hover:bg-brand-50">Book</Link>
         </div>
       ) : (
         <span className="order-2 justify-self-end font-display text-base font-semibold tabular-nums text-brand-800 sm:order-4">{formatPeso(service.price)}</span>

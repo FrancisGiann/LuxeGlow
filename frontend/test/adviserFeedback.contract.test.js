@@ -11,6 +11,7 @@ const migrationMirror = read('database/supabase/migrations/20261012000000_advise
 const bookingPage = read('frontend/src/pages/BookingPage.jsx');
 const endpoints = read('frontend/src/api/endpoints.js');
 const authModal = read('frontend/src/components/auth/AuthModal.jsx');
+const authContext = read('frontend/src/context/AuthContext.jsx');
 const ratingModal = read('frontend/src/components/dashboard/RateVisitModal.jsx');
 const reviewsPage = read('frontend/src/pages/dashboard/ReviewsPage.jsx');
 const bell = read('frontend/src/components/admin/StaffNotificationBell.jsx');
@@ -39,7 +40,7 @@ test('date status RPC is bounded, read-only, and exposes only closure state', ()
   assert.doesNotMatch(endpoints, /ask an administrator to apply the latest schedule update/);
 });
 
-test('public review cards retain their limit while aggregate count and average cover every visible published review', () => {
+test('public review cards retain their limit while visit-rating aggregates cover every visible published review', () => {
   assert.match(migration, /create or replace function public\.get_published_review_stats\(\)\s+returns table\(total_reviews bigint, average_rating numeric\)/i);
   assert.match(migration, /count\(r\.id\)::bigint[\s\S]*?avg\(r\.rating\)::numeric[\s\S]*?where r\.is_published[\s\S]*?exists \(select 1 from public\.profiles p where p\.id = r\.customer_id\)/i);
   assert.match(migration, /grant execute on function public\.get_published_review_stats\(\) to anon, authenticated/i);
@@ -64,15 +65,31 @@ test('customer cancellation alerts require the authenticated customer cancellati
 });
 
 test('verification screen gives a local sign-in path after cross-device confirmation', () => {
+  const loginView = authModal.slice(
+    authModal.indexOf('/* ── LOGIN ── */'),
+    authModal.indexOf('/* ── PASSWORD RESET REQUEST ── */'),
+  );
+  const verificationView = authModal.slice(authModal.indexOf('/* ── VERIFY ── */'));
+  const loginFlow = authContext.slice(
+    authContext.indexOf('const login = useCallback'),
+    authContext.indexOf('const register = useCallback'),
+  );
+  assert.doesNotMatch(loginView, /Resend verification email|handleLoginResend|verificationMessage/);
+  assert.doesNotMatch(authModal, /handleLoginResend|loginResendRemaining|verificationMessage/);
+  assert.match(verificationView, /Need a link\?[\s\S]*?onClick=\{handleResend\}[\s\S]*?Resend email/);
+  assert.match(authModal, /const handleResend = async \(\) => \{[\s\S]*?verificationCooldownSeconds\(res\)[\s\S]*?Could not resend the verification email right now/);
+  assert.match(loginFlow, /if \(data\.needs_verification\) \{\s*setVerifyEmail\(email\);\s*setModalView\('verify'\)/);
   assert.match(authModal, /If you confirm on another device, return here and sign in to continue/);
   assert.match(authModal, /<Button type="button" variant="soft" onClick=\{handleVerificationSignIn\}>Sign in<\/Button>/);
-  assert.match(authModal, /setLoginEmail\(verifyEmail\)/);
+  assert.match(authModal, /updateLoginEmail\(verifyEmail\)/);
   assert.match(authModal, /onClick=\{handleVerificationSignIn\}/);
   assert.doesNotMatch(authModal, /modalView !== 'login' \|\| loginEmail \|\| !verifyEmail/);
-  assert.match(ratingModal, />Your rating</);
+  assert.match(ratingModal, /Your rating/);
+  assert.match(ratingModal, /Rate your team member \(optional\)/);
   assert.match(ratingModal, /readOnly = false/);
   assert.match(ratingModal, /star <= safeRating \? 'text-gold-400' : 'text-line-strong'/);
   assert.match(reviewsPage, /StarPicker value=\{review\.rating\} readOnly/);
+  assert.match(reviewsPage, /review\.staff_rating != null/);
   assert.doesNotMatch(reviewsPage, /onChange=\{\(\) => \{\}\}/);
   assert.doesNotMatch(ratingModal, /formatPeso|#\$\{a\.appointment_id\}/);
   assert.doesNotMatch(reviewsPage, /review\.appointment_id/);
@@ -121,12 +138,19 @@ test('single-package migration preserves the canonical booking RPC except for ro
   assert.equal(packageMigrationMirror, packageMigration);
 });
 
-test('Accounts daily availability slots are removed while assigned appointment dates and times remain', () => {
+test('Accounts management has no date navigation and lists assigned appointments across dates', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
   const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('export function AdminPage'));
   assert.doesNotMatch(adminPage, /getAvailableSlots|Daily availability|30-minute availability/);
-  assert.match(accountPanel, /Appointments date/);
+  assert.doesNotMatch(accountPanel, /Appointments date|type="date"|Previous day|Next day|appointmentDate|minDate|maxDate|onDateChange|onShiftDate/);
+  assert.match(accountPanel, /String\(appointment\.staff_id \|\| ""\) === selectedStaffKey/);
+  assert.doesNotMatch(accountPanel, /appointment\.local_date ===/);
+  assert.match(accountPanel, /\.sort\([\s\S]*?left\.local_date[\s\S]*?left\.local_time[\s\S]*?leftIndex - rightIndex/);
   assert.match(accountPanel, /Assigned appointments/);
+  assert.match(accountPanel, /localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time\?\.slice\(0, 5\)/);
   assert.match(accountPanel, /appointment\.local_time\?\.slice\(0, 5\)/);
+  const accountPanelUse = adminPage.match(/<StaffAccountPanel\b[\s\S]*?\/>/)?.[0] || '';
+  assert.doesNotMatch(accountPanelUse, /appointmentDate|minDate|maxDate|onDateChange|onShiftDate/);
+  assert.doesNotMatch(adminPage, /appointmentsDate|appointmentsMinDate|appointmentsMaxDate|shiftManilaDate/);
   assert.match(adminPage, /<ScheduleSettings/);
 });

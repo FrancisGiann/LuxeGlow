@@ -327,7 +327,12 @@ export function AuthProvider({ children }) {
       closeAuth();
       return { ok: true, role: data.role };
     }
-    return { ok: false, error: data.error || 'Invalid email or password.' };
+    return {
+      ok: false,
+      error: data.error || 'Invalid email or password.',
+      invalidCredentials: data.invalid_credentials === true,
+      rateLimited: data.rate_limited === true,
+    };
   }, [refreshSession, closeAuth, invalidateSessionRefresh, setAuthStatus]);
 
   /** Returns { ok, error }. On success the session enters "pending email verification". */

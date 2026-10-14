@@ -40,3 +40,29 @@ test('merges realtime rows without duplicates, preserves read state, and caps th
   assert.equal(merged.some((row) => row.id === 2 && row.is_read), true);
   assert.equal(new Set(merged.map((row) => row.id)).size, STAFF_NOTIFICATION_LIMIT);
 });
+
+test('a newer customer reschedule refresh reopens the existing notification as unread', () => {
+  const current = [{
+    id: 9,
+    type: 'customer_rescheduled',
+    title: 'Customer rescheduled an appointment',
+    message: 'Appointment LG-1 was moved to Sep 3.',
+    created_at: '2026-09-03T00:00:00.000Z',
+    is_read: true,
+  }];
+  const refreshed = {
+    ...current[0],
+    message: 'Appointment LG-1 was moved to Sep 4.',
+    created_at: '2026-09-04T00:00:00.000Z',
+    is_read: false,
+  };
+
+  const merged = mergeStaffNotifications(current, [refreshed]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].message, refreshed.message);
+  assert.equal(merged[0].is_read, false);
+
+  const staleFetch = mergeStaffNotifications(merged, [{ ...current[0], is_read: true }]);
+  assert.equal(staleFetch[0].message, refreshed.message);
+  assert.equal(staleFetch[0].is_read, false);
+});

@@ -17,6 +17,8 @@ const userId = '123e4567-e89b-42d3-a456-426614174000';
 const targetId = '987e4567-e89b-42d3-a456-426614174000';
 let resendStatus = 200;
 let resetStatus = 200;
+let loginStatus = 401;
+let loginFunctionBody = { error: 'Invalid email or password.' };
 let staffFunctionStatus = 200;
 let staffFunctionBody = { success: true };
 let inviteFunctionStatus = 200;
@@ -25,6 +27,8 @@ let server;
 let supabase;
 let resendVerificationEmail;
 let requestPasswordReset;
+let loginCustomer;
+let createReview;
 let resetStaffPassword;
 let inviteStaff;
 
@@ -53,8 +57,14 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.pathname.endsWith('/rest/v1/profiles')) {
     return Response.json({ role: 'admin', is_active: true });
   }
+  if (url.pathname.endsWith('/rest/v1/reviews') && method === 'POST') {
+    return Response.json({ id: 71 });
+  }
   if (url.pathname.endsWith('/functions/v1/reset-staff-password')) {
     return Response.json(staffFunctionBody, { status: staffFunctionStatus });
+  }
+  if (url.pathname.endsWith('/functions/v1/login-rate-limit')) {
+    return Response.json(loginFunctionBody, { status: loginStatus, headers: { 'Retry-After': '90' } });
   }
   if (url.pathname.endsWith('/functions/v1/invite-staff')) {
     return Response.json(inviteFunctionBody, { status: inviteFunctionStatus });
@@ -74,7 +84,7 @@ before(async () => {
     server: { middlewareMode: true },
     appType: 'custom',
   });
-  ({ resendVerificationEmail, requestPasswordReset } = await server.ssrLoadModule('/src/api/endpoints.js'));
+  ({ resendVerificationEmail, requestPasswordReset, loginCustomer, createReview } = await server.ssrLoadModule('/src/api/endpoints.js'));
   ({ supabase } = await server.ssrLoadModule('/src/lib/supabase.js'));
   ({ resetStaffPassword, inviteStaff } = await server.ssrLoadModule('/src/api/admin.js'));
 
@@ -92,6 +102,8 @@ beforeEach(() => {
   calls.length = 0;
   resendStatus = 200;
   resetStatus = 200;
+  loginStatus = 401;
+  loginFunctionBody = { error: 'Invalid email or password.' };
   staffFunctionStatus = 200;
   staffFunctionBody = { success: true };
   inviteFunctionStatus = 200;
@@ -158,6 +170,104 @@ test('public reset requests surface Auth rate limits so the form can be retried 
   assert.equal(result.success, false);
   assert.match(result.error, /rate limit/i);
   assert.equal(calls.length, 1);
+});
+
+test('login marks only the gateway’s explicit invalid-credentials contract', async () => {
+  loginFunctionBody = { error: 'Invalid email or password.', invalid_credentials: true };
+  const result = await loginCustomer(' Person@Example.com ', 'wrong-password');
+
+  assert.equal(result.success, false);
+  assert.equal(result.invalid_credentials, true);
+  assert.equal(result.rate_limited, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, '/functions/v1/login-rate-limit');
+  assert.equal(calls[0].body.email, 'person@example.com');
+});
+
+test('login routes only the explicit unverified-email response to verification', async () => {
+  loginFunctionBody = { error: 'Verify your email address to continue.', needs_verification: true };
+  const result = await loginCustomer('person@example.com', 'password');
+
+  assert.equal(result.success, false);
+  assert.equal(result.needs_verification, true);
+  assert.equal(result.invalid_credentials, undefined);
+});
+
+test('the legacy generic credential message is preserved without a counter tag', async () => {
+  loginFunctionBody = { error: 'Invalid email or password.' };
+  const unknown = await loginCustomer('person@example.com', 'password');
+  assert.equal(unknown.invalid_credentials, undefined);
+  assert.equal(unknown.error, 'Invalid email or password.');
+
+  loginFunctionBody = { error: 'Unexpected gateway response.', invalid_credentials: true };
+  const malformed = await loginCustomer('person@example.com', 'password');
+  assert.equal(malformed.invalid_credentials, undefined);
+  assert.match(malformed.error, /unable to sign in/i);
+
+  loginFunctionBody = { error: 'Unexpected gateway response.' };
+  const unexpected = await loginCustomer('person@example.com', 'password');
+  assert.equal(unexpected.invalid_credentials, undefined);
+  assert.match(unexpected.error, /unable to sign in/i);
+});
+
+test('login rate limits and service failures stay outside invalid-credential classification', async () => {
+  loginStatus = 429;
+  loginFunctionBody = { error: 'Too many attempts.' };
+  const limited = await loginCustomer('person@example.com', 'password');
+  assert.equal(limited.rate_limited, true);
+  assert.equal(limited.invalid_credentials, undefined);
+  assert.equal(limited.retry_after, 90);
+
+  loginStatus = 503;
+  const unavailable = await loginCustomer('person@example.com', 'password');
+  assert.equal(unavailable.invalid_credentials, undefined);
+  assert.match(unavailable.error, /unable to sign in/i);
+});
+
+test('login input validation prevents malformed credentials from reaching the gateway', async () => {
+  const invalidEmail = await loginCustomer('not-an-email', 'password');
+  const missingPassword = await loginCustomer('person@example.com', '');
+  const oversizedPassword = await loginCustomer('person@example.com', 'x'.repeat(1025));
+
+  for (const result of [invalidEmail, missingPassword, oversizedPassword]) {
+    assert.equal(result.success, false);
+    assert.equal(result.invalid_credentials, undefined);
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('review creation stores the required visit rating and treats the assigned-staff rating as optional', async () => {
+  const visitOnly = await createReview('123e4567-e89b-42d3-a456-426614174000', 4, null, 'Good visit');
+  assert.deepEqual(visitOnly, { success: true, review_id: 71 });
+  let insert = calls.find((call) => call.path.startsWith('/rest/v1/reviews'));
+  assert.deepEqual(insert.body, {
+    appointment_id: '123e4567-e89b-42d3-a456-426614174000',
+    customer_id: userId,
+    rating: 4,
+    staff_rating: null,
+    review_text: 'Good visit',
+    is_published: false,
+  });
+
+  calls.length = 0;
+  const withStaffRating = await createReview('123e4567-e89b-42d3-a456-426614174000', '3', '5', '');
+  assert.deepEqual(withStaffRating, { success: true, review_id: 71 });
+  insert = calls.find((call) => call.path.startsWith('/rest/v1/reviews'));
+  assert.equal(insert.body.rating, 3);
+  assert.equal(insert.body.staff_rating, 5);
+});
+
+test('review creation rejects coercible nonnumeric rating inputs before inserting', async () => {
+  const appointmentId = '123e4567-e89b-42d3-a456-426614174000';
+  for (const invalid of [true, [5], {}, '5.0']) {
+    const result = await createReview(appointmentId, invalid, null, '');
+    assert.equal(result.success, false);
+  }
+  for (const invalid of [true, [5], {}, '5.0']) {
+    const result = await createReview(appointmentId, 5, invalid, '');
+    assert.equal(result.success, false);
+  }
+  assert.equal((calls.filter((call) => call.path.startsWith('/rest/v1/reviews'))).length, 0);
 });
 
 test('admin password reset invokes the protected function and returns its success body', async () => {

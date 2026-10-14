@@ -67,15 +67,21 @@ export function useStaffNotifications() {
     }
 
     let disposed = false;
+    const mergeRealtimeNotification = (payload) => {
+      if (disposed || String(payload?.new?.recipient_id || '') !== userId) return;
+      setNotifications((current) => mergeStaffNotifications(current, [payload.new]));
+    };
     const channel = supabase
       .channel(`staff-notifications:${userId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'staff_notifications', filter: `recipient_id=eq.${userId}` },
-        (payload) => {
-          if (disposed || String(payload?.new?.recipient_id || '') !== userId) return;
-          setNotifications((current) => mergeStaffNotifications(current, [payload.new]));
-        }
+        mergeRealtimeNotification
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'staff_notifications', filter: `recipient_id=eq.${userId}` },
+        mergeRealtimeNotification
       );
 
     const handleStatus = (nextStatus) => {

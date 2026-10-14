@@ -17,6 +17,7 @@ import { AdminDialog } from "../components/admin/AdminDialog";
 import { useToast } from "../components/ui/Toast";
 import { useToastControls } from "../components/ui/ToastControls";
 import { StaffNotificationBell } from "../components/admin/StaffNotificationBell";
+import { ReviewModerationPanel } from "../components/admin/ReviewModerationPanel";
 import { ScheduleSettings } from "../components/admin/ScheduleSettings";
 import { formatPeso } from "../utils/format";
 import { isStaffRole } from "../utils/roles";
@@ -94,6 +95,7 @@ import {
   IconMenu,
   IconSearch,
   IconSparkle,
+  IconStar,
   IconUser,
   IconX,
 } from "../components/icons";
@@ -134,6 +136,7 @@ const NAV_GROUPS = [
     items: [
       ["faqs", "FAQs", IconCheckCircle],
       ["about", "Business info", IconGrid],
+        ["reviews", "Review approvals", IconStar],
     ],
     adminOnly: true,
   },
@@ -435,15 +438,6 @@ function attendanceTimeLabel(timestamp) {
     timeStyle: "short",
     timeZone: "Asia/Manila",
   }).format(date);
-}
-
-function shiftManilaDate(date, days) {
-  const [year, month, day] = String(date || "")
-    .split("-")
-    .map(Number);
-  if (![year, month, day].every(Number.isFinite)) return manilaDateKey();
-  const shifted = new Date(Date.UTC(year, month - 1, day + days));
-  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
 }
 
 function staffDisplayName(profile) {
@@ -1713,11 +1707,6 @@ function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
 
 function StaffAccountPanel({
   staffMember,
-  appointmentDate,
-  minDate,
-  maxDate,
-  onDateChange,
-  onShiftDate,
   appointments,
   onRequestAction,
   actionBusy,
@@ -1725,15 +1714,26 @@ function StaffAccountPanel({
 }) {
   const bookable = isBookableStaff(staffMember);
   const selectedStaffKey = String(staffMember?.id || "");
-  const dayAppointments = appointments.filter(
-    (appointment) =>
-      String(appointment.staff_id || "") === selectedStaffKey &&
-      appointment.local_date === appointmentDate,
-  );
-  const blockingAppointments = dayAppointments.filter((appointment) =>
+  const assignedAppointments = appointments
+    .filter(
+      (appointment) =>
+        String(appointment.staff_id || "") === selectedStaffKey,
+    )
+    .map((appointment, index) => ({ appointment, index }))
+    .sort(({ appointment: left, index: leftIndex }, { appointment: right, index: rightIndex }) =>
+      String(left.local_date || "\uffff").localeCompare(
+        String(right.local_date || "\uffff"),
+      ) ||
+      String(left.local_time || "\uffff").localeCompare(
+        String(right.local_time || "\uffff"),
+      ) ||
+      leftIndex - rightIndex,
+    )
+    .map(({ appointment }) => appointment);
+  const blockingAppointments = assignedAppointments.filter((appointment) =>
     ["Pending", "Confirmed"].includes(appointment.status),
   );
-  const otherAppointments = dayAppointments.filter(
+  const otherAppointments = assignedAppointments.filter(
     (appointment) => !["Pending", "Confirmed"].includes(appointment.status),
   );
   return (
@@ -1855,40 +1855,9 @@ function StaffAccountPanel({
           />
         </div>
       )}
-      <div className="mt-5 flex flex-wrap items-center gap-2 border-y border-line py-4">
-        <button
-          type="button"
-          onClick={() => onShiftDate(-1)}
-          disabled={appointmentDate <= minDate}
-          aria-label="Previous day"
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 transition-colors hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <IconArrowRight size={16} className="rotate-180" />
-        </button>
-        <label className="min-w-[12rem] flex-1 text-sm font-semibold text-ink-900">
-          <span className="sr-only">Appointments date</span>
-          <input
-            type="date"
-            min={minDate}
-            max={maxDate}
-            value={appointmentDate}
-            onChange={(event) => onDateChange(event.target.value)}
-            className="min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => onShiftDate(1)}
-          disabled={appointmentDate >= maxDate}
-          aria-label="Next day"
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 transition-colors hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <IconArrowRight size={16} />
-        </button>
-      </div>
       {!staffMember ? (
         <p className="py-8 text-sm text-ink-500">
-          Choose an account to view its appointment history for this date.
+          Choose an account to view its assigned appointments.
         </p>
       ) : <div className="mt-6 border-t border-line pt-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -1896,13 +1865,13 @@ function StaffAccountPanel({
             Assigned appointments
           </h3>
           <span className="text-xs text-ink-500">
-            {dayAppointments.length} record
-            {dayAppointments.length === 1 ? "" : "s"}
+            {assignedAppointments.length} appointment
+            {assignedAppointments.length === 1 ? "" : "s"}
           </span>
         </div>
-        {dayAppointments.length ? (
+        {assignedAppointments.length ? (
           <ul className="mt-3 divide-y divide-line">
-            {blockingAppointments.map((appointment) => (
+            {[...blockingAppointments, ...otherAppointments].map((appointment) => (
               <li
                 key={appointment.id}
                 className="flex flex-wrap items-center justify-between gap-3 py-3"
@@ -1912,23 +1881,7 @@ function StaffAccountPanel({
                     {appointment.reference_no}
                   </p>
                   <p className="mt-1 text-xs text-ink-500">
-                    {appointment.local_time?.slice(0, 5) || "Time unavailable"}{" "}
-                    · {appointment.total_duration_minutes || "—"} min
-                  </p>
-                </div>
-                <StatusPill status={appointment.status} size="sm" />
-              </li>
-            ))}
-            {otherAppointments.map((appointment) => (
-              <li
-                key={appointment.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink-900">
-                    {appointment.reference_no}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-500">
+                    {localDateLabel(appointment.local_date)} ·{" "}
                     {appointment.local_time?.slice(0, 5) || "Time unavailable"}{" "}
                     · {appointment.total_duration_minutes || "—"} min
                   </p>
@@ -1939,7 +1892,7 @@ function StaffAccountPanel({
           </ul>
         ) : (
           <p className="py-5 text-sm text-ink-500">
-            No appointments assigned to this team member on this date.
+            No assigned appointments found.
           </p>
         )}
       </div>}
@@ -2055,9 +2008,6 @@ export function AdminPage() {
   const notificationAppointmentRequestRef = useRef(0);
   const noShowDismissedIdsRef = useRef(new Set());
   const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [appointmentsDate, setAppointmentsDate] = useState(() =>
-    manilaDateKey(),
-  );
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteDialogError, setInviteDialogError] = useState("");
@@ -2409,8 +2359,6 @@ export function AdminPage() {
     () => staff.find((profile) => profile.id === selectedStaffId) || null,
     [staff, selectedStaffId],
   );
-  const appointmentsMinDate = manilaDateKey();
-  const appointmentsMaxDate = shiftManilaDate(appointmentsMinDate, 60);
 
   const requestStatus = (appointment, nextStatus) => {
     const current = appointments.find((item) => item.id === appointment?.id);
@@ -3161,6 +3109,8 @@ export function AdminPage() {
                 onPageChange={setServicePage}
               />
             </Card>
+          ) : tab === "reviews" && customer?.role === "admin" ? (
+            <ReviewModerationPanel />
           ) : tab === "customers" ? (
             <Card className="p-5 sm:p-7">
               <CardHeader
@@ -3391,27 +3341,6 @@ export function AdminPage() {
                 </Card>
                 <StaffAccountPanel
                   staffMember={selectedStaff}
-                  appointmentDate={appointmentsDate}
-                  minDate={appointmentsMinDate}
-                  maxDate={appointmentsMaxDate}
-                  onDateChange={(nextDate) => {
-                    if (
-                      /^\d{4}-\d{2}-\d{2}$/.test(nextDate) &&
-                      nextDate >= appointmentsMinDate &&
-                      nextDate <= appointmentsMaxDate
-                    )
-                      setAppointmentsDate(nextDate);
-                  }}
-                  onShiftDate={(days) =>
-                    setAppointmentsDate((current) => {
-                      const next = shiftManilaDate(current, days);
-                      return next < appointmentsMinDate
-                        ? appointmentsMinDate
-                        : next > appointmentsMaxDate
-                          ? appointmentsMaxDate
-                          : next;
-                    })
-                  }
                   appointments={appointments}
                   onRequestAction={requestStaffAction}
                   actionBusy={staffActionBusy}

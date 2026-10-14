@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { classifyLoginAuthFailure } from '../_shared/loginAuthFailure.js';
 
 const origin = Deno.env.get('ALLOWED_ORIGIN') || 'null';
 const headers = {
@@ -94,6 +95,7 @@ Deno.serve(async (request) => {
         apikey: authProxyKey,
         'Sb-Forwarded-For': ip,
         'Content-Type': 'application/json',
+        'x-supabase-api-version': '2024-01-01',
       },
       body: JSON.stringify({ email, password }),
     });
@@ -115,7 +117,8 @@ Deno.serve(async (request) => {
     // Do not expose GoTrue's account or credential details. Failed credential
     // responses keep their reservation; provider/server failures release it.
     if (authResponse.status >= 400 && authResponse.status < 500) {
-      return json({ error: INVALID_CREDENTIALS }, 401);
+      const failure = classifyLoginAuthFailure(authResponse.status, authData);
+      return json(failure.body, failure.status);
     }
     await releaseReservation();
     return json({ error: GENERIC_ERROR }, 503);

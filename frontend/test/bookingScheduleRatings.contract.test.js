@@ -105,10 +105,12 @@ test('customer workspace keeps the approved minimal navigation and return flow',
   assert.match(publicLayout, /navigate\('\/book', \{ replace: true \}\)/);
 });
 
-test('assigned staff ratings are required in the review flow and business hours use structured schedule', () => {
+test('visit ratings remain required while assigned staff ratings are optional', () => {
   assert.match(endpoints, /createReview\(appointmentId, visitRating, staffRating = null, reviewText = ''\)/);
-  assert.match(rateVisitModal, /Please rate your team member from 1 to 5 stars/);
-  assert.match(rateVisitModal, /Team member rating \(required\)/);
+  assert.match(endpoints, /visitValue === null/);
+  assert.match(rateVisitModal, /Your rating/);
+  assert.match(rateVisitModal, /Rate your team member \(optional\)/);
+  assert.doesNotMatch(rateVisitModal, /staff rating \(required\)/i);
   assert.doesNotMatch(adminPage, /\['business_hours', 'Business hours'\]/);
   assert.match(adminPage, /<ScheduleSettings[\s\S]*?onOpenAppointments=/);
 });
