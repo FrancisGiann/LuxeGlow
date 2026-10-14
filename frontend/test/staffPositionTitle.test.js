@@ -65,7 +65,7 @@ test('admin API validates title writes and both API surfaces map the nullable ti
   assert.match(endpoints, /average_rating: row\.average_rating/);
 });
 
-test('admin exposes an accessible free-text editor and booking picker omits an unset title', () => {
+test('admin edits roster titles separately from login accounts and booking picker omits an unset title', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
   const bookingPage = read('frontend/src/pages/BookingPage.jsx');
   assert.match(adminPage, /Optional position title/);
@@ -73,33 +73,37 @@ test('admin exposes an accessible free-text editor and booking picker omits an u
   assert.match(adminPage, /maxLength=\{STAFF_POSITION_TITLE_MAX_LENGTH\}/);
   assert.match(adminPage, /Position title is unchanged\./);
   assert.match(adminPage, /position_title: nextTitle/);
-  assert.match(adminPage, /function StaffPositionTitleEditor\(\{ staffMember, canManage, onSaved \}\)/);
-  assert.match(adminPage, /type: ["']position_title_saved["']/);
-  assert.match(adminPage, /position_title: action\.position_title/);
-  assert.equal((adminPage.match(/setNotice\(["']Position title saved\.["']\)/g) || []).length, 1);
+  assert.match(adminPage, /function TeamMemberTitleEditor\(\{ staffMember, canManage, onSaved \}\)/);
+  assert.match(adminPage, /updateAdminStaffMember\(staffMember\.id,\s*\{\s*position_title: nextTitle,?\s*\}\)/);
+  assert.match(adminPage, /function TeamRosterPanel\([\s\S]*?title="Team roster"/);
+  const loginPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('function TeamRosterPanel'));
+  assert.doesNotMatch(loginPanel, /position_title|accepts_appointments|Bookable/);
   assert.doesNotMatch(adminPage, /CustomEvent|admin-staff-profile-updated/);
-  assert.match(adminPage, /profile\.position_title &&/);
   assert.match(bookingPage, /member\.position_title &&/);
   assert.match(bookingPage, /member\.average_rating > 0/);
 });
 
-test('staff rows prioritize position titles, keep ratings in the inspector, and use one concise status', () => {
+test('login account rows show account status while the roster owns booking status and ratings', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
-  const rowMatch = adminPage.match(/function ProfileRow\(\{ profile, selected, onSelect \}\) \{[\s\S]*?\n\}\n\nfunction StaffPositionTitleEditor/);
-  const panelMatch = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\nexport function AdminPage/);
+  const rowMatch = adminPage.match(/function ProfileRow\(\{ profile, selected, onSelect \}\) \{[\s\S]*?\n\}\n\nfunction TeamMemberTitleEditor/);
+  const panelMatch = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\n(?:export )?function TeamRosterPanel/);
+  const rosterMatch = adminPage.match(/function TeamRosterPanel\([\s\S]*?\n\}\n\nexport function AdminPage/);
   assert.ok(rowMatch, 'staff row component should be present');
-  assert.ok(panelMatch, 'selected staff inspector should be present');
+  assert.ok(panelMatch, 'login account inspector should be present');
+  assert.ok(rosterMatch, 'database-backed team roster should be present');
 
   const row = rowMatch[0];
-  assert.ok(row.indexOf('{name}') < row.indexOf('{profile.position_title}') && row.indexOf('{profile.position_title}') < row.indexOf('{profile.email}'));
-  assert.match(row, /text-sm font-semibold text-brand-800/);
+  assert.ok(row.indexOf('{name}') < row.indexOf('{profile.email}'));
+  assert.doesNotMatch(row, /profile\.position_title|profile\.accepts_appointments|Bookable/);
   assert.doesNotMatch(row, /rating_count|average_rating|published rating|No ratings yet/);
-  assert.match(row, /const accountStatus = !profile\.is_active\s*\?\s*["']Inactive["']\s*:\s*profile\.accepts_appointments\s*\?\s*["']Bookable["']\s*:\s*["']Appointments off["']/);
+  assert.match(row, /const accountStatus = profile\.is_active \? "Active" : "Inactive"/);
   assert.equal((row.match(/rounded-full/g) || []).length, 1);
   assert.match(row, /Account status: \$\{accountStatus\}/);
   assert.doesNotMatch(row, /Accepts appointments/);
   assert.match(row, /<span className="min-w-0">[\s\S]*?\{profile\.email\}\s*<\/span>\s*<\/span>\s*<span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">/);
-  assert.match(panelMatch[0], /staffMember\.rating_count[\s\S]*?staffMember\.average_rating[\s\S]*?published rating/);
   assert.match(panelMatch[0], /Assigned appointments[\s\S]*?localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time/);
+  assert.match(rosterMatch[0], /member\.is_active && member\.is_bookable/);
+  assert.match(rosterMatch[0], /member\.rating_count[\s\S]*?member\.average_rating[\s\S]*?published ratings/);
+  assert.match(rosterMatch[0], /record_kind === "owner"[\s\S]*?record_kind === "staff"[\s\S]*?record_kind === "legacy"/);
   assert.doesNotMatch(panelMatch[0], /Appointments date|type="date"|Previous day|Next day/);
 });

@@ -74,7 +74,8 @@ test('review moderation API is admin-only, paginated, and writes only the public
   const listing = adminApi.slice(adminApi.indexOf('export async function listAdminReviewModeration'), adminApi.indexOf('export async function setAdminReviewPublication'));
   const update = adminApi.slice(adminApi.indexOf('export async function setAdminReviewPublication'), adminApi.indexOf('export async function saveFaq'));
   assert.match(listing, /const client = await assertAdmin\(\)/);
-  assert.match(listing, /select\([\s\S]*?profiles!reviews_customer_id_fkey[^']*appointments!reviews_appointment_id_fkey/);
+  assert.match(listing, /const selection = 'id,rating,staff_rating[\s\S]*?profiles!reviews_customer_id_fkey[\s\S]*?appointments!reviews_appointment_id_fkey[\s\S]*?staff_member:staff_members!appointments_staff_member_id_fkey/);
+  assert.match(listing, /runQuery\(selection\)[\s\S]*?runQuery\(legacySelection\)/);
   assert.match(listing, /\.eq\('is_published', isPublished\)/);
   assert.match(listing, /\.order\('created_at', \{ ascending: false \}\)[\s\S]*?\.range\(from, from \+ REVIEW_MODERATION_PAGE_SIZE - 1\)/);
   assert.match(update, /isValidReviewPublicationUpdate\(reviewId, isPublished\)/);

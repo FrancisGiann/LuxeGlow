@@ -337,8 +337,14 @@ export async function getDashboard() {
   const profile = unwrap(profileResult, 'Could not load your profile.');
   const appointmentRows = unwrap(appointmentsResult, 'Could not load appointments.') || [];
   const appointmentStaff = unwrap(appointmentStaffResult, 'Could not load appointment staff.') || [];
-  const staffNames = new Map(appointmentStaff.map((row) => [row.appointment_id, row.display_name || (row.staff_id ? 'Assigned team member' : 'Unassigned')]));
-  appointmentRows.forEach((row) => { row.staff_name = staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'); });
+  const staffByAppointment = new Map(appointmentStaff.map((row) => [row.appointment_id, row]));
+  const staffNames = new Map();
+  appointmentRows.forEach((row) => {
+    const staff = staffByAppointment.get(row.id);
+    row.staff_id = staff?.staff_id || row.staff_id || null;
+    row.staff_name = staff?.display_name || (row.staff_id ? 'Assigned team member' : 'Unassigned');
+    staffNames.set(row.id, row.staff_name);
+  });
   const appointments = appointmentRows.map(dashboardAppointment);
   const notifications = (unwrap(notificationsResult, 'Could not load notifications.') || []).map((row) => ({ ...row, id: Number(row.id), is_read: !!row.is_read, created_at: new Date(row.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }));
   const reviews = appointmentRows
@@ -377,8 +383,12 @@ export async function getRatableAppointments() {
   ]);
   const data = unwrap(appointmentsResult, 'Could not load visits.') || [];
   const staffRows = unwrap(staffResult, 'Could not load appointment staff.') || [];
-  const staffNames = new Map(staffRows.map((row) => [row.appointment_id, row.display_name]));
-  return { success: true, appointments: data.filter(isRatableVisit).map((row) => ({ appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: row.staff_id || null, staff_name: staffNames.get(row.id) || (row.staff_id ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((service) => reviewServiceLabel(service, row.created_at)).filter(Boolean).join(', ') || 'Beauty Service' })) };
+  const staffByAppointment = new Map(staffRows.map((row) => [row.appointment_id, row]));
+  return { success: true, appointments: data.filter(isRatableVisit).map((row) => {
+    const staff = staffByAppointment.get(row.id);
+    const staffId = staff?.staff_id || row.staff_id || null;
+    return { appointment_id: row.id, appointment_date: row.local_date, appointment_time: manilaTimeLabel(row.local_date, row.local_time), staff_id: staffId, staff_name: staff?.display_name || (staffId ? 'Assigned team member' : 'Unassigned'), service_names: (row.appointment_services || []).map((service) => reviewServiceLabel(service, row.created_at)).filter(Boolean).join(', ') || 'Beauty Service' };
+  }) };
 }
 
 export async function createReview(appointmentId, visitRating, staffRating = null, reviewText = '') {

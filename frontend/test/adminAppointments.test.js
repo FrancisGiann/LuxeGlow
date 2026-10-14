@@ -5,6 +5,7 @@ import {
   appointmentQueueEmptyMessage,
   createInitialAppointmentFilters,
   getAdminAppointmentQueue,
+  getAppointmentStaffName,
   manilaDateKey,
 } from '../src/utils/adminAppointments.js';
 
@@ -26,6 +27,13 @@ test('appointment defaults show active appointments across every date', () => {
     status: 'active',
     search: '',
   });
+});
+
+test('appointment staff labels use new roster identities and preserve legacy history', () => {
+  assert.equal(getAppointmentStaffName({ staff_name: '  Jhona Hael Amparado  ', staff_id: 'roster-id' }), 'Jhona Hael Amparado');
+  assert.equal(getAppointmentStaffName({ staff_member_id: 'roster-id', staff_member: { full_name: 'Jen Reyes' } }), 'Jen Reyes');
+  assert.equal(getAppointmentStaffName({ staff_id: 'legacy-id', staff: [{ first_name: 'Sam', last_name: 'Lee' }] }), 'Sam Lee');
+  assert.equal(getAppointmentStaffName({}), 'Unassigned');
 });
 
 test('appointment search is case-insensitive across reference, customer, service, and assigned staff fields', () => {

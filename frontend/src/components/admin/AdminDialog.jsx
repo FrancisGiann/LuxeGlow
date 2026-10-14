@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { IconX } from '../icons';
 
-export function AdminDialog({ open, title, description, onClose, closeDisabled = false, size = 'default', returnFocusRef, fallbackFocusRef, children }) {
+export function AdminDialog({ open, title, description, onClose, closeDisabled = false, size = 'default', returnFocusRef, fallbackFocusRef, footer, children }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
@@ -105,7 +105,8 @@ export function AdminDialog({ open, title, description, onClose, closeDisabled =
             <IconX size={19} />
           </button>
         </div>
-        <div className="admin-dialog-body min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">{children}</div>
+        <div className={`admin-dialog-body min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 ${footer ? 'flex-1' : ''}`}>{children}</div>
+        {footer && <div className="shrink-0 border-t border-line bg-surface px-5 py-4 sm:px-6">{footer}</div>}
       </div>
     </div>
   );

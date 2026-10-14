@@ -12,8 +12,11 @@ const adminId = '123e4567-e89b-42d3-a456-426614174000';
 const targetId = '987e4567-e89b-42d3-a456-426614174000';
 const appointmentId = '423e4567-e89b-42d3-a456-426614174000';
 const noShowAppointmentId = '523e4567-e89b-42d3-a456-426614174000';
+const rosterOwnerId = '623e4567-e89b-42d3-a456-426614174000';
+const rosterStaffId = '723e4567-e89b-42d3-a456-426614174000';
 const calls = [];
 const profiles = new Map();
+const staffMembers = new Map();
 const faqs = new Map();
 const closures = new Map();
 const appointments = new Map();
@@ -79,10 +82,29 @@ globalThis.fetch = async (input, init = {}) => {
     Object.assign(appointment, body || {});
     return json([], 200);
   }
+  if (url.pathname.endsWith('/rest/v1/staff_members')) {
+    const idFilter = url.searchParams.get('id') || '';
+    const id = idFilter.startsWith('eq.') ? idFilter.slice(3) : '';
+    if (method === 'GET') return objectResponse(request, [...staffMembers.values()]);
+    if (method === 'PATCH') {
+      const member = staffMembers.get(id);
+      if (!member) return json([], 200);
+      Object.assign(member, body || {});
+      return objectResponse(request, [{
+        id: member.id,
+        is_active: member.is_active,
+        is_bookable: member.is_bookable,
+        position_title: member.position_title,
+      }]);
+    }
+  }
   if (url.pathname.endsWith('/functions/v1/upload-service-image')) return json(uploadBody, uploadStatus);
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const name = url.pathname.slice('/rest/v1/rpc/'.length);
     if (name === 'get_salon_closures') return json([...closures.values()].filter((item) => item.closure_date >= body.p_from && item.closure_date <= body.p_to));
+    if (name === 'get_staff_rating_aggregates') return json([
+      { staff_id: rosterStaffId, average_rating: 4.5, rating_count: 2 },
+    ]);
     if (name === 'save_salon_closure') {
       const row = { closure_date: body.p_closure_date, reason: body.p_reason };
       closures.set(row.closure_date, row);
@@ -132,6 +154,9 @@ beforeEach(() => {
   profiles.clear();
   profiles.set(adminId, { id: adminId, role: 'admin', is_active: true });
   profiles.set(targetId, { id: targetId, role: 'head', is_active: true, accepts_appointments: true });
+  staffMembers.clear();
+  staffMembers.set(rosterOwnerId, { id: rosterOwnerId, roster_key: 'owner-leth-s-alfabete', record_kind: 'owner', full_name: 'Leth S. Alfabete', position_title: null, is_active: true, is_bookable: false, created_at: '2026-10-14T00:00:00Z' });
+  staffMembers.set(rosterStaffId, { id: rosterStaffId, roster_key: 'staff-jhona-hael-amparado', record_kind: 'staff', full_name: 'Jhona Hael Amparado', position_title: '   Nail   Artist ', is_active: true, is_bookable: true, created_at: '2026-10-14T00:00:00Z' });
   faqs.clear();
   faqs.set(1, { id: 1, question: 'How do I book?', answer: 'Book online.', display_order: 1, is_published: true });
   closures.clear();
@@ -161,6 +186,44 @@ test('account activation and appointment access are separate scoped updates', as
   const updates = calls.filter((call) => call.path.endsWith('/profiles') && call.method === 'PATCH');
   assert.equal(updates.length, 2);
   assert.ok(updates.every((call) => call.query.get('id') === `eq.${targetId}`));
+});
+
+test('team roster reads include safe published ratings and admin edits only allowed fields', async () => {
+  const roster = await api.listAdminStaffMembers();
+  assert.equal(roster.length, 2);
+  assert.deepEqual(roster.find((member) => member.record_kind === 'owner'), {
+    ...staffMembers.get(rosterOwnerId), average_rating: 0, rating_count: 0,
+  });
+  assert.equal(roster.find((member) => member.id === rosterStaffId).position_title, 'Nail Artist');
+  assert.equal(roster.find((member) => member.id === rosterStaffId).average_rating, 4.5);
+  assert.equal(roster.find((member) => member.id === rosterStaffId).rating_count, 2);
+  const result = await api.updateAdminStaffMember(rosterStaffId, {
+    is_active: false,
+    position_title: 'Senior Nail Artist',
+  });
+  assert.deepEqual(result, {
+    success: true,
+    is_active: false,
+    is_bookable: true,
+    position_title: 'Senior Nail Artist',
+  });
+  const update = calls.find((call) => call.path.endsWith('/staff_members') && call.method === 'PATCH');
+  assert.equal(update.query.get('id'), `eq.${rosterStaffId}`);
+  assert.deepEqual(update.body, { is_active: false, position_title: 'Senior Nail Artist' });
+});
+
+test('team roster updates reject malformed targets and unsupported fields before writing', async () => {
+  const before = calls.length;
+  assert.deepEqual(await api.updateAdminStaffMember('invalid', { is_active: false }), {
+    success: false, error: 'Invalid roster record.',
+  });
+  assert.deepEqual(await api.updateAdminStaffMember(rosterStaffId, null), {
+    success: false, error: 'Choose valid roster changes.',
+  });
+  assert.deepEqual(await api.updateAdminStaffMember(rosterStaffId, { record_kind: 'owner' }), {
+    success: false, error: 'No roster changes supplied.',
+  });
+  assert.equal(calls.length, before);
 });
 
 test('FAQ create, edit, and delete send scoped API requests and update fixture state', async () => {

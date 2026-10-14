@@ -16,6 +16,17 @@ function isMissingHomepageCurationError(error) {
   return /\bis_homepage_featured\b/.test(message) && (code === '42703' || code === 'PGRST204' || /schema cache|column .* does not exist|could not find .*column/.test(message));
 }
 
+function isMissingStaffRosterMetadataError(error) {
+  if (!error) return false;
+  const code = String(error.code || '').toUpperCase();
+  const message = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLocaleLowerCase();
+  const referencesRosterAssignment = /staff_member_id|appointments_staff_member_id_fkey|staff_members/.test(message);
+  return referencesRosterAssignment && (
+    code === '42703' || code === 'PGRST200' || code === 'PGRST204' ||
+    /schema cache|column .* does not exist|could not find .*relationship|could not find .*column/.test(message)
+  );
+}
+
 const throwIfError = (result, fallback) => {
   if (result.error) throw new Error(result.error.message || fallback);
   return result.data;
@@ -68,17 +79,21 @@ export async function listAdminAppointments() {
     await client.rpc('reconcile_expired_pending_appointments'),
     'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
   );
-  const [appointmentResult, aggregateResult] = await Promise.all([
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)').order('created_at', { ascending: false }).order('id', { ascending: false }),
-    client.rpc('get_staff_rating_aggregates'),
-  ]);
+  const appointmentSelection = 'id,reference_no,staff_id,staff_member_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name,unit_price)';
+  const orderAppointments = (query) => query.order('created_at', { ascending: false }).order('id', { ascending: false });
+  let appointmentResult = await orderAppointments(client.from('appointments').select(appointmentSelection));
+  if (appointmentResult.error && isMissingStaffRosterMetadataError(appointmentResult.error)) {
+    appointmentResult = await orderAppointments(client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)'));
+  }
+  const aggregateResult = await client.rpc('get_staff_rating_aggregates');
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');
   const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
   const ratingByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: row.average_rating == null ? 0 : Number(row.average_rating), rating_count: Number(row.rating_count || 0) }]));
   return (rows || []).map((row) => {
-    const staffName = row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : row.staff_id ? 'Assigned team member' : 'Unassigned';
-    const rating = ratingByStaff.get(String(row.staff_id));
-    return { ...row, staff_name: staffName || 'Assigned team member', staff_average_rating: rating?.average_rating || 0, staff_rating_count: rating?.rating_count || 0, total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] };
+    const staffId = row.staff_member_id || row.staff_id || null;
+    const staffName = row.staff_member?.full_name || (row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : staffId ? 'Assigned team member' : 'Unassigned');
+    const rating = ratingByStaff.get(String(staffId));
+    return { ...row, legacy_staff_id: row.staff_id || null, staff_id: staffId, staff_name: staffName || 'Assigned team member', staff_average_rating: rating?.average_rating || 0, staff_rating_count: rating?.rating_count || 0, total_price: Number(row.total_price), customer: row.profiles, services: row.appointment_services || [] };
   });
 }
 
@@ -130,14 +145,15 @@ export async function listAdminReviewModeration({ isPublished = false, page = 1 
   }
   const client = await assertAdmin();
   const from = (page - 1) * REVIEW_MODERATION_PAGE_SIZE;
-  const result = await client.from('reviews').select(
-    'id,rating,staff_rating,review_text,is_published,created_at,profiles!reviews_customer_id_fkey(first_name,last_name),appointments!reviews_appointment_id_fkey(local_date,local_time,staff_id,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name))',
-    { count: 'exact' },
-  )
+  const selection = 'id,rating,staff_rating,review_text,is_published,created_at,profiles!reviews_customer_id_fkey(first_name,last_name),appointments!reviews_appointment_id_fkey(local_date,local_time,staff_id,staff_member_id,staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name))';
+  const legacySelection = 'id,rating,staff_rating,review_text,is_published,created_at,profiles!reviews_customer_id_fkey(first_name,last_name),appointments!reviews_appointment_id_fkey(local_date,local_time,staff_id,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name))';
+  const runQuery = (fields) => client.from('reviews').select(fields, { count: 'exact' })
     .eq('is_published', isPublished)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(from, from + REVIEW_MODERATION_PAGE_SIZE - 1);
+  let result = await runQuery(selection);
+  if (result.error && isMissingStaffRosterMetadataError(result.error)) result = await runQuery(legacySelection);
   const rows = throwIfError(result, 'Could not load review approvals.') || [];
   return {
     reviews: normalizeReviewModerationRows(rows),
@@ -202,13 +218,71 @@ export async function listAdminProfiles(role) {
   });
 }
 
+export async function listAdminStaffMembers() {
+  const client = await assertStaff();
+  const [memberResult, aggregateResult] = await Promise.all([
+    client.from('staff_members').select('id,roster_key,record_kind,full_name,position_title,is_active,is_bookable,created_at').order('record_kind').order('full_name'),
+    client.rpc('get_staff_rating_aggregates'),
+  ]);
+  const members = throwIfError(memberResult, 'Could not load the team roster.') || [];
+  const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
+  const ratingsByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: Number(row.average_rating || 0), rating_count: Number(row.rating_count || 0) }]));
+  return members.map((member) => {
+    const positionTitle = normalizeStaffPositionTitle(member.position_title);
+    return {
+      ...member,
+      position_title: isStaffPositionTitleWithinLimit(positionTitle) ? positionTitle : null,
+      average_rating: ratingsByStaff.get(String(member.id))?.average_rating || 0,
+      rating_count: ratingsByStaff.get(String(member.id))?.rating_count || 0,
+    };
+  });
+}
+
+export async function updateAdminStaffMember(id, fields) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id))) return { success: false, error: 'Invalid roster record.' };
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return { success: false, error: 'Choose valid roster changes.' };
+  const patch = {};
+  if (fields.is_active !== undefined) {
+    if (typeof fields.is_active !== 'boolean') return { success: false, error: 'Choose a valid roster status.' };
+    patch.is_active = fields.is_active;
+  }
+  if (fields.is_bookable !== undefined) {
+    if (typeof fields.is_bookable !== 'boolean') return { success: false, error: 'Choose a valid booking status.' };
+    patch.is_bookable = fields.is_bookable;
+  }
+  if (fields.position_title !== undefined) {
+    if (fields.position_title !== null && typeof fields.position_title !== 'string') return { success: false, error: 'Enter a valid position title.' };
+    const positionTitle = normalizeStaffPositionTitle(fields.position_title);
+    if (!isStaffPositionTitleWithinLimit(positionTitle)) return { success: false, error: 'Position title must be 100 characters or fewer.' };
+    patch.position_title = positionTitle;
+  }
+  if (!Object.keys(patch).length) return { success: false, error: 'No roster changes supplied.' };
+  const client = await assertAdmin();
+  const result = await client.from('staff_members').update(patch).eq('id', id).select('id,is_active,is_bookable,position_title').maybeSingle();
+  const saved = throwIfError(result, 'Could not update the roster record.');
+  if (!saved) return { success: false, error: 'Roster record not found.' };
+  const savedTitle = normalizeStaffPositionTitle(saved.position_title);
+  return {
+    success: true,
+    is_active: saved.is_active,
+    is_bookable: saved.is_bookable,
+    position_title: isStaffPositionTitleWithinLimit(savedTitle) ? savedTitle : null,
+  };
+}
+
 export async function getCustomerHistory(id) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id))) throw new Error('Invalid customer account.');
   const client = await assertStaff();
-  const rows = throwIfError(await client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,total_price,total_duration_minutes,status,created_at,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name)').eq('customer_id', id).order('local_date', { ascending: false }).order('local_time', { ascending: false }), 'Could not load customer history.');
+  const selection = 'id,reference_no,staff_id,staff_member_id,local_date,local_time,total_price,total_duration_minutes,status,created_at,staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name)';
+  const legacySelection = 'id,reference_no,staff_id,local_date,local_time,total_price,total_duration_minutes,status,created_at,staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name)';
+  const runQuery = (fields) => client.from('appointments').select(fields).eq('customer_id', id).order('local_date', { ascending: false }).order('local_time', { ascending: false });
+  let result = await runQuery(selection);
+  if (result.error && isMissingStaffRosterMetadataError(result.error)) result = await runQuery(legacySelection);
+  const rows = throwIfError(result, 'Could not load customer history.');
   return (rows || []).map((row) => {
-    const staffName = row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : row.staff_id ? 'Assigned team member' : 'Unassigned';
-    return { ...row, staff_name: staffName || 'Assigned team member', total_price: Number(row.total_price), services: [{ service_name: `Team member: ${staffName || 'Assigned team member'}` }, ...(row.appointment_services || [])] };
+    const staffId = row.staff_member_id || row.staff_id || null;
+    const staffName = row.staff_member?.full_name || (row.staff ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ') : staffId ? 'Assigned team member' : 'Unassigned');
+    return { ...row, legacy_staff_id: row.staff_id || null, staff_id: staffId, staff_name: staffName || 'Assigned team member', total_price: Number(row.total_price), services: [{ service_name: `Team member: ${staffName || 'Assigned team member'}` }, ...(row.appointment_services || [])] };
   });
 }
 

@@ -44,6 +44,31 @@ export function createInitialAppointmentFilters() {
   return { date: '', status: 'active', search: '' };
 }
 
+function firstRelatedRecord(value) {
+  return Array.isArray(value) ? value[0] || null : value || null;
+}
+
+export function getAppointmentStaffName(appointment) {
+  const normalizedName = appointment?.staff_name;
+  if (typeof normalizedName === 'string' && normalizedName.trim()) return normalizedName.trim();
+  const rosterMember = firstRelatedRecord(appointment?.staff_member);
+  if (typeof rosterMember?.full_name === 'string' && rosterMember.full_name.trim()) {
+    return rosterMember.full_name.trim();
+  }
+  const profile = firstRelatedRecord(appointment?.staff);
+  if (profile) {
+    const profileName = [profile.first_name, profile.last_name]
+      .filter((part) => typeof part === 'string')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' ');
+    if (profileName) return profileName;
+  }
+  return appointment?.staff_member_id || appointment?.staff_id
+    ? 'Assigned team member'
+    : 'Unassigned';
+}
+
 function localTimeSeconds(value) {
   const time = stringValue(value);
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time)) return null;

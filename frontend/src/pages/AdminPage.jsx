@@ -40,6 +40,7 @@ import {
   listAdminAppointments,
   listAdminFaqs,
   listAdminProfiles,
+  listAdminStaffMembers,
   listAdminServices,
   markAppointmentArrived,
   respondToNoShow,
@@ -51,6 +52,7 @@ import {
   setServiceHomepageFeatured,
   updateAdminAbout,
   updateAdminProfile,
+  updateAdminStaffMember,
   updateAppointmentStatus,
   uploadServiceImage,
 } from "../api/admin";
@@ -63,6 +65,7 @@ import {
   appointmentFilterPreset,
   appointmentQueueEmptyMessage,
   createInitialAppointmentFilters,
+  getAppointmentStaffName,
   getAdminAppointmentQueue,
   manilaDateKey,
 } from "../utils/adminAppointments";
@@ -74,6 +77,8 @@ import {
   closeAdminStatusConfirmation,
   runAdminStatusConfirmation,
 } from "../utils/adminStatusConfirmation";
+import { activateStaffAccountImmediately } from "../utils/adminStaffActivation";
+import { getAdminAppointmentActions } from "../utils/adminAppointmentActions";
 
 const createServiceDraft = () => ({
   id: globalThis.crypto.randomUUID(),
@@ -101,16 +106,6 @@ import {
 } from "../components/icons";
 
 const TERMINAL_APPOINTMENT_STATUSES = new Set(["Completed", "Cancelled"]);
-const APPOINTMENT_ACTIONS = {
-  Pending: [
-    { status: "Confirmed", label: "Confirm", variant: "primary" },
-    { status: "Cancelled", label: "Cancel", variant: "danger" },
-  ],
-  Confirmed: [
-    { status: "Completed", label: "Mark completed", variant: "primary" },
-    { status: "Cancelled", label: "Cancel", variant: "danger" },
-  ],
-};
 const NAV_GROUPS = [
   {
     id: "daily-work",
@@ -400,10 +395,6 @@ function isTerminalAppointment(appointment) {
   return TERMINAL_APPOINTMENT_STATUSES.has(appointment?.status);
 }
 
-function appointmentActions(status) {
-  return APPOINTMENT_ACTIONS[status] || [];
-}
-
 function statusConfirmationCopy(status) {
   if (status === "Confirmed")
     return { title: "Confirm appointment?", button: "Confirm appointment" };
@@ -420,16 +411,6 @@ function serviceNames(appointment) {
     .filter(Boolean);
 }
 
-function appointmentStaffName(appointment) {
-  const staff = appointment?.staff;
-  if (!staff)
-    return appointment?.staff_id ? "Assigned team member" : "Unassigned";
-  return (
-    [staff.first_name, staff.last_name].filter(Boolean).join(" ") ||
-    "Assigned team member"
-  );
-}
-
 function attendanceTimeLabel(timestamp) {
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime())) return "";
@@ -442,20 +423,13 @@ function attendanceTimeLabel(timestamp) {
 
 function staffDisplayName(profile) {
   return (
+    profile?.full_name?.trim() ||
     [profile?.first_name, profile?.last_name]
       .filter(Boolean)
       .join(" ")
       .trim() ||
     profile?.email ||
     "Team member"
-  );
-}
-
-function isBookableStaff(profile) {
-  return Boolean(
-    profile?.is_active &&
-    isStaffRole(profile?.role) &&
-    profile?.accepts_appointments,
   );
 }
 
@@ -574,7 +548,7 @@ function AppointmentRow({ appointment, selected, onSelect }) {
   );
 }
 
-function AppointmentDetails({
+function AppointmentDetailsActions({
   appointment,
   onRequestStatus,
   onReschedule,
@@ -588,25 +562,129 @@ function AppointmentDetails({
     const timer = window.setInterval(() => setArrivalClock(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+  const terminal = isTerminalAppointment(appointment);
+  const arrivalAvailable = canRecordAppointmentArrival(appointment, arrivalClock);
+  const hasArrivalTime = Number.isFinite(Date.parse(appointment.start_at));
+  const statusActions = getAdminAppointmentActions(appointment.status);
+  const primaryActions = statusActions.filter((action) => action.variant === "primary");
+  const secondaryActions = statusActions.filter((action) => action.variant !== "primary");
+  const canMarkArrived = appointment.status === "Confirmed" && !appointment.arrived_at && onMarkArrived;
+  const canReschedule = !appointment.arrived_at;
+  const secondaryCount = Number(!!canMarkArrived) + Number(canReschedule) + secondaryActions.length;
+  const arrivalUnavailable = appointment.status === "Confirmed" && !appointment.arrived_at && !arrivalAvailable;
+
+  if (terminal && !onViewInAppointments && !arrivalError) return null;
+
+  return (
+    <div className="space-y-3">
+      {arrivalError && (
+        <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">
+          {arrivalError}
+        </p>
+      )}
+      {!terminal && (primaryActions.length > 0 || secondaryCount > 0 || arrivalUnavailable) && (
+        <div className={`grid grid-cols-1 gap-3 ${primaryActions.length > 0 && secondaryCount > 0 ? "sm:grid-cols-[auto_minmax(0,1fr)]" : ""} sm:items-start`}>
+          {primaryActions.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {primaryActions.map((action) => (
+                <Button
+                  key={action.status}
+                  type="button"
+                  size="md"
+                  variant="primary"
+                  className="min-h-11 w-full sm:w-auto"
+                  disabled={arrivalBusy}
+                  onClick={() => onRequestStatus(appointment, action.status)}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          )}
+          {(secondaryCount > 0 || arrivalUnavailable) && (
+            <div className={`${primaryActions.length > 0 ? "border-t border-line pt-3 sm:border-l sm:border-t-0 sm:pl-3 sm:pt-0" : ""} space-y-2`}>
+              {arrivalUnavailable && (
+                <p className="text-xs leading-relaxed text-ink-500" role="status">
+                  {hasArrivalTime
+                    ? "Arrival can only be recorded on the appointment’s calendar date in Manila time."
+                    : "Arrival is unavailable because the scheduled start time could not be loaded."}
+                </p>
+              )}
+              {secondaryCount > 0 && (
+                <div className={`grid gap-2 sm:flex sm:flex-wrap ${secondaryCount > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {canMarkArrived && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="soft"
+                      className="min-h-11 w-full sm:w-auto"
+                      loading={arrivalBusy}
+                      disabled={arrivalBusy || !arrivalAvailable}
+                      onClick={() => onMarkArrived(appointment)}
+                    >
+                      Person arrived
+                    </Button>
+                  )}
+                  {canReschedule && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="soft"
+                      className="min-h-11 w-full sm:w-auto"
+                      disabled={arrivalBusy}
+                      onClick={() => onReschedule(appointment)}
+                    >
+                      Reschedule
+                    </Button>
+                  )}
+                  {secondaryActions.map((action) => (
+                    <Button
+                      key={action.status}
+                      type="button"
+                      size="sm"
+                      variant="soft"
+                      className="min-h-11 w-full sm:w-auto"
+                      disabled={arrivalBusy}
+                      onClick={() => onRequestStatus(appointment, action.status)}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {onViewInAppointments && (
+        <div className="border-t border-line pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="soft"
+            className="min-h-11 w-full sm:w-auto"
+            onClick={onViewInAppointments}
+          >
+            View in appointments
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AppointmentDetails({
+  appointment,
+}) {
   const customer = appointment.customer || {};
   const terminal = isTerminalAppointment(appointment);
   const arrivedAtLabel = attendanceTimeLabel(appointment.arrived_at);
-  const arrivalAvailable = canRecordAppointmentArrival(
-    appointment,
-    arrivalClock,
-  );
-  const hasArrivalTime = Number.isFinite(Date.parse(appointment.start_at));
   return (
     <>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-            Appointment details
-          </p>
-          <h2 className="mt-2 break-all font-display text-2xl font-medium text-ink-900">
-            {appointment.reference_no || "Reference unavailable"}
-          </h2>
-        </div>
+        <h2 className="break-all font-display text-2xl font-medium text-ink-900">
+          {appointment.reference_no || "Reference unavailable"}
+        </h2>
         <StatusPill status={appointment.status} />
       </div>
       <div className="mt-6 border-t border-line pt-5">
@@ -641,7 +719,7 @@ function AppointmentDetails({
         <p className="mt-2 text-sm text-ink-600">
           Team member:{" "}
           <span className="font-semibold text-ink-900">
-            {appointmentStaffName(appointment)}
+            {getAppointmentStaffName(appointment)}
           </span>
         </p>
         {appointment.customer_cancellation_reason && (
@@ -713,81 +791,10 @@ function AppointmentDetails({
           </span>
         </p>
       </div>
-      {terminal ? (
+      {terminal && (
         <p className="mt-6 border-t border-line pt-5 text-sm leading-relaxed text-ink-500">
           Completed and cancelled appointments are read-only.
         </p>
-      ) : (
-        <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5">
-          {appointment.status === "Confirmed" &&
-            !appointment.arrived_at &&
-            onMarkArrived && (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="primary"
-                  className="min-h-11"
-                  loading={arrivalBusy}
-                  disabled={!arrivalAvailable}
-                  onClick={() => onMarkArrived(appointment)}
-                >
-                  Person arrived
-                </Button>
-                {!arrivalAvailable && (
-                  <p className="basis-full text-xs leading-relaxed text-ink-500" role="status">
-                    {hasArrivalTime
-                      ? "Arrival can only be recorded on the appointment’s calendar date in Manila time."
-                      : "Arrival is unavailable because the scheduled start time could not be loaded."}
-                  </p>
-                )}
-              </>
-            )}
-          {!appointment.arrived_at && (
-            <Button
-              type="button"
-              size="sm"
-              variant="soft"
-              className="min-h-11"
-              onClick={() => onReschedule(appointment)}
-            >
-              Reschedule
-            </Button>
-          )}
-          {appointmentActions(appointment.status).map((action) => (
-            <Button
-              key={action.status}
-              type="button"
-              size="sm"
-              variant={action.variant}
-              className="min-h-11"
-              onClick={() => onRequestStatus(appointment, action.status)}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      )}
-      {arrivalError && (
-        <p
-          className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
-          role="alert"
-        >
-          {arrivalError}
-        </p>
-      )}
-      {onViewInAppointments && (
-        <div className="mt-5 border-t border-line pt-5">
-          <Button
-            type="button"
-            size="sm"
-            variant="soft"
-            className="min-h-11 w-full sm:w-auto"
-            onClick={onViewInAppointments}
-          >
-            View in appointments
-          </Button>
-        </div>
       )}
     </>
   );
@@ -972,6 +979,17 @@ function NotificationAppointmentDialog({
           : "The appointment linked to this notification could not be displayed."
       }
       onClose={onClose}
+      footer={appointment && (!isTerminalAppointment(appointment) || onViewInAppointments) ? (
+        <AppointmentDetailsActions
+          appointment={appointment}
+          onRequestStatus={onRequestStatus}
+          onReschedule={onReschedule}
+          onMarkArrived={onMarkArrived}
+          arrivalBusy={arrivalBusy}
+          arrivalError={arrivalError}
+          onViewInAppointments={onViewInAppointments}
+        />
+      ) : null}
     >
       {state.loading && (
         <div
@@ -993,12 +1011,6 @@ function NotificationAppointmentDialog({
       {!state.loading && appointment && (
         <AppointmentDetails
           appointment={appointment}
-          onRequestStatus={onRequestStatus}
-          onReschedule={onReschedule}
-          onMarkArrived={onMarkArrived}
-          arrivalBusy={arrivalBusy}
-          arrivalError={arrivalError}
-          onViewInAppointments={onViewInAppointments}
         />
       )}
     </AdminDialog>
@@ -1553,16 +1565,10 @@ function FaqRow({ faq, onSaved }) {
 
 function ProfileRow({ profile, selected, onSelect }) {
   const name = staffDisplayName(profile);
-  const accountStatus = !profile.is_active
-    ? "Inactive"
-    : profile.accepts_appointments
-      ? "Bookable"
-      : "Appointments off";
-  const statusTone = !profile.is_active
-    ? "bg-danger/10 text-danger"
-    : profile.accepts_appointments
-      ? "bg-success/10 text-success"
-      : "bg-gold-100 text-ink-900";
+  const accountStatus = profile.is_active ? "Active" : "Inactive";
+  const statusTone = profile.is_active
+    ? "bg-success/10 text-success"
+    : "bg-danger/10 text-danger";
   return (
     <li className="border-b border-line last:border-b-0">
       <button
@@ -1575,11 +1581,6 @@ function ProfileRow({ profile, selected, onSelect }) {
           <span className="block truncate font-semibold text-ink-900">
             {name}
           </span>
-          {profile.position_title && (
-            <span className="mt-0.5 block truncate text-sm font-semibold text-brand-800">
-              {profile.position_title}
-            </span>
-          )}
           <span className="mt-0.5 block truncate text-xs text-ink-500">
             {profile.email}
           </span>
@@ -1602,16 +1603,17 @@ function ProfileRow({ profile, selected, onSelect }) {
   );
 }
 
-function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
+function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
   const [title, setTitle] = useState(staffMember?.position_title || "");
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   if (
     !canManage ||
     !staffMember ||
-    !isStaffRole(staffMember.role)
+    staffMember.record_kind !== "staff"
   )
     return null;
 
@@ -1633,9 +1635,11 @@ function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
       );
       return;
     }
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
-      const result = await updateAdminProfile(staffMember.id, {
+      const result = await updateAdminStaffMember(staffMember.id, {
         position_title: nextTitle,
       });
       if (!result.success)
@@ -1646,6 +1650,7 @@ function StaffPositionTitleEditor({ staffMember, canManage, onSaved }) {
     } catch (saveError) {
       setError(saveError?.message || "Could not save position title.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -1710,9 +1715,10 @@ function StaffAccountPanel({
   appointments,
   onRequestAction,
   actionBusy,
+  actionBusyLabel,
+  actionFeedback,
   canManage,
 }) {
-  const bookable = isBookableStaff(staffMember);
   const selectedStaffKey = String(staffMember?.id || "");
   const assignedAppointments = appointments
     .filter(
@@ -1747,28 +1753,15 @@ function StaffAccountPanel({
           </h2>
           <p className="mt-1 text-sm text-ink-500">
             {staffMember
-              ? bookable
-                ? "Account status and assigned appointments."
-                : "This account is not bookable for new appointments."
-              : "Select an account to review its assigned appointments."}
+              ? "Login access and appointments assigned to this account before roster migration."
+              : "Select an admin or head account to review login access."}
           </p>
-          {staffMember && (
-            <p className="mt-2 text-xs font-semibold text-gold-600">
-              {staffMember.rating_count > 0
-                ? `${Number(staffMember.average_rating).toFixed(1)} / 5 · ${staffMember.rating_count} published rating${staffMember.rating_count === 1 ? "" : "s"}`
-                : "No ratings yet"}
-            </p>
-          )}
         </div>
         {staffMember && (
           <span
-            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${bookable ? "bg-success/10 text-success" : "bg-canvas text-ink-500"}`}
+            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${staffMember.is_active ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}
           >
-            {bookable
-              ? "Bookable"
-              : staffMember.is_active
-                ? "Not bookable"
-                : "Inactive"}
+            {staffMember.is_active ? "Active account" : "Inactive account"}
           </span>
         )}
       </div>
@@ -1777,11 +1770,11 @@ function StaffAccountPanel({
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
               <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-                Account controls
+                Login account controls
               </h3>
               <p className="mt-1 text-xs text-ink-500">
-                Changes apply to {staffDisplayName(staffMember)} after
-                confirmation.
+                Activation is immediate. Deactivation, role changes, and
+                password reset sends require confirmation.
               </p>
             </div>
             {actionBusy && (
@@ -1789,30 +1782,11 @@ function StaffAccountPanel({
                 className="text-xs font-semibold text-brand-800"
                 role="status"
               >
-                Saving account change…
+                {actionBusyLabel || "Saving account change…"}
               </span>
             )}
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            
-            <Button
-              type="button"
-              size="sm"
-              variant={staffMember.accepts_appointments ? "primary" : "soft"}
-              disabled={actionBusy}
-              onClick={() =>
-                onRequestAction({
-                  type: "appointments",
-                  enabled: !staffMember.accepts_appointments,
-                })
-              }
-              aria-pressed={staffMember.accepts_appointments}
-              className="min-h-11 self-end"
-            >
-              {staffMember.accepts_appointments
-                ? "Disable appointments"
-                : "Enable appointments"}
-            </Button>
             <Button
               type="button"
               size="sm"
@@ -1841,23 +1815,19 @@ function StaffAccountPanel({
               Send password reset
             </Button>
           </div>
-          <StaffPositionTitleEditor
-            key={`${staffMember.id}:${staffMember.position_title || ""}`}
-            staffMember={staffMember}
-            canManage={canManage}
-            onSaved={(id, positionTitle) =>
-              onRequestAction({
-                type: "position_title_saved",
-                id,
-                position_title: positionTitle,
-              })
-            }
-          />
+          {actionFeedback && actionFeedback.kind !== "busy" && (
+            <p
+              className={`mt-3 text-sm font-semibold ${actionFeedback.kind === "error" ? "text-danger" : "text-success"}`}
+              role={actionFeedback.kind === "error" ? "alert" : "status"}
+            >
+              {actionFeedback.message}
+            </p>
+          )}
         </div>
       )}
       {!staffMember ? (
         <p className="py-8 text-sm text-ink-500">
-          Choose an account to view its assigned appointments.
+          Choose an account to review its access and historical assignments.
         </p>
       ) : <div className="mt-6 border-t border-line pt-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -1900,6 +1870,136 @@ function StaffAccountPanel({
   );
 }
 
+function TeamRosterPanel({
+  members,
+  busyId,
+  feedback,
+  onChange,
+  onTitleSaved,
+  canManage,
+}) {
+  const owner = members.find((member) => member.record_kind === "owner");
+  const teamMembers = members.filter((member) => member.record_kind === "staff");
+  const legacyMembers = members.filter((member) => member.record_kind === "legacy");
+  return (
+    <Card className="p-5 sm:p-7">
+      <CardHeader
+        title="Team roster"
+        subtitle="These records are separate from admin and head login accounts. Only active, bookable staff appear in new booking choices."
+      />
+      <ul className="divide-y divide-line">
+        {owner && (
+          <li className="flex flex-wrap items-center justify-between gap-4 py-4">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink-900">{owner.full_name}</p>
+              <p className="mt-1 text-xs text-ink-500">Owner record · no login</p>
+            </div>
+            <span className="rounded-full bg-canvas px-2.5 py-1 text-[10px] font-bold uppercase text-ink-600">
+              Owner · not bookable
+            </span>
+          </li>
+        )}
+        {teamMembers.map((member) => {
+          const isBusy = busyId === String(member.id);
+          return (
+            <li key={member.id} className="py-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink-900">{member.full_name}</p>
+                  {member.position_title && (
+                    <p className="mt-0.5 text-sm font-semibold text-brand-800">
+                      {member.position_title}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-ink-500">Roster record · no login</p>
+                  {member.rating_count > 0 && (
+                    <p className="mt-1 text-xs font-semibold text-gold-600">
+                      {Number(member.average_rating).toFixed(1)} / 5 · {member.rating_count} published ratings
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${member.is_active ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                    {member.is_active ? "Active" : "Inactive"}
+                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${member.is_active && member.is_bookable ? "bg-success/10 text-success" : "bg-canvas text-ink-500"}`}>
+                    {member.is_bookable
+                      ? member.is_active
+                        ? "Bookable"
+                        : "Bookable when active"
+                      : "Not bookable"}
+                  </span>
+                </div>
+              </div>
+              {canManage && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={member.is_active ? "soft" : "primary"}
+                    className="min-h-11"
+                    disabled={busyId !== null}
+                    loading={isBusy}
+                    onClick={() => onChange(member, { is_active: !member.is_active })}
+                  >
+                    {member.is_active ? "Deactivate roster record" : "Activate roster record"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={member.is_bookable ? "soft" : "primary"}
+                    className="min-h-11"
+                    disabled={busyId !== null}
+                    onClick={() => onChange(member, { is_bookable: !member.is_bookable })}
+                  >
+                    {member.is_bookable ? "Remove from booking choices" : "Add to booking choices"}
+                  </Button>
+                </div>
+              )}
+              {canManage && (
+                <TeamMemberTitleEditor
+                  key={`${member.id}:${member.position_title || ""}`}
+                  staffMember={member}
+                  canManage={canManage}
+                  onSaved={onTitleSaved}
+                />
+              )}
+              {feedback?.id === String(member.id) && feedback.kind !== "busy" && (
+                <p
+                  className={`mt-2 text-sm font-semibold ${feedback.kind === "error" ? "text-danger" : "text-success"}`}
+                  role={feedback.kind === "error" ? "alert" : "status"}
+                >
+                  {feedback.message}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {!teamMembers.length && (
+        <p className="py-6 text-sm text-ink-500">No staff roster records are available.</p>
+      )}
+      {legacyMembers.length > 0 && (
+        <details className="mt-3 border-t border-line pt-4">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink-700">
+            Archived booking identities ({legacyMembers.length})
+          </summary>
+          <p className="mb-2 text-xs text-ink-500">
+            These records preserve existing appointment and rating history. They are inactive and cannot be selected for new bookings.
+          </p>
+          <ul className="divide-y divide-line">
+            {legacyMembers.map((member) => (
+              <li key={member.id} className="py-3 text-sm text-ink-700">
+                {member.full_name}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Card>
+  );
+}
+
 export function AdminPage() {
   const { customer, logout } = useAuth();
   const navigate = useNavigate();
@@ -1917,6 +2017,8 @@ export function AdminPage() {
   const [faqs, setFaqs] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [teamRoster, setTeamRoster] = useState([]);
+  const [teamRosterError, setTeamRosterError] = useState("");
   const [customerHistory, setCustomerHistory] = useState([]);
   const [customerHistoryLoading, setCustomerHistoryLoading] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -2014,6 +2116,12 @@ export function AdminPage() {
   const [staffAction, setStaffAction] = useState(null);
   const [staffActionBusy, setStaffActionBusy] = useState(false);
   const [staffActionError, setStaffActionError] = useState("");
+  const staffActivationBusyRef = useRef(false);
+  const [staffActivationBusyId, setStaffActivationBusyId] = useState(null);
+  const [staffActivationFeedback, setStaffActivationFeedback] = useState(null);
+  const rosterBusyRef = useRef(null);
+  const [rosterBusyId, setRosterBusyId] = useState(null);
+  const [rosterFeedback, setRosterFeedback] = useState(null);
 
   useEffect(() => {
     workspaceMountedRef.current = true;
@@ -2083,12 +2191,16 @@ export function AdminPage() {
         nextFaqs,
         nextAbout,
         nextProfiles,
+        rosterResult,
       ] = await Promise.all([
         listAdminAppointments(),
         listAdminServices(),
         listAdminFaqs(),
         getAdminAbout(),
         listAdminProfiles(),
+        listAdminStaffMembers()
+          .then((members) => ({ members }))
+          .catch((rosterLoadError) => ({ rosterLoadError })),
       ]);
       setAppointments(nextAppointments);
       setSelectedAppointment((current) =>
@@ -2123,12 +2235,16 @@ export function AdminPage() {
             !(!profile.is_active && profile.accepts_appointments),
         ),
       );
+      if (rosterResult.rosterLoadError) {
+        setTeamRosterError(
+          rosterResult.rosterLoadError.message || "Could not load the team roster.",
+        );
+      } else {
+        setTeamRoster(rosterResult.members);
+        setTeamRosterError("");
+      }
       const nextStaff = nextProfiles.filter(
-        (profile) =>
-          isStaffRole(profile.role) ||
-          (profile.role === "customer" &&
-            !profile.is_active &&
-            profile.accepts_appointments),
+        (profile) => isStaffRole(profile.role),
       );
       setStaff(nextStaff);
       setSelectedStaffId((current) =>
@@ -2365,7 +2481,7 @@ export function AdminPage() {
     if (
       !current ||
       isTerminalAppointment(current) ||
-      !appointmentActions(current.status).some(
+      !getAdminAppointmentActions(current.status).some(
         (action) => action.status === nextStatus,
       )
     )
@@ -2398,7 +2514,7 @@ export function AdminPage() {
       busyRef: statusBusyRef,
       isTransitionAllowed: (current, nextStatus) =>
         !isTerminalAppointment(current) &&
-        appointmentActions(current.status).some(
+        getAdminAppointmentActions(current.status).some(
           (action) => action.status === nextStatus,
         ),
       updateStatus: updateAppointmentStatus,
@@ -2614,27 +2730,91 @@ export function AdminPage() {
     closeNotificationAppointment(true);
     openReschedule(appointment);
   };
-  const requestStaffAction = (action) => {
-    if (action.type === "position_title_saved") {
-      const profileId = String(action.id || "");
-      if (
-        customer?.role !== "admin" ||
-        !staff.some((profile) => String(profile.id) === profileId)
-      )
-        return;
-      setStaff((current) =>
-        current.map((profile) =>
-          String(profile.id) === profileId
-            ? { ...profile, position_title: action.position_title }
-            : profile,
+  const updateRosterMember = async (member, fields) => {
+    const id = String(member?.id || "");
+    if (
+      customer?.role !== "admin" ||
+      !id ||
+      rosterBusyRef.current !== null
+    ) return;
+    const targetName = String(member.full_name || "Team member");
+    rosterBusyRef.current = id;
+    setRosterBusyId(id);
+    setRosterFeedback({ id, kind: "busy", message: `Saving ${targetName}…` });
+    try {
+      const result = await updateAdminStaffMember(id, fields);
+      if (!result.success) throw new Error(result.error || "Could not update the team roster.");
+      setTeamRoster((current) =>
+        current.map((item) =>
+          String(item.id) === id ? { ...item, ...result } : item,
         ),
       );
-      setError("");
-      setNotice("Position title saved.");
-      return;
+      const message = fields.is_active !== undefined
+        ? `${targetName} ${fields.is_active ? "activated" : "deactivated"}.`
+        : fields.is_bookable !== undefined
+          ? `${targetName} ${fields.is_bookable ? "added to" : "removed from"} booking choices.`
+          : `${targetName} roster record saved.`;
+      setRosterFeedback({ id, kind: "success", message });
+    } catch (rosterError) {
+      setRosterFeedback({
+        id,
+        kind: "error",
+        message: rosterError?.message || "Could not update the team roster.",
+      });
+    } finally {
+      rosterBusyRef.current = null;
+      setRosterBusyId(null);
     }
+  };
+  const saveRosterTitle = (id, positionTitle) => {
+    const targetId = String(id || "");
+    setTeamRoster((current) =>
+      current.map((member) =>
+        String(member.id) === targetId
+          ? { ...member, position_title: positionTitle }
+          : member,
+      ),
+    );
+    const member = teamRoster.find((item) => String(item.id) === targetId);
+    if (member) setRosterFeedback({ id: targetId, kind: "success", message: `${member.full_name} roster record saved.` });
+  };
+  const requestStaffAction = (action) => {
     if (!selectedStaff || customer?.role !== "admin" || staffActionBusy) return;
     const name = staffDisplayName(selectedStaff);
+    if (action.type === "active" && action.enabled === true) {
+      const target = {
+        id: String(selectedStaff.id),
+        name,
+        is_active: selectedStaff.is_active,
+      };
+      void activateStaffAccountImmediately({
+        target,
+        isAdmin: customer?.role === "admin",
+        busyRef: staffActivationBusyRef,
+        setBusyId: setStaffActivationBusyId,
+        setFeedback: (feedback) => {
+          setStaffActivationFeedback(feedback);
+          if (feedback.kind === "busy") {
+            setError("");
+            setNotice("");
+          }
+          if (feedback.kind === "error") setError(feedback.message);
+        },
+        updateAccount: updateAdminProfile,
+        onSaved: (targetId) => {
+          setStaff((current) =>
+            current.map((profile) =>
+              String(profile.id) === targetId
+                ? { ...profile, is_active: true }
+                : profile,
+            ),
+          );
+          setNotice(`${name} activated.`);
+        },
+      });
+      return;
+    }
+    if (staffActivationBusyRef.current) return;
     let nextAction = null;
     if (
       action.type === "role" &&
@@ -2649,19 +2829,6 @@ export function AdminPage() {
         confirmLabel: `Change to ${action.nextRole === "admin" ? "admin" : "head"}`,
         variant: "primary",
       };
-    } else if (action.type === "appointments") {
-      nextAction = {
-        type: "appointments",
-        fields: { accepts_appointments: action.enabled === true },
-        title: `${action.enabled ? "Enable" : "Disable"} appointments for ${name}?`,
-        description: action.enabled
-          ? "This account will be eligible for new customer bookings once it is active."
-          : "New customer bookings will no longer offer this account. Existing assigned bookings are unchanged.",
-        confirmLabel: action.enabled
-          ? "Enable appointments"
-          : "Disable appointments",
-        variant: "primary",
-      };
     } else if (action.type === "active") {
       nextAction = {
         type: "active",
@@ -2669,7 +2836,7 @@ export function AdminPage() {
         title: `${action.enabled ? "Activate" : "Deactivate"} ${name}?`,
         description: action.enabled
           ? "This account will be able to sign in again, subject to its role."
-          : "This prevents sign-in and removes the account from customer-facing staff choices. Existing assigned bookings are unchanged.",
+          : "This prevents the account from signing in. Existing assigned appointments remain in its history.",
         confirmLabel: action.enabled
           ? "Activate account"
           : "Deactivate account",
@@ -3299,28 +3466,29 @@ export function AdminPage() {
             />
           ) : tab === "staff" ? (
             <div className="space-y-6">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm text-ink-500">
-                    Select an account to review assigned appointments or change access.
-                    Activation controls sign-in; “Accepts appointments”
-                    separately controls eligibility for new customer bookings.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="min-h-11"
-                  onClick={openInvite}
-                >
-                  Invite staff
-                </Button>
-              </div>
+              {teamRosterError && (
+                <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">
+                  {teamRosterError}
+                </p>
+              )}
+              <TeamRosterPanel
+                members={teamRoster}
+                busyId={rosterBusyId}
+                feedback={rosterFeedback}
+                onChange={updateRosterMember}
+                onTitleSaved={saveRosterTitle}
+                canManage={customer?.role === "admin"}
+              />
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
                 <Card className="p-5 sm:p-7">
                   <CardHeader
-                    title="Accounts management"
-                    subtitle="Select an account to review assigned appointments, update access, or send a recovery link."
+                    title="Admin and Head login accounts"
+                    subtitle="These accounts can sign in to the staff workspace. Roster booking eligibility is managed above."
+                    action={customer?.role === "admin" ? (
+                      <Button type="button" size="sm" className="min-h-11" onClick={openInvite}>
+                        Invite login account
+                      </Button>
+                    ) : null}
                   />
                   <ul className="mt-2">
                     {staff.length ? (
@@ -3334,7 +3502,7 @@ export function AdminPage() {
                       ))
                     ) : (
                       <li className="py-10 text-center text-sm text-ink-500">
-                        No staff accounts yet.
+                        No admin or head login accounts yet.
                       </li>
                     )}
                   </ul>
@@ -3343,7 +3511,17 @@ export function AdminPage() {
                   staffMember={selectedStaff}
                   appointments={appointments}
                   onRequestAction={requestStaffAction}
-                  actionBusy={staffActionBusy}
+                  actionBusy={staffActionBusy || staffActivationBusyId !== null}
+                  actionBusyLabel={
+                    staffActivationFeedback?.kind === "busy"
+                      ? staffActivationFeedback.message
+                      : "Saving account change…"
+                  }
+                  actionFeedback={
+                    staffActivationFeedback?.id === String(selectedStaff?.id || "")
+                      ? staffActivationFeedback
+                      : null
+                  }
                   canManage={customer?.role === "admin"}
                 />
               </div>
@@ -3374,9 +3552,8 @@ export function AdminPage() {
         onClose={() => setSelectedAppointment(null)}
         returnFocusRef={appointmentReturnFocusRef}
         fallbackFocusRef={appointmentQueueHeadingRef}
-      >
-        {selectedVisibleAppointment && (
-          <AppointmentDetails
+        footer={selectedVisibleAppointment && !isTerminalAppointment(selectedVisibleAppointment) ? (
+          <AppointmentDetailsActions
             appointment={selectedVisibleAppointment}
             onRequestStatus={requestStatus}
             onReschedule={openReschedule}
@@ -3387,6 +3564,12 @@ export function AdminPage() {
                 ? arrivalError.message
                 : ""
             }
+          />
+        ) : null}
+      >
+        {selectedVisibleAppointment && (
+          <AppointmentDetails
+            appointment={selectedVisibleAppointment}
           />
         )}
       </AdminDialog>

@@ -53,7 +53,7 @@ test('staff appointments reconcile after staff validation and before appointment
   const listAppointments = adminApi.slice(adminApi.indexOf('export async function listAdminAppointments()'), adminApi.indexOf('export async function updateAppointmentStatus'));
   const staffValidation = listAppointments.indexOf('await assertStaff()');
   const reconciliation = listAppointments.indexOf("client.rpc('reconcile_expired_pending_appointments')");
-  const queries = listAppointments.indexOf('const [appointmentResult, aggregateResult]');
+  const queries = listAppointments.indexOf('const appointmentSelection');
   assert.ok(staffValidation >= 0 && reconciliation > staffValidation && queries > reconciliation);
   assert.match(listAppointments, /throwIfError\([\s\S]*?client\.rpc\('reconcile_expired_pending_appointments'\)[\s\S]*?'Could not refresh expired appointments/);
 });

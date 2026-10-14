@@ -6,6 +6,9 @@ function relatedRecord(value) {
 }
 
 function displayName(profile, fallback) {
+  if (typeof profile?.full_name === 'string' && profile.full_name.trim()) {
+    return profile.full_name.trim();
+  }
   const name = [profile?.first_name, profile?.last_name]
     .filter((part) => typeof part === 'string')
     .map((part) => part.trim())
@@ -31,7 +34,8 @@ export function normalizeReviewModerationRow(row) {
 
   const customer = relatedRecord(row.profiles);
   const appointment = relatedRecord(row.appointments);
-  const staff = relatedRecord(appointment?.staff);
+  const staff = relatedRecord(appointment?.staff_member) || relatedRecord(appointment?.staff);
+  const assignedStaffId = appointment?.staff_member_id || appointment?.staff_id;
   const services = Array.isArray(appointment?.appointment_services)
     ? appointment.appointment_services
       .map((service) => typeof service?.service_name === 'string' ? service.service_name.trim() : '')
@@ -48,7 +52,7 @@ export function normalizeReviewModerationRow(row) {
     customer_name: displayName(customer, 'Customer'),
     appointment_date: typeof appointment?.local_date === 'string' ? appointment.local_date : '',
     appointment_time: typeof appointment?.local_time === 'string' ? appointment.local_time.slice(0, 5) : '',
-    staff_name: appointment?.staff_id ? displayName(staff, 'Assigned team member') : 'Unassigned',
+    staff_name: assignedStaffId ? displayName(staff, 'Assigned team member') : 'Unassigned',
     service_names: services.length ? services.join(', ') : 'Beauty service',
   };
 }

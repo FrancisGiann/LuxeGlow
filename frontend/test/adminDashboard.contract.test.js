@@ -41,8 +41,11 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
   assert.doesNotMatch(publicLayout, /Admin dashboard/);
   assert.match(adminPage, /customer\?\.first_name \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
   assert.match(adminPage, /join\(" "\) \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
-  assert.match(adminPage, /title="Accounts management"/);
-  assert.match(adminPage, /Activation controls sign-in; “Accepts appointments”\s+separately controls eligibility for new customer bookings/);
+  assert.match(adminPage, /label: "Accounts management"/);
+  assert.match(adminPage, /Team roster/);
+  assert.match(adminPage, /Admin and Head login accounts/);
+  assert.match(adminPage, /Activation is immediate\. Deactivation, role changes, and\s+password reset sends require confirmation\./);
+  assert.doesNotMatch(adminPage, /Disable appointments|Enable appointments|removes the account from customer-facing staff choices/);
 });
 
 test('Appointments is the unknown-tab fallback and queue props have one implementation', () => {
