@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
+import { BrandLogo } from '../branding/BrandLogo';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
@@ -29,10 +30,8 @@ const VIEWS = {
 
 function BrandMark() {
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-semibold text-brand-800">
-        A
-      </div>
+    <div className="flex justify-center">
+      <BrandLogo className="h-24 w-24" />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { Button } from "../components/ui/Button";
 import { StatusPill } from "../components/ui/StatusPill";
 import { Spinner } from "../components/ui/Spinner";
 import { AdminDialog } from "../components/admin/AdminDialog";
+import { BrandLogo } from "../components/branding/BrandLogo";
 import { useToast } from "../components/ui/Toast";
 import { useToastControls } from "../components/ui/ToastControls";
 import { StaffNotificationBell } from "../components/admin/StaffNotificationBell";
@@ -153,17 +154,8 @@ const ADMIN_MOBILE_MENU_ID = "admin-mobile-menu";
 
 function AdminWorkspaceBrand() {
   return (
-    <div className="flex items-center gap-3 border-b border-line px-5 py-7">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-medium text-gold-600">
-        A
-      </span>
-      <span className="font-display text-sm font-semibold leading-[0.95] text-ink-900">
-        Astrid Nails
-        <br />
-        <span className="font-sans text-[8px] font-bold uppercase tracking-[0.15em] text-ink-500">
-          &amp; Beauty Bar
-        </span>
-      </span>
+    <div className="flex justify-center border-b border-line px-5 py-2">
+      <BrandLogo className="h-20 w-20" />
     </div>
   );
 }

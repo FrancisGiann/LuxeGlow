@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getAbout } from '../../api/endpoints';
 import { useFetch } from '../../hooks/useFetch';
 import { AuthModal } from '../auth/AuthModal';
+import { BrandLogo } from '../branding/BrandLogo';
 import { getInitials } from '../../utils/format';
 import { isStaffRole } from '../../utils/roles';
 import { IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
@@ -14,15 +15,6 @@ const NAV_LINKS = [
   ['About', '#about'],
   ['FAQs', '#faqs'],
 ];
-
-function SalonWordmark({ compact = false }) {
-  return (
-    <span className="flex flex-col text-left leading-[0.9]">
-      <span className={`${compact ? 'text-base' : 'text-lg'} font-display font-semibold tracking-[-0.03em] text-ink-900`}>Astrid Nails</span>
-      <span className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-ink-500">&amp; Beauty Bar</span>
-    </span>
-  );
-}
 
 function Navbar() {
   const { isAuthenticated, customer, openAuth } = useAuth();
@@ -51,8 +43,8 @@ function Navbar() {
   return (
     <header className={`fixed inset-x-0 top-0 z-[900] border-b border-line bg-canvas/95 transition-shadow duration-300 ${scrolled ? 'shadow-card backdrop-blur-sm' : ''}`}>
       <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between gap-6 px-5 sm:px-8 lg:px-14">
-        <button type="button" onClick={goHome} aria-label="Astrid Nails and Beauty Bar home" className="rounded-lg">
-          <SalonWordmark />
+        <button type="button" onClick={goHome} aria-label="Astrid Nails & Beauty Bar home" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg">
+          <BrandLogo className="h-16 w-16" />
         </button>
 
         <nav aria-label="Primary navigation" className="hidden items-center gap-7 xl:flex">
@@ -110,7 +102,7 @@ function Footer() {
     <footer id="contact" className="border-t border-line bg-surface">
       <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-16 sm:px-8 md:grid-cols-[1.3fr_0.7fr_1fr] lg:px-14">
         <div>
-          <SalonWordmark />
+          <BrandLogo className="h-28 w-28" loading="lazy" />
           <p className="mt-5 max-w-[38ch] text-sm leading-relaxed text-ink-500">{about?.description || 'A considered menu of nail, lash, and spa treatments in Lucena City.'}</p>
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-ink-400">LuxeGlow experience</p>
         </div>

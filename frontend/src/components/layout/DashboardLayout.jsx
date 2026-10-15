@@ -5,6 +5,7 @@ import { useDashboard } from '../../context/DashboardContext';
 import { logoutToPublicHome } from '../../utils/manualLogout';
 import { DashboardDataNotice } from '../dashboard/DashboardDataNotice';
 import { NotificationBell } from '../dashboard/NotificationBell';
+import { BrandLogo } from '../branding/BrandLogo';
 import { IconCalendar, IconGrid, IconLogout, IconMenu, IconSparkle, IconStar, IconUser, IconX } from '../icons';
 
 const NAV_ITEMS = [
@@ -24,7 +25,7 @@ const PAGE_TITLES = {
 };
 
 function Brand() {
-  return <div className="flex items-center gap-3 px-5 pb-8 pt-7"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-500 font-display text-xl font-medium text-gold-600">A</span><span className="font-display text-[15px] font-semibold leading-[0.95] tracking-[-0.03em] text-ink-900">Astrid Nails<br /><span className="font-sans text-[9px] font-bold uppercase tracking-[0.16em] text-ink-500">&amp; Beauty Bar</span></span></div>;
+  return <div className="flex justify-center px-5 pb-5 pt-4"><BrandLogo className="h-20 w-20" /></div>;
 }
 
 function SidebarContent({ onNavigate }) {
