@@ -79,6 +79,8 @@ import {
 } from "../utils/adminStatusConfirmation";
 import { activateStaffAccountImmediately } from "../utils/adminStaffActivation";
 import { getAdminAppointmentActions } from "../utils/adminAppointmentActions";
+import { createStaffDirectory } from "../utils/staffDirectory";
+import { StaffDirectory } from "../components/admin/StaffDirectory";
 
 const createServiceDraft = () => ({
   id: globalThis.crypto.randomUUID(),
@@ -1563,52 +1565,71 @@ function FaqRow({ faq, onSaved }) {
   );
 }
 
-function ProfileRow({ profile, selected, onSelect }) {
-  const name = staffDisplayName(profile);
-  const accountStatus = profile.is_active ? "Active" : "Inactive";
-  const statusTone = profile.is_active
-    ? "bg-success/10 text-success"
-    : "bg-danger/10 text-danger";
+function AssignedAppointments({ appointments, staffId }) {
+  const assignedAppointments = appointments
+    .filter((appointment) => String(appointment.staff_id || "") === String(staffId || ""))
+    .map((appointment, index) => ({ appointment, index }))
+    .sort(({ appointment: left, index: leftIndex }, { appointment: right, index: rightIndex }) =>
+      String(left.local_date || "\uffff").localeCompare(String(right.local_date || "\uffff")) ||
+      String(left.local_time || "\uffff").localeCompare(String(right.local_time || "\uffff")) ||
+      leftIndex - rightIndex,
+    )
+    .map(({ appointment }) => appointment);
+  const blockingAppointments = assignedAppointments.filter((appointment) =>
+    ["Pending", "Confirmed"].includes(appointment.status),
+  );
+  const otherAppointments = assignedAppointments.filter(
+    (appointment) => !["Pending", "Confirmed"].includes(appointment.status),
+  );
+
   return (
-    <li className="border-b border-line last:border-b-0">
-      <button
-        type="button"
-        onClick={() => onSelect(profile.id)}
-        aria-pressed={selected}
-        className={`grid min-h-20 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${selected ? "bg-blush-50" : "hover:bg-canvas"}`}
-      >
-        <span className="min-w-0">
-          <span className="block truncate font-semibold text-ink-900">
-            {name}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-ink-500">
-            {profile.email}
-          </span>
+    <div className="mt-6 border-t border-line pt-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h3 className="font-display text-lg font-medium text-ink-900">
+          Assigned appointments
+        </h3>
+        <span className="text-xs text-ink-500">
+          {assignedAppointments.length} appointment
+          {assignedAppointments.length === 1 ? "" : "s"}
         </span>
-        <span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-          <span
-            aria-label={`Account status: ${accountStatus}`}
-            className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold ${statusTone}`}
-          >
-            {accountStatus}
-          </span>
-          <IconArrowRight
-            size={16}
-            aria-hidden="true"
-            className={`shrink-0 text-ink-400 transition-transform ${selected ? "translate-x-0.5 text-brand-700" : ""}`}
-          />
-        </span>
-      </button>
-    </li>
+      </div>
+      {assignedAppointments.length ? (
+        <ul className="mt-3 divide-y divide-line">
+          {[...blockingAppointments, ...otherAppointments].map((appointment) => (
+            <li
+              key={appointment.id}
+              className="flex flex-wrap items-center justify-between gap-3 py-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink-900">
+                  {appointment.reference_no}
+                </p>
+                <p className="mt-1 text-xs text-ink-500">
+                  {localDateLabel(appointment.local_date)} ·{" "}
+                  {appointment.local_time?.slice(0, 5) || "Time unavailable"}{" "}
+                  · {appointment.total_duration_minutes || "—"} min
+                </p>
+              </div>
+              <StatusPill status={appointment.status} size="sm" />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-5 text-sm text-ink-500">
+          No assigned appointments found.
+        </p>
+      )}
+    </div>
   );
 }
 
-function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
+function TeamMemberTitleEditor({ staffMember, canManage, onSave, pending = false }) {
   const [title, setTitle] = useState(staffMember?.position_title || "");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const isBusy = busy || pending;
 
   if (
     !canManage ||
@@ -1635,18 +1656,15 @@ function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
       );
       return;
     }
-    if (busyRef.current) return;
+    if (busyRef.current || pending) return;
     busyRef.current = true;
     setBusy(true);
     try {
-      const result = await updateAdminStaffMember(staffMember.id, {
-        position_title: nextTitle,
-      });
+      const result = await onSave(staffMember.id, nextTitle);
       if (!result.success)
         throw new Error(result.error || "Could not save position title.");
       const savedTitle = normalizeStaffPositionTitle(result.position_title);
       setTitle(savedTitle || "");
-      onSaved(staffMember.id, savedTitle);
     } catch (saveError) {
       setError(saveError?.message || "Could not save position title.");
     } finally {
@@ -1659,11 +1677,11 @@ function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
   return (
     <form
       onSubmit={save}
-      aria-busy={busy}
+      aria-busy={isBusy}
       className="mt-4 grid gap-2 border-t border-line pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
     >
       <label htmlFor={inputId} className="text-sm font-semibold text-ink-900">
-        Optional position title
+        Position title
         <input
           id={inputId}
           type="text"
@@ -1674,8 +1692,8 @@ function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
             setError("");
             setNotice("");
           }}
-          placeholder="Head Massage Therapist"
-          disabled={busy}
+          placeholder="e.g. Nail Artist"
+          disabled={isBusy}
           aria-invalid={!!error}
           aria-describedby={error ? `${inputId}-error` : undefined}
           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm font-normal text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:opacity-60"
@@ -1685,9 +1703,9 @@ function TeamMemberTitleEditor({ staffMember, canManage, onSaved }) {
         type="submit"
         size="sm"
         className="min-h-11 w-fit justify-self-start"
-        disabled={busy}
+        disabled={isBusy}
       >
-        {busy ? "Saving…" : "Save title"}
+        {isBusy ? "Saving…" : "Save title"}
       </Button>
       {error && (
         <p
@@ -1719,43 +1737,25 @@ function StaffAccountPanel({
   actionFeedback,
   canManage,
 }) {
-  const selectedStaffKey = String(staffMember?.id || "");
-  const assignedAppointments = appointments
-    .filter(
-      (appointment) =>
-        String(appointment.staff_id || "") === selectedStaffKey,
-    )
-    .map((appointment, index) => ({ appointment, index }))
-    .sort(({ appointment: left, index: leftIndex }, { appointment: right, index: rightIndex }) =>
-      String(left.local_date || "\uffff").localeCompare(
-        String(right.local_date || "\uffff"),
-      ) ||
-      String(left.local_time || "\uffff").localeCompare(
-        String(right.local_time || "\uffff"),
-      ) ||
-      leftIndex - rightIndex,
-    )
-    .map(({ appointment }) => appointment);
-  const blockingAppointments = assignedAppointments.filter((appointment) =>
-    ["Pending", "Confirmed"].includes(appointment.status),
-  );
-  const otherAppointments = assignedAppointments.filter(
-    (appointment) => !["Pending", "Confirmed"].includes(appointment.status),
-  );
   return (
     <Card className="p-5 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="mt-2 font-display text-2xl font-medium text-ink-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="staff-directory-details-heading" tabIndex={-1} className="font-display text-2xl font-medium text-ink-900">
             {staffMember
               ? staffDisplayName(staffMember)
-              : "Choose a staff account"}
-          </h2>
-          <p className="mt-1 text-sm text-ink-500">
-            {staffMember
-              ? "Login access and appointments assigned to this account before roster migration."
-              : "Select an admin or head account to review login access."}
-          </p>
+              : "Choose a person"}
+            </h2>
+            {staffMember && (
+              <span className="rounded-full bg-canvas px-2.5 py-1 text-[10px] font-bold uppercase text-ink-600">
+                {staffMember.role === "admin" ? "Admin" : "Head"}
+              </span>
+            )}
+          </div>
+          {staffMember?.email && (
+            <p className="mt-1 text-sm text-ink-500">{staffMember.email}</p>
+          )}
         </div>
         {staffMember && (
           <span
@@ -1770,12 +1770,9 @@ function StaffAccountPanel({
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
               <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-                Login account controls
+                Account controls
               </h3>
-              <p className="mt-1 text-xs text-ink-500">
-                Activation is immediate. Deactivation, role changes, and
-                password reset sends require confirmation.
-              </p>
+              <p className="mt-1 text-xs text-ink-500">Manage sign-in access.</p>
             </div>
             {actionBusy && (
               <span
@@ -1827,174 +1824,108 @@ function StaffAccountPanel({
       )}
       {!staffMember ? (
         <p className="py-8 text-sm text-ink-500">
-          Choose an account to review its access and historical assignments.
+          Select a person to view details.
         </p>
-      ) : <div className="mt-6 border-t border-line pt-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="font-display text-lg font-medium text-ink-900">
-            Assigned appointments
-          </h3>
-          <span className="text-xs text-ink-500">
-            {assignedAppointments.length} appointment
-            {assignedAppointments.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {assignedAppointments.length ? (
-          <ul className="mt-3 divide-y divide-line">
-            {[...blockingAppointments, ...otherAppointments].map((appointment) => (
-              <li
-                key={appointment.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink-900">
-                    {appointment.reference_no}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-500">
-                    {localDateLabel(appointment.local_date)} ·{" "}
-                    {appointment.local_time?.slice(0, 5) || "Time unavailable"}{" "}
-                    · {appointment.total_duration_minutes || "—"} min
-                  </p>
-                </div>
-                <StatusPill status={appointment.status} size="sm" />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="py-5 text-sm text-ink-500">
-            No assigned appointments found.
-          </p>
-        )}
-      </div>}
+      ) : <AssignedAppointments appointments={appointments} staffId={staffMember.id} />}
     </Card>
   );
 }
 
-function TeamRosterPanel({
-  members,
+function TeamMemberDetailsPanel({
+  staffMember,
+  appointments,
   busyId,
   feedback,
   onChange,
-  onTitleSaved,
+  onSaveTitle,
   canManage,
 }) {
-  const owner = members.find((member) => member.record_kind === "owner");
-  const teamMembers = members.filter((member) => member.record_kind === "staff");
-  const legacyMembers = members.filter((member) => member.record_kind === "legacy");
+  const isOwner = staffMember?.record_kind === "owner";
+  const isBusy = staffMember && busyId === String(staffMember.id);
   return (
     <Card className="p-5 sm:p-7">
-      <CardHeader
-        title="Team roster"
-        subtitle="These records are separate from admin and head login accounts. Only active, bookable staff appear in new booking choices."
-      />
-      <ul className="divide-y divide-line">
-        {owner && (
-          <li className="flex flex-wrap items-center justify-between gap-4 py-4">
-            <div className="min-w-0">
-              <p className="font-semibold text-ink-900">{owner.full_name}</p>
-              <p className="mt-1 text-xs text-ink-500">Owner record · no login</p>
-            </div>
-            <span className="rounded-full bg-canvas px-2.5 py-1 text-[10px] font-bold uppercase text-ink-600">
-              Owner · not bookable
-            </span>
-          </li>
-        )}
-        {teamMembers.map((member) => {
-          const isBusy = busyId === String(member.id);
-          return (
-            <li key={member.id} className="py-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="font-semibold text-ink-900">{member.full_name}</p>
-                  {member.position_title && (
-                    <p className="mt-0.5 text-sm font-semibold text-brand-800">
-                      {member.position_title}
-                    </p>
-                  )}
-                  <p className="mt-1 text-xs text-ink-500">Roster record · no login</p>
-                  {member.rating_count > 0 && (
-                    <p className="mt-1 text-xs font-semibold text-gold-600">
-                      {Number(member.average_rating).toFixed(1)} / 5 · {member.rating_count} published ratings
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${member.is_active ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
-                    {member.is_active ? "Active" : "Inactive"}
-                  </span>
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${member.is_active && member.is_bookable ? "bg-success/10 text-success" : "bg-canvas text-ink-500"}`}>
-                    {member.is_bookable
-                      ? member.is_active
-                        ? "Bookable"
-                        : "Bookable when active"
-                      : "Not bookable"}
-                  </span>
-                </div>
+      {!staffMember ? (
+        <p className="py-8 text-sm text-ink-500">Select a person to view details.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="staff-directory-details-heading" tabIndex={-1} className="font-display text-2xl font-medium text-ink-900">
+                  {staffMember.full_name}
+                </h2>
+                <span className="rounded-full bg-canvas px-2.5 py-1 text-[10px] font-bold uppercase text-ink-600">
+                  {isOwner ? "Owner" : "Staff"}
+                </span>
               </div>
-              {canManage && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={member.is_active ? "soft" : "primary"}
-                    className="min-h-11"
-                    disabled={busyId !== null}
-                    loading={isBusy}
-                    onClick={() => onChange(member, { is_active: !member.is_active })}
-                  >
-                    {member.is_active ? "Deactivate roster record" : "Activate roster record"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={member.is_bookable ? "soft" : "primary"}
-                    className="min-h-11"
-                    disabled={busyId !== null}
-                    onClick={() => onChange(member, { is_bookable: !member.is_bookable })}
-                  >
-                    {member.is_bookable ? "Remove from booking choices" : "Add to booking choices"}
-                  </Button>
-                </div>
-              )}
-              {canManage && (
-                <TeamMemberTitleEditor
-                  key={`${member.id}:${member.position_title || ""}`}
-                  staffMember={member}
-                  canManage={canManage}
-                  onSaved={onTitleSaved}
-                />
-              )}
-              {feedback?.id === String(member.id) && feedback.kind !== "busy" && (
-                <p
-                  className={`mt-2 text-sm font-semibold ${feedback.kind === "error" ? "text-danger" : "text-success"}`}
-                  role={feedback.kind === "error" ? "alert" : "status"}
-                >
-                  {feedback.message}
+              {staffMember.position_title && (
+                <p className="mt-1 text-sm font-semibold text-brand-800">
+                  {staffMember.position_title}
                 </p>
               )}
-            </li>
-          );
-        })}
-      </ul>
-      {!teamMembers.length && (
-        <p className="py-6 text-sm text-ink-500">No staff roster records are available.</p>
-      )}
-      {legacyMembers.length > 0 && (
-        <details className="mt-3 border-t border-line pt-4">
-          <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink-700">
-            Archived booking identities ({legacyMembers.length})
-          </summary>
-          <p className="mb-2 text-xs text-ink-500">
-            These records preserve existing appointment and rating history. They are inactive and cannot be selected for new bookings.
-          </p>
-          <ul className="divide-y divide-line">
-            {legacyMembers.map((member) => (
-              <li key={member.id} className="py-3 text-sm text-ink-700">
-                {member.full_name}
-              </li>
-            ))}
-          </ul>
-        </details>
+              {staffMember.rating_count > 0 && (
+                <p className="mt-2 text-xs font-semibold text-gold-600">
+                  {Number(staffMember.average_rating).toFixed(1)} / 5 · {staffMember.rating_count} published ratings
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${staffMember.is_active ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                {staffMember.is_active ? "Active" : "Inactive"}
+              </span>
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${staffMember.is_active && staffMember.is_bookable ? "bg-success/10 text-success" : "bg-canvas text-ink-500"}`}>
+                {isOwner || !staffMember.is_bookable
+                  ? "Not bookable"
+                  : staffMember.is_active
+                    ? "Bookable"
+                    : "Bookable when active"}
+              </span>
+            </div>
+          </div>
+          {!isOwner && canManage && (
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={staffMember.is_active ? "soft" : "primary"}
+                  className="min-h-11"
+                  disabled={busyId !== null}
+                  loading={Boolean(isBusy)}
+                  onClick={() => onChange(staffMember, { is_active: !staffMember.is_active })}
+                >
+                  {staffMember.is_active ? "Deactivate" : "Activate"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={staffMember.is_bookable ? "soft" : "primary"}
+                  className="min-h-11"
+                  disabled={busyId !== null}
+                  onClick={() => onChange(staffMember, { is_bookable: !staffMember.is_bookable })}
+                >
+                  {staffMember.is_bookable ? "Mark not bookable" : "Make bookable"}
+                </Button>
+              </div>
+              <TeamMemberTitleEditor
+                key={`${staffMember.id}:${staffMember.position_title || ""}`}
+                staffMember={staffMember}
+                canManage={canManage}
+                onSave={onSaveTitle}
+                pending={Boolean(isBusy)}
+              />
+            </div>
+          )}
+          {feedback?.id === String(staffMember.id) && feedback.kind !== "busy" && (
+            <p
+              className={`mt-3 text-sm font-semibold ${feedback.kind === "error" ? "text-danger" : "text-success"}`}
+              role={feedback.kind === "error" ? "alert" : "status"}
+            >
+              {feedback.message}
+            </p>
+          )}
+          <AssignedAppointments appointments={appointments} staffId={staffMember.id} />
+        </>
       )}
     </Card>
   );
@@ -2109,7 +2040,7 @@ export function AdminPage() {
   const historyRequestRef = useRef(0);
   const notificationAppointmentRequestRef = useRef(0);
   const noShowDismissedIdsRef = useRef(new Set());
-  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [selectedStaffKey, setSelectedStaffKey] = useState("");
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteDialogError, setInviteDialogError] = useState("");
@@ -2237,8 +2168,9 @@ export function AdminPage() {
       );
       if (rosterResult.rosterLoadError) {
         setTeamRosterError(
-          rosterResult.rosterLoadError.message || "Could not load the team roster.",
+          rosterResult.rosterLoadError.message || "Could not load staff details.",
         );
+        setTeamRoster([]);
       } else {
         setTeamRoster(rosterResult.members);
         setTeamRosterError("");
@@ -2247,10 +2179,14 @@ export function AdminPage() {
         (profile) => isStaffRole(profile.role),
       );
       setStaff(nextStaff);
-      setSelectedStaffId((current) =>
-        nextStaff.some((profile) => profile.id === current)
+      const nextDirectory = createStaffDirectory(
+        rosterResult.rosterLoadError ? [] : rosterResult.members,
+        nextStaff,
+      );
+      setSelectedStaffKey((current) =>
+        nextDirectory.some((entry) => entry.key === current)
           ? current
-          : nextStaff[0]?.id || "",
+          : nextDirectory[0]?.key || "",
       );
       return nextAppointments;
     } catch (loadError) {
@@ -2471,10 +2407,20 @@ export function AdminPage() {
     [appointments, openAppointments],
   );
 
-  const selectedStaff = useMemo(
-    () => staff.find((profile) => profile.id === selectedStaffId) || null,
-    [staff, selectedStaffId],
+  const staffDirectory = useMemo(
+    () => createStaffDirectory(teamRoster, staff),
+    [teamRoster, staff],
   );
+  const selectedStaffEntry = useMemo(
+    () => staffDirectory.find((entry) => entry.key === selectedStaffKey) || null,
+    [staffDirectory, selectedStaffKey],
+  );
+  const selectedStaff = selectedStaffEntry?.kind === "account"
+    ? selectedStaffEntry.account
+    : null;
+  const selectedTeamMember = selectedStaffEntry?.kind === "member"
+    ? selectedStaffEntry.member
+    : null;
 
   const requestStatus = (appointment, nextStatus) => {
     const current = appointments.find((item) => item.id === appointment?.id);
@@ -2743,7 +2689,7 @@ export function AdminPage() {
     setRosterFeedback({ id, kind: "busy", message: `Saving ${targetName}…` });
     try {
       const result = await updateAdminStaffMember(id, fields);
-      if (!result.success) throw new Error(result.error || "Could not update the team roster.");
+      if (!result.success) throw new Error(result.error || "Could not update staff details.");
       setTeamRoster((current) =>
         current.map((item) =>
           String(item.id) === id ? { ...item, ...result } : item,
@@ -2753,30 +2699,48 @@ export function AdminPage() {
         ? `${targetName} ${fields.is_active ? "activated" : "deactivated"}.`
         : fields.is_bookable !== undefined
           ? `${targetName} ${fields.is_bookable ? "added to" : "removed from"} booking choices.`
-          : `${targetName} roster record saved.`;
+          : `${targetName}'s details saved.`;
       setRosterFeedback({ id, kind: "success", message });
     } catch (rosterError) {
       setRosterFeedback({
         id,
         kind: "error",
-        message: rosterError?.message || "Could not update the team roster.",
+        message: rosterError?.message || "Could not update staff details.",
       });
     } finally {
       rosterBusyRef.current = null;
       setRosterBusyId(null);
     }
   };
-  const saveRosterTitle = (id, positionTitle) => {
+  const saveRosterTitle = async (id, positionTitle) => {
     const targetId = String(id || "");
-    setTeamRoster((current) =>
-      current.map((member) =>
-        String(member.id) === targetId
-          ? { ...member, position_title: positionTitle }
-          : member,
-      ),
-    );
+    if (customer?.role !== "admin" || !targetId || rosterBusyRef.current !== null) {
+      return { success: false, error: "Another staff update is in progress." };
+    }
     const member = teamRoster.find((item) => String(item.id) === targetId);
-    if (member) setRosterFeedback({ id: targetId, kind: "success", message: `${member.full_name} roster record saved.` });
+    if (!member || member.record_kind !== "staff") {
+      return { success: false, error: "Staff member not found." };
+    }
+    rosterBusyRef.current = targetId;
+    setRosterBusyId(targetId);
+    setRosterFeedback({ id: targetId, kind: "busy", message: `Saving ${member.full_name}…` });
+    try {
+      const result = await updateAdminStaffMember(targetId, { position_title: positionTitle });
+      if (!result.success) throw new Error(result.error || "Could not save position title.");
+      const savedTitle = normalizeStaffPositionTitle(result.position_title);
+      setTeamRoster((current) => current.map((item) =>
+        String(item.id) === targetId ? { ...item, position_title: savedTitle } : item,
+      ));
+      setRosterFeedback({ id: targetId, kind: "success", message: `${member.full_name}'s position title saved.` });
+      return { ...result, position_title: savedTitle };
+    } catch (rosterError) {
+      const error = rosterError?.message || "Could not save position title.";
+      setRosterFeedback({ id: targetId, kind: "error", message: error });
+      return { success: false, error };
+    } finally {
+      rosterBusyRef.current = null;
+      setRosterBusyId(null);
+    }
   };
   const requestStaffAction = (action) => {
     if (!selectedStaff || customer?.role !== "admin" || staffActionBusy) return;
@@ -3468,63 +3432,49 @@ export function AdminPage() {
             <div className="space-y-6">
               {teamRosterError && (
                 <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert">
-                  {teamRosterError}
+                  Could not load staff details. Try again in a moment.
                 </p>
               )}
-              <TeamRosterPanel
-                members={teamRoster}
-                busyId={rosterBusyId}
-                feedback={rosterFeedback}
-                onChange={updateRosterMember}
-                onTitleSaved={saveRosterTitle}
-                canManage={customer?.role === "admin"}
-              />
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
-                <Card className="p-5 sm:p-7">
-                  <CardHeader
-                    title="Admin and Head login accounts"
-                    subtitle="These accounts can sign in to the staff workspace. Roster booking eligibility is managed above."
-                    action={customer?.role === "admin" ? (
-                      <Button type="button" size="sm" className="min-h-11" onClick={openInvite}>
-                        Invite login account
-                      </Button>
-                    ) : null}
+              <StaffDirectory
+                entries={staffDirectory}
+                selectedKey={selectedStaffKey}
+                onSelect={setSelectedStaffKey}
+                action={customer?.role === "admin" ? (
+                  <Button type="button" size="sm" className="min-h-11" onClick={openInvite}>
+                    Invite account
+                  </Button>
+                ) : null}
+              >
+                {selectedStaffEntry?.kind === "account" ? (
+                  <StaffAccountPanel
+                    staffMember={selectedStaff}
+                    appointments={appointments}
+                    onRequestAction={requestStaffAction}
+                    actionBusy={staffActionBusy || staffActivationBusyId !== null}
+                    actionBusyLabel={
+                      staffActivationFeedback?.kind === "busy"
+                        ? staffActivationFeedback.message
+                        : "Saving account change…"
+                    }
+                    actionFeedback={
+                      staffActivationFeedback?.id === String(selectedStaff?.id || "")
+                        ? staffActivationFeedback
+                        : null
+                    }
+                    canManage={customer?.role === "admin"}
                   />
-                  <ul className="mt-2">
-                    {staff.length ? (
-                      staff.map((profile) => (
-                        <ProfileRow
-                          key={profile.id}
-                          profile={profile}
-                          selected={selectedStaffId === profile.id}
-                          onSelect={setSelectedStaffId}
-                        />
-                      ))
-                    ) : (
-                      <li className="py-10 text-center text-sm text-ink-500">
-                        No admin or head login accounts yet.
-                      </li>
-                    )}
-                  </ul>
-                </Card>
-                <StaffAccountPanel
-                  staffMember={selectedStaff}
-                  appointments={appointments}
-                  onRequestAction={requestStaffAction}
-                  actionBusy={staffActionBusy || staffActivationBusyId !== null}
-                  actionBusyLabel={
-                    staffActivationFeedback?.kind === "busy"
-                      ? staffActivationFeedback.message
-                      : "Saving account change…"
-                  }
-                  actionFeedback={
-                    staffActivationFeedback?.id === String(selectedStaff?.id || "")
-                      ? staffActivationFeedback
-                      : null
-                  }
-                  canManage={customer?.role === "admin"}
-                />
-              </div>
+                ) : (
+                  <TeamMemberDetailsPanel
+                    staffMember={selectedTeamMember}
+                    appointments={appointments}
+                    busyId={rosterBusyId}
+                    feedback={rosterFeedback}
+                    onChange={updateRosterMember}
+                    onSaveTitle={saveRosterTitle}
+                    canManage={customer?.role === "admin"}
+                  />
+                )}
+              </StaffDirectory>
             </div>
           ) : appointmentQueue}
         </div>
@@ -3951,8 +3901,8 @@ export function AdminPage() {
       </AdminDialog>
       <AdminDialog
         open={inviteDialogOpen}
-        title="Invite team member"
-        description="Only administrators can provision team accounts. Invitation acceptance enables sign-in; “Accepts appointments” separately controls eligibility for new customer bookings."
+        title="Invite account"
+        description="Send an invitation to set up staff workspace access."
         closeDisabled={inviteBusy}
         onClose={closeInvite}
       >
@@ -3966,7 +3916,7 @@ export function AdminPage() {
             </p>
           )}
           <label className="text-sm font-semibold text-ink-900">
-            Team member email
+            Account email
             <input
               required
               type="email"

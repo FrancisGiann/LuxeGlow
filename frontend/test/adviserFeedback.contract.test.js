@@ -141,14 +141,16 @@ test('single-package migration preserves the canonical booking RPC except for ro
 test('Accounts management has no date navigation and lists assigned appointments across dates', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
   const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('export function AdminPage'));
+  const assignedAppointments = adminPage.slice(adminPage.indexOf('function AssignedAppointments'), adminPage.indexOf('function StaffAccountPanel'));
   assert.doesNotMatch(adminPage, /getAvailableSlots|Daily availability|30-minute availability/);
   assert.doesNotMatch(accountPanel, /Appointments date|type="date"|Previous day|Next day|appointmentDate|minDate|maxDate|onDateChange|onShiftDate/);
-  assert.match(accountPanel, /String\(appointment\.staff_id \|\| ""\) === selectedStaffKey/);
-  assert.doesNotMatch(accountPanel, /appointment\.local_date ===/);
-  assert.match(accountPanel, /\.sort\([\s\S]*?left\.local_date[\s\S]*?left\.local_time[\s\S]*?leftIndex - rightIndex/);
-  assert.match(accountPanel, /Assigned appointments/);
-  assert.match(accountPanel, /localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time\?\.slice\(0, 5\)/);
-  assert.match(accountPanel, /appointment\.local_time\?\.slice\(0, 5\)/);
+  assert.match(accountPanel, /<AssignedAppointments appointments=\{appointments\} staffId=\{staffMember\.id\}/);
+  assert.match(assignedAppointments, /String\(appointment\.staff_id \|\| ""\) === String\(staffId \|\| ""\)/);
+  assert.doesNotMatch(assignedAppointments, /appointment\.local_date ===/);
+  assert.match(assignedAppointments, /\.sort\([\s\S]*?left\.local_date[\s\S]*?left\.local_time[\s\S]*?leftIndex - rightIndex/);
+  assert.match(assignedAppointments, /Assigned appointments/);
+  assert.match(assignedAppointments, /localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time\?\.slice\(0, 5\)/);
+  assert.match(assignedAppointments, /appointment\.local_time\?\.slice\(0, 5\)/);
   const accountPanelUse = adminPage.match(/<StaffAccountPanel\b[\s\S]*?\/>/)?.[0] || '';
   assert.doesNotMatch(accountPanelUse, /appointmentDate|minDate|maxDate|onDateChange|onShiftDate/);
   assert.doesNotMatch(adminPage, /appointmentsDate|appointmentsMinDate|appointmentsMaxDate|shiftManilaDate/);

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (path) => readFileSync(resolve(projectRoot, path), 'utf8');
 const adminPage = read('frontend/src/pages/AdminPage.jsx');
+const staffDirectory = read('frontend/src/components/admin/StaffDirectory.jsx');
 const adminNav = adminPage.slice(adminPage.indexOf('function AdminNav'), adminPage.indexOf('function AdminWorkspaceFooter'));
 const adminUtilities = read('frontend/src/utils/adminAppointments.js');
 const publicLayout = read('frontend/src/components/layout/PublicLayout.jsx');
@@ -42,9 +43,13 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
   assert.match(adminPage, /customer\?\.first_name \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
   assert.match(adminPage, /join\(" "\) \|\| "Account"[\s\S]*?customer\?\.role === "admin" \? "Administrator" : "Staff"/);
   assert.match(adminPage, /label: "Accounts management"/);
-  assert.match(adminPage, /Team roster/);
-  assert.match(adminPage, /Admin and Head login accounts/);
-  assert.match(adminPage, /Activation is immediate\. Deactivation, role changes, and\s+password reset sends require confirmation\./);
+  assert.match(adminPage, /<StaffDirectory[\s\S]*?selectedKey=\{selectedStaffKey\}/);
+  assert.match(staffDirectory, /title="Staff"[\s\S]*?Select a person to manage details and appointments\./);
+  assert.match(adminPage, /createStaffDirectory\(teamRoster, staff\)/);
+  assert.match(adminPage, /selectedStaffEntry\?\.kind === "account"[\s\S]*?<StaffAccountPanel/);
+  assert.match(adminPage, /<TeamMemberDetailsPanel[\s\S]*?staffMember=\{selectedTeamMember\}/);
+  assert.doesNotMatch(adminPage, /Team roster|Admin and Head login accounts|Archived booking identities|before roster migration|no login|Roster record/);
+  assert.match(adminPage, /Manage sign-in access\./);
   assert.doesNotMatch(adminPage, /Disable appointments|Enable appointments|removes the account from customer-facing staff choices/);
 });
 

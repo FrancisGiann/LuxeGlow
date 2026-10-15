@@ -65,45 +65,62 @@ test('admin API validates title writes and both API surfaces map the nullable ti
   assert.match(endpoints, /average_rating: row\.average_rating/);
 });
 
-test('admin edits roster titles separately from login accounts and booking picker omits an unset title', () => {
+test('admin edits a selected staff member title and booking picker omits an unset title', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
   const bookingPage = read('frontend/src/pages/BookingPage.jsx');
-  assert.match(adminPage, /Optional position title/);
-  assert.match(adminPage, /placeholder="Head Massage Therapist"/);
+  assert.match(adminPage, /Position title/);
+  assert.ok(adminPage.includes('placeholder="e.g. Nail Artist"'));
   assert.match(adminPage, /maxLength=\{STAFF_POSITION_TITLE_MAX_LENGTH\}/);
   assert.match(adminPage, /Position title is unchanged\./);
-  assert.match(adminPage, /position_title: nextTitle/);
-  assert.match(adminPage, /function TeamMemberTitleEditor\(\{ staffMember, canManage, onSaved \}\)/);
-  assert.match(adminPage, /updateAdminStaffMember\(staffMember\.id,\s*\{\s*position_title: nextTitle,?\s*\}\)/);
-  assert.match(adminPage, /function TeamRosterPanel\([\s\S]*?title="Team roster"/);
-  const loginPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('function TeamRosterPanel'));
-  assert.doesNotMatch(loginPanel, /position_title|accepts_appointments|Bookable/);
+  assert.match(adminPage, /onSave\(staffMember\.id, nextTitle\)/);
+  assert.match(adminPage, /function TeamMemberTitleEditor\(\{ staffMember, canManage, onSave, pending = false \}\)/);
+  assert.match(adminPage, /updateAdminStaffMember\(targetId, \{ position_title: positionTitle \}\)/);
+  assert.match(adminPage, /function TeamMemberDetailsPanel\([\s\S]*?TeamMemberTitleEditor/);
+  const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('function TeamMemberDetailsPanel'));
+  assert.doesNotMatch(accountPanel, /position_title|accepts_appointments|Bookable/);
   assert.doesNotMatch(adminPage, /CustomEvent|admin-staff-profile-updated/);
   assert.match(bookingPage, /member\.position_title &&/);
   assert.match(bookingPage, /member\.average_rating > 0/);
 });
 
-test('login account rows show account status while the roster owns booking status and ratings', () => {
+test('one directory selects a person and shows only the matching account or member controls', () => {
   const adminPage = read('frontend/src/pages/AdminPage.jsx');
-  const rowMatch = adminPage.match(/function ProfileRow\(\{ profile, selected, onSelect \}\) \{[\s\S]*?\n\}\n\nfunction TeamMemberTitleEditor/);
-  const panelMatch = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\n(?:export )?function TeamRosterPanel/);
-  const rosterMatch = adminPage.match(/function TeamRosterPanel\([\s\S]*?\n\}\n\nexport function AdminPage/);
-  assert.ok(rowMatch, 'staff row component should be present');
-  assert.ok(panelMatch, 'login account inspector should be present');
-  assert.ok(rosterMatch, 'database-backed team roster should be present');
+  const directory = read('frontend/src/components/admin/StaffDirectory.jsx');
+  const rowMatch = directory.match(/function StaffDirectoryRow\(\{ entry, selected, onSelect \}\) \{[\s\S]*?\n\}\n\nexport function StaffDirectory/);
+  const accountPanel = adminPage.match(/function StaffAccountPanel\([\s\S]*?\n\}\n\nfunction TeamMemberDetailsPanel/);
+  const memberPanel = adminPage.match(/function TeamMemberDetailsPanel\([\s\S]*?\n\}\n\nexport function AdminPage/);
+  assert.ok(rowMatch, 'staff directory row should be present');
+  assert.ok(accountPanel, 'staff account inspector should be present');
+  assert.ok(memberPanel, 'selected staff detail should be present');
 
   const row = rowMatch[0];
-  assert.ok(row.indexOf('{name}') < row.indexOf('{profile.email}'));
-  assert.doesNotMatch(row, /profile\.position_title|profile\.accepts_appointments|Bookable/);
-  assert.doesNotMatch(row, /rating_count|average_rating|published rating|No ratings yet/);
-  assert.match(row, /const accountStatus = profile\.is_active \? "Active" : "Inactive"/);
-  assert.equal((row.match(/rounded-full/g) || []).length, 1);
-  assert.match(row, /Account status: \$\{accountStatus\}/);
-  assert.doesNotMatch(row, /Accepts appointments/);
-  assert.match(row, /<span className="min-w-0">[\s\S]*?\{profile\.email\}\s*<\/span>\s*<\/span>\s*<span className="flex min-w-0 flex-col items-end gap-2 sm:flex-row sm:items-center">/);
-  assert.match(panelMatch[0], /Assigned appointments[\s\S]*?localDateLabel\(appointment\.local_date\)[\s\S]*?appointment\.local_time/);
-  assert.match(rosterMatch[0], /member\.is_active && member\.is_bookable/);
-  assert.match(rosterMatch[0], /member\.rating_count[\s\S]*?member\.average_rating[\s\S]*?published ratings/);
-  assert.match(rosterMatch[0], /record_kind === "owner"[\s\S]*?record_kind === "staff"[\s\S]*?record_kind === "legacy"/);
-  assert.doesNotMatch(panelMatch[0], /Appointments date|type="date"|Previous day|Next day/);
+  assert.match(row, /onSelect\(entry\.key\)/);
+  assert.match(row, /entry\.roleLabel/);
+  assert.match(row, /entry\.kind === 'member'/);
+  assert.match(row, /person\.email/);
+  assert.match(row, /aria-controls="staff-directory-details"/);
+  assert.match(row, /IconArrowRight/);
+  assert.match(directory, /userSelectionRef\.current = true/);
+  assert.match(directory, /setSelectionVersion\(\(version\) => version \+ 1\)/);
+  assert.match(directory, /\(max-width: 1279px\)/);
+  assert.match(directory, /prefers-reduced-motion: reduce/);
+  assert.match(directory, /details\.scrollIntoView/);
+  assert.match(directory, /focus\(\{ preventScroll: true \}\)/);
+  assert.doesNotMatch(row, /legacy|record_kind === "legacy"/);
+
+  const account = accountPanel[0];
+  assert.match(account, /staffMember\.role === "admin" \? "Admin" : "Head"/);
+  assert.match(account, /Account controls/);
+  assert.match(account, /Manage sign-in access\./);
+  assert.match(account, /<AssignedAppointments appointments=\{appointments\} staffId=\{staffMember\.id\}/);
+  assert.doesNotMatch(account, /Login account controls|before roster migration|accepts_appointments|Bookable/);
+
+  const details = memberPanel[0];
+  assert.match(details, /staffMember\?\.record_kind === "owner"/);
+  assert.match(details, /!isOwner && canManage/);
+  assert.match(details, /Deactivate|Activate/);
+  assert.match(details, /Make bookable|Mark not bookable/);
+  assert.match(details, /TeamMemberTitleEditor[\s\S]*?staffMember=\{staffMember\}/);
+  assert.match(details, /<AssignedAppointments appointments=\{appointments\} staffId=\{staffMember\.id\}/);
+  assert.doesNotMatch(details, /Archived|legacyMembers|record_kind === "legacy"/);
 });

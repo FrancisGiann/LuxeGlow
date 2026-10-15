@@ -26,7 +26,8 @@ test('invite and staff recovery links target the configured password setup route
   assert.match(resetStaff, /buildStaffPasswordEmail\(\{ isInvite, firstName, actionLink \}\)/);
   assert.doesNotMatch(invite, /password\s*:/i);
   assert.match(invite, /accepts_appointments: false/);
-  assert.match(adminPage, /Invitation acceptance enables sign-in; “Accepts appointments” separately controls eligibility for new customer bookings/);
+  assert.match(adminPage, /Send an invitation to set up staff workspace access\./);
+  assert.doesNotMatch(adminPage, /Accepts appointments.*controls eligibility for new customer bookings/);
 });
 
 test('auth callback handling opens password setup for invite and recovery sessions', () => {

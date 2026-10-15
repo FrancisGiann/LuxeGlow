@@ -224,7 +224,7 @@ export async function listAdminStaffMembers() {
     client.from('staff_members').select('id,roster_key,record_kind,full_name,position_title,is_active,is_bookable,created_at').order('record_kind').order('full_name'),
     client.rpc('get_staff_rating_aggregates'),
   ]);
-  const members = throwIfError(memberResult, 'Could not load the team roster.') || [];
+  const members = throwIfError(memberResult, 'Could not load staff details.') || [];
   const aggregates = throwIfError(aggregateResult, 'Could not load staff ratings.') || [];
   const ratingsByStaff = new Map(aggregates.map((row) => [String(row.staff_id), { average_rating: Number(row.average_rating || 0), rating_count: Number(row.rating_count || 0) }]));
   return members.map((member) => {
@@ -239,11 +239,11 @@ export async function listAdminStaffMembers() {
 }
 
 export async function updateAdminStaffMember(id, fields) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id))) return { success: false, error: 'Invalid roster record.' };
-  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return { success: false, error: 'Choose valid roster changes.' };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id))) return { success: false, error: 'Invalid staff member.' };
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return { success: false, error: 'Choose valid staff changes.' };
   const patch = {};
   if (fields.is_active !== undefined) {
-    if (typeof fields.is_active !== 'boolean') return { success: false, error: 'Choose a valid roster status.' };
+    if (typeof fields.is_active !== 'boolean') return { success: false, error: 'Choose a valid staff status.' };
     patch.is_active = fields.is_active;
   }
   if (fields.is_bookable !== undefined) {
@@ -256,11 +256,11 @@ export async function updateAdminStaffMember(id, fields) {
     if (!isStaffPositionTitleWithinLimit(positionTitle)) return { success: false, error: 'Position title must be 100 characters or fewer.' };
     patch.position_title = positionTitle;
   }
-  if (!Object.keys(patch).length) return { success: false, error: 'No roster changes supplied.' };
+  if (!Object.keys(patch).length) return { success: false, error: 'No staff changes supplied.' };
   const client = await assertAdmin();
   const result = await client.from('staff_members').update(patch).eq('id', id).select('id,is_active,is_bookable,position_title').maybeSingle();
-  const saved = throwIfError(result, 'Could not update the roster record.');
-  if (!saved) return { success: false, error: 'Roster record not found.' };
+  const saved = throwIfError(result, 'Could not update staff details.');
+  if (!saved) return { success: false, error: 'Staff member not found.' };
   const savedTitle = normalizeStaffPositionTitle(saved.position_title);
   return {
     success: true,

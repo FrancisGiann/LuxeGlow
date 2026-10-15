@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const adminPage = await readFile(new URL('../src/pages/AdminPage.jsx', import.meta.url), 'utf8');
-const faqRow = adminPage.slice(adminPage.indexOf('function FaqRow('), adminPage.indexOf('\nfunction ProfileRow('));
+const faqRow = adminPage.slice(adminPage.indexOf('function FaqRow('), adminPage.indexOf('\nfunction AssignedAppointments('));
 const newFaqForm = adminPage.slice(adminPage.indexOf('title="FAQs"'), adminPage.indexOf(') : tab === "about"'));
 
 test('FAQ deletion uses an accessible in-app confirmation with retryable guarded errors', () => {

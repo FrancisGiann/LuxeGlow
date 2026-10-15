@@ -212,16 +212,16 @@ test('team roster reads include safe published ratings and admin edits only allo
   assert.deepEqual(update.body, { is_active: false, position_title: 'Senior Nail Artist' });
 });
 
-test('team roster updates reject malformed targets and unsupported fields before writing', async () => {
+test('staff updates reject malformed targets and unsupported fields before writing', async () => {
   const before = calls.length;
   assert.deepEqual(await api.updateAdminStaffMember('invalid', { is_active: false }), {
-    success: false, error: 'Invalid roster record.',
+    success: false, error: 'Invalid staff member.',
   });
   assert.deepEqual(await api.updateAdminStaffMember(rosterStaffId, null), {
-    success: false, error: 'Choose valid roster changes.',
+    success: false, error: 'Choose valid staff changes.',
   });
   assert.deepEqual(await api.updateAdminStaffMember(rosterStaffId, { record_kind: 'owner' }), {
-    success: false, error: 'No roster changes supplied.',
+    success: false, error: 'No staff changes supplied.',
   });
   assert.equal(calls.length, before);
 });
