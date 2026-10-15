@@ -88,14 +88,16 @@ test('Confirm and Cancel save once, refresh, clear selection, then close confirm
     },
     {
       appointment: { id: 'appointment-1', reference_no: 'LX-1042', status: 'Confirmed' },
-      requestedStatus: { id: 'appointment-1', to: 'Cancelled' },
+      requestedStatus: { id: 'appointment-1', to: 'Cancelled', reason: 'Customer request' },
     },
   ]) {
     const harness = createHarness(scenario);
     const result = await harness.submit();
 
     assert.equal(result, 'saved');
-    assert.deepEqual(harness.updateCalls, [['appointment-1', scenario.requestedStatus.to]]);
+    assert.deepEqual(harness.updateCalls, scenario.requestedStatus.to === 'Cancelled'
+      ? [['appointment-1', scenario.requestedStatus.to, scenario.requestedStatus.reason]]
+      : [['appointment-1', scenario.requestedStatus.to]]);
     assert.equal(harness.loadCalls, 1);
     assert.equal(harness.state.selectedAppointment, null);
     assert.equal(harness.state.pendingStatus, null);
@@ -153,6 +155,24 @@ test('a failed status save keeps the confirmation and appointment selection open
   assert.equal(harness.state.pageError, 'Status update denied');
   assert.equal(harness.busyRef.current, false);
   assert.equal(harness.state.busy, false);
+});
+
+test('a returned API validation failure does not refresh, close, or announce a saved status', async () => {
+  const request = { id: 'appointment-1', to: 'Cancelled', reason: ' ' };
+  const appointment = { id: 'appointment-1', reference_no: 'LX-1042', status: 'Pending' };
+  const harness = createHarness({
+    appointment,
+    requestedStatus: request,
+    updateStatus: async () => ({ success: false, error: 'Enter a cancellation reason.' }),
+  });
+
+  assert.equal(await harness.submit(), 'failed');
+  assert.deepEqual(harness.updateCalls, [['appointment-1', 'Cancelled', ' ']]);
+  assert.equal(harness.loadCalls, 0);
+  assert.equal(harness.state.pendingStatus, request);
+  assert.equal(harness.state.selectedAppointment, appointment);
+  assert.equal(harness.state.dialogError, 'Enter a cancellation reason.');
+  assert.equal(harness.state.notice, '');
 });
 
 test('Mark completed keeps the existing refreshed-selection path', async () => {

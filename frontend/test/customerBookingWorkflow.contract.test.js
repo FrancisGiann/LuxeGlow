@@ -78,7 +78,7 @@ test('reschedule and repeated status events queue new notifications and replace 
   assert.match(worker, /'rescheduled'/);
   assert.match(worker, /APPOINTMENT RESCHEDULED/);
   assert.match(adminApi, /customer_cancellation_reason/);
-  assert.match(adminPage, /Customer cancellation reason/);
+  assert.match(adminPage, /Cancellation reason/);
   assert.match(worker, /const stale = appointment\?\.status !== 'Confirmed'/);
   assert.match(worker, /expectedStartEpoch/);
 });

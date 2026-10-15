@@ -80,7 +80,7 @@ test('guest booking draft returns to a separate review and confirmation is authe
     /const confirmBooking = async/,
     /createAppointment\(\{ serviceIds: selectedIdsForServices, staffId: selectedStaffId/,
     /: 'Sign in'\}/,
-    /editingReview \? 'Save' : 'Review'/,
+    /editingReview \? 'Save' : 'Continue'/,
     /getSalonDateStatus/,
     /No preference/,
     /No ratings yet\./,
@@ -96,10 +96,13 @@ test('guest booking draft returns to a separate review and confirmation is authe
   assert.doesNotMatch(submit, /createAppointment\(/);
 });
 
-test('customer workspace keeps the approved minimal navigation and return flow', () => {
-  for (const label of ['/dashboard/overview', "label: 'Home'", "label: 'My Appointments'", "label: 'Ratings & Reviews'", "label: 'My Profile'", 'to="/book"', 'Book appointment']) assert.match(dashboardLayout, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+test('customer workspace keeps minimal navigation and a home-linked logo', () => {
+  for (const label of ['/dashboard/overview', "label: 'Home'", "label: 'My Appointments'", "label: 'Ratings & Reviews'", "label: 'My Profile'"]) assert.match(dashboardLayout, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(dashboardLayout, /<Link to="\/" aria-label="Astrid Nails & Beauty Bar home"/);
+  assert.doesNotMatch(dashboardLayout, /to="\/book"|Book appointment|IconSparkle/);
   assert.doesNotMatch(dashboardLayout, /label: 'Notifications'/);
-  assert.match(dashboardOverview, /Book an appointment/);
+  assert.match(dashboardOverview, /Book another appointment/);
+  assert.match(dashboardOverview, /to="\/book"/);
   assert.doesNotMatch(dashboardOverview, /View notifications|Rate a visit/);
   assert.match(publicLayout, /luxeglow-auth-return/);
   assert.match(publicLayout, /navigate\('\/book', \{ replace: true \}\)/);

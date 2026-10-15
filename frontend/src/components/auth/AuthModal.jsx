@@ -9,6 +9,7 @@ import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
 import { verificationCooldownSeconds } from '../../utils/verificationFeedback';
+import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
   changeLoginFailureEmail,
   emptyLoginFailureState,
@@ -56,6 +57,7 @@ export function AuthModal() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginFailureState, setLoginFailureState] = useState(emptyLoginFailureState);
   const [resetEmail, setResetEmail] = useState('');
@@ -89,6 +91,7 @@ export function AuthModal() {
 
   useEffect(() => {
     setError(passwordSetup?.error || '');
+    setPhoneError('');
     setResetCode('');
     if (!modalView || (modalView === 'login' && previousModalViewRef.current !== 'login')) {
       setLoginFailureState(emptyLoginFailureState());
@@ -197,6 +200,11 @@ export function AuthModal() {
     e.preventDefault();
     setError('');
     const f = Object.fromEntries(new FormData(e.currentTarget));
+    if (!isValidPhoneNumber(f.phone)) {
+      setPhoneError('Enter a phone number with 7 to 15 digits.');
+      return;
+    }
+    setPhoneError('');
     const passwordError = getPasswordPolicyError(f.password);
     if (passwordError) {
       setError(passwordError);
@@ -439,7 +447,11 @@ export function AuthModal() {
                 <Input id="reg-last" name="last_name" label="Last name" placeholder="Dela Cruz" autoComplete="family-name" required />
               </div>
               <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" required />
-              <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required />
+              <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required error={phoneError} aria-invalid={Boolean(phoneError)} onChange={(event) => {
+                const nextPhone = sanitizePhoneInput(event.currentTarget.value);
+                event.currentTarget.value = nextPhone;
+                if (phoneError && isValidPhoneNumber(nextPhone)) setPhoneError('');
+              }} />
               <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
               <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}

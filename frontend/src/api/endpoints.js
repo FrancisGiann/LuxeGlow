@@ -5,6 +5,7 @@ import { passwordResetPath } from '../utils/authRedirect';
 import { isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 import { isRatableVisit, normalizeReviewRating } from '../utils/reviewRatings';
+import { isValidPhoneNumber } from '../utils/phoneNumber';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -156,12 +157,11 @@ export async function registerCustomer(fields) {
   const firstName = String(input.first_name || '').trim();
   const lastName = String(input.last_name || '').trim();
   const email = normalizeEmail(input.email);
-  const phone = String(input.phone || '').trim();
+  const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
   const password = typeof input.password === 'string' ? input.password : '';
   const confirmPassword = typeof input.confirm_password === 'string' ? input.confirm_password : '';
-  if (!firstName || !lastName || !phone || !/^\S+@\S+\.\S+$/.test(email)) {
-    return { success: false, error: 'Enter a valid name, email, phone number, and password of at least 8 characters.' };
-  }
+  if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: 'Enter a valid name, email, and password of at least 8 characters.' };
+  if (!isValidPhoneNumber(phone)) return { success: false, error: 'Enter a phone number with 7 to 15 digits.' };
   const passwordError = getPasswordPolicyError(password);
   if (passwordError) return { success: false, error: passwordError };
   if (password !== confirmPassword) return { success: false, error: 'Passwords do not match.' };

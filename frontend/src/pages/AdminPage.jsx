@@ -152,10 +152,12 @@ const HISTORY_PAGE_SIZE = 5;
 
 const ADMIN_MOBILE_MENU_ID = "admin-mobile-menu";
 
-function AdminWorkspaceBrand() {
+function AdminWorkspaceBrand({ onNavigate }) {
   return (
     <div className="flex justify-center border-b border-line px-5 py-2">
-      <BrandLogo className="h-20 w-20" />
+      <Link to="/" aria-label="Astrid Nails & Beauty Bar home" onClick={onNavigate} className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
+        <BrandLogo className="h-20 w-20" />
+      </Link>
     </div>
   );
 }
@@ -243,14 +245,6 @@ function AdminWorkspaceFooter({ onLogout, onNavigate }) {
   return (
     <div className="mt-auto border-t border-line p-4">
       <p className="text-xs text-ink-500">Workspace</p>
-      <Link
-        to="/"
-        onClick={onNavigate}
-        className="mt-3 flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-      >
-        <IconArrowRight size={16} className="rotate-180" />
-        Back to homepage
-      </Link>
       <button
         type="button"
         onClick={() => {
@@ -347,7 +341,7 @@ function AdminMobileDrawer({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <AdminWorkspaceBrand />
+            <AdminWorkspaceBrand onNavigate={onClose} />
           </div>
           <button
             ref={closeButtonRef}
@@ -446,6 +440,7 @@ function noShowPromptDetails(appointment) {
       [appointment.customer?.first_name, appointment.customer?.last_name]
         .filter(Boolean)
         .join(" ") || "Customer details unavailable",
+    customerPhone: String(appointment.customer?.phone || "").trim() || "No phone recorded",
     date: localDateLabel(appointment.local_date),
     time: appointment.local_time?.slice(0, 5) || "Time unavailable",
   };
@@ -496,45 +491,47 @@ function PaginationControls({
   );
 }
 
-function AppointmentRow({ appointment, selected, onSelect }) {
+function appointmentCancellationReason(appointment) {
+  return String(appointment?.cancellation_reason || "").trim()
+    || String(appointment?.customer_cancellation_reason || "").trim()
+    || "No reason recorded";
+}
+
+function AppointmentRow({ appointment, selected, onSelect, index, showCancellationReason }) {
   const customer = appointment.customer || {};
-  const statusTint = {
-    Pending: "bg-gold-50/70",
-    Confirmed: "bg-brand-50/60",
-    Completed: "bg-success/5",
-    Cancelled: "bg-danger/5",
-  }[appointment.status] || "bg-surface";
+  const gridColumns = showCancellationReason
+    ? "lg:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(7.5rem,7.5rem)]"
+    : "lg:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_minmax(7.5rem,7.5rem)]";
   return (
-    <li className="border-b border-line last:border-b-0">
+    <li className={`border-b border-line last:border-b-0 ${index % 2 ? "bg-blush-100" : "bg-surface"}`}>
       <button
         type="button"
         onClick={(event) => onSelect(appointment, event.currentTarget)}
-        className={`w-full block py-4 text-left leading-relaxed transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 ${selected ? "bg-blush-50" : `${statusTint} hover:bg-canvas`}`}
+        className={`block w-full px-3 py-2.5 text-left leading-relaxed transition-colors hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-800 ${selected ? "bg-brand-50 ring-2 ring-inset ring-brand-400" : ""}`}
       >
-        <div className="grid min-h-20 items-center gap-3 sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
-          <div className="flex justify-between sm:contents">
-            <span className="min-w-0">
-              <span className="block font-display text-base font-medium leading-snug text-ink-900">
-                {appointment.local_time?.slice(0, 5) || "—"}
-              </span>
-              <span className="block text-xs leading-snug text-ink-500">
-                {appointment.local_date || "Date unavailable"}
-              </span>
-            </span>
-            <span className="sm:hidden">
-              <StatusPill status={appointment.status} size="sm" />
-            </span>
-          </div>
-          <span className="min-w-0 break-words">
-            <span className="block text-sm font-bold leading-snug text-ink-900">
-              {customer.first_name} {customer.last_name}
-            </span>
+        <div className={`grid min-h-16 items-center gap-x-4 gap-y-2 ${gridColumns}`}>
+          <span className="grid min-w-0 gap-0.5 lg:block">
+            <span className="text-xs font-semibold text-ink-500 lg:hidden">Date &amp; time</span>
+            <span className="block font-display text-base font-medium leading-snug text-ink-900">{appointment.local_time?.slice(0, 5) || "—"}</span>
+            <span className="block break-words text-xs leading-snug text-ink-600">{appointment.local_date || "Date unavailable"}</span>
           </span>
-          <span className="min-w-0 break-words text-sm leading-snug text-ink-600">
-            {serviceNames(appointment).join(", ") || "No services"}
+          <span className="grid min-w-0 gap-0.5 break-words lg:block">
+            <span className="text-xs font-semibold text-ink-500 lg:hidden">Customer</span>
+            <span className="block text-sm font-bold leading-snug text-ink-900">{[customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Customer details unavailable"}</span>
           </span>
-          <span className="hidden justify-self-end whitespace-nowrap sm:block">
-            <StatusPill status={appointment.status} size="sm" />
+          <span className="grid min-w-0 gap-0.5 break-words text-sm leading-snug text-ink-700 lg:block">
+            <span className="text-xs font-semibold text-ink-500 lg:hidden">Services</span>
+            <span>{serviceNames(appointment).join(", ") || "No services"}</span>
+          </span>
+          {showCancellationReason && (
+            <span className="grid min-w-0 gap-0.5 break-words text-sm leading-snug text-ink-700 lg:block">
+              <span className="text-xs font-semibold text-ink-500 lg:hidden">Cancellation reason</span>
+              <span>{appointmentCancellationReason(appointment)}</span>
+            </span>
+          )}
+          <span className="grid justify-start gap-0.5 lg:block lg:justify-self-end lg:whitespace-nowrap">
+            <span className="text-xs font-semibold text-ink-500 lg:hidden">Status</span>
+            <span className="inline-flex rounded-full bg-surface p-0.5 shadow-sm"><StatusPill status={appointment.status} size="sm" /></span>
           </span>
         </div>
       </button>
@@ -716,13 +713,13 @@ function AppointmentDetails({
             {getAppointmentStaffName(appointment)}
           </span>
         </p>
-        {appointment.customer_cancellation_reason && (
+        {appointment.status === "Cancelled" && (
           <div className="mt-6 border-t border-line pt-5">
             <h3 className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-ink-500">
-              Customer cancellation reason
+              Cancellation reason
             </h3>
             <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-700">
-              {appointment.customer_cancellation_reason}
+              {appointmentCancellationReason(appointment)}
             </p>
           </div>
         )}
@@ -797,8 +794,9 @@ function AppointmentDetails({
 function AppointmentQueue({
   appointments,
   filters,
+  section,
   totalAppointments,
-  totalCompletedAppointments,
+  allAppointments,
   selectedAppointment,
   filtersExpanded,
   headingRef,
@@ -809,16 +807,15 @@ function AppointmentQueue({
   onReset,
   onSelectAppointment,
 }) {
-  const statusLabel = filters.status === "active"
-    ? "Active bookings"
-    : filters.status === "history"
-      ? "History (completed visits)"
-      : filters.status === "all"
-        ? "All statuses"
-        : filters.status;
-  const completedView = filters.status === "history" || filters.status === "Completed";
-  const displayedTotal = completedView ? totalCompletedAppointments : totalAppointments;
-  const resultLabel = completedView ? "completed visit" : "appointment";
+  const historyView = section === "history";
+  const showCancellationReason = historyView && filters.status === "Cancelled";
+  const availableStatuses = historyView ? ["Pending", "Confirmed", "Completed", "Cancelled"] : ["Pending", "Confirmed"];
+  const statusLabel = `${historyView ? "History" : "Appointments"} · ${filters.status}`;
+  const displayedTotal = allAppointments.filter((appointment) => appointment.status === filters.status).length;
+  const resultLabel = historyView ? "record" : "booking";
+  const gridColumns = showCancellationReason
+    ? "sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(7.5rem,7.5rem)]"
+    : "sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_minmax(7.5rem,7.5rem)]";
   const filterSummary = [
     statusLabel,
     filters.date || "All dates",
@@ -829,10 +826,10 @@ function AppointmentQueue({
     <Card className="overflow-hidden p-5 sm:p-7">
       <div className="border-b border-line pb-5">
         <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-ink-900">
-          Appointments
+          {historyView ? "History" : "Appointments"}
         </h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          Search and update bookings across all dates. Times use Asia/Manila.
+          {historyView ? "Read the full appointment record by status and review cancellation details." : "Review Pending and Confirmed bookings across every date."} Times use Asia/Manila.
         </p>
       </div>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -883,16 +880,13 @@ function AppointmentQueue({
             onChange={(event) => onFilterChange("status", event.target.value)}
             className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
-            <option value="active">Active (pending and confirmed)</option>
-            <option value="all">All statuses</option>
-            {["Pending", "Confirmed", "Completed", "Cancelled"].map(
+            {availableStatuses.map(
               (status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>
               ),
             )}
-            <option value="history">History (completed visits)</option>
           </select>
         </label>
         <button
@@ -925,25 +919,28 @@ function AppointmentQueue({
           {appointments.length} of {displayedTotal} {resultLabel}{displayedTotal === 1 ? "" : "s"}
         </p>
       </div>
-      <div className="mt-3 hidden min-h-12 items-center gap-2 border-b border-line bg-canvas py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 sm:grid sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_auto]">
+      <div className={`mt-3 hidden min-h-12 items-center gap-x-4 border-b border-line bg-canvas px-3 py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 lg:grid ${gridColumns}`}>
         <span>Date &amp; time</span>
         <span>Customer</span>
         <span>Services</span>
-        <span className="sm:text-right">Status</span>
+        {showCancellationReason && <span>Cancellation reason</span>}
+        <span className="lg:text-right">Status</span>
       </div>
       <ul className="mt-1">
         {appointments.length ? (
-          appointments.map((appointment) => (
+          appointments.map((appointment, index) => (
             <AppointmentRow
               key={appointment.id}
               appointment={appointment}
               selected={selectedAppointment?.id === appointment.id}
+              index={index}
+              showCancellationReason={showCancellationReason}
               onSelect={onSelectAppointment}
             />
           ))
         ) : (
           <li className="py-12 text-center text-sm text-ink-500">
-            {appointmentQueueEmptyMessage(totalAppointments, filters)}
+            {appointmentQueueEmptyMessage(totalAppointments, filters, section)}
           </li>
         )}
       </ul>
@@ -2056,20 +2053,21 @@ export function AdminPage() {
     };
   }, [clearToastScope, toastScopePrefix]);
 
-  const openAppointments = useCallback((kind = "active", appointment = null) => {
+  const openAppointments = useCallback((kind = "pending", appointment = null) => {
     appointmentReturnFocusRef.current = null;
     setAppointmentFilters(
-      appointmentFilterPreset(kind, manilaDateKey()),
+      appointmentFilterPreset(kind, manilaDateKey(), appointment),
     );
+    const selectedTab = kind === "history" || (kind === "appointment" && isTerminalAppointment(appointment)) ? "history" : "appointments";
+    setTab(selectedTab);
     setSelectedAppointment(kind === "appointment" ? appointment : null);
-    setTab(kind === "history" ? "history" : "appointments");
   }, [setTab]);
   const setNavigationTab = useCallback((nextTab) => {
     if (nextTab === "history") {
       setAppointmentFilters(appointmentFilterPreset("history"));
       setSelectedAppointment(null);
     } else if (nextTab === "appointments") {
-      setAppointmentFilters(appointmentFilterPreset("active"));
+      setAppointmentFilters(appointmentFilterPreset("appointments"));
       setSelectedAppointment(null);
     }
     setTab(nextTab);
@@ -2433,6 +2431,7 @@ export function AdminPage() {
       reference: current.reference_no,
       from: current.status,
       to: nextStatus,
+      reason: "",
     });
   };
 
@@ -2446,8 +2445,17 @@ export function AdminPage() {
   };
 
   const confirmStatus = () => {
+    let pendingStatus = statusConfirm;
+    if (statusConfirm?.to === "Cancelled") {
+      const reason = String(statusConfirm.reason || "").trim();
+      if (!reason || reason.length > 500) {
+        setStatusDialogError("Enter a cancellation reason between 1 and 500 characters.");
+        return;
+      }
+      pendingStatus = { ...statusConfirm, reason };
+    }
     void runAdminStatusConfirmation({
-      pendingStatus: statusConfirm,
+      pendingStatus,
       appointments,
       busyRef: statusBusyRef,
       isTransitionAllowed: (current, nextStatus) =>
@@ -2983,8 +2991,9 @@ export function AdminPage() {
     <AppointmentQueue
       appointments={visibleAppointments}
       filters={appointmentFilters}
+      section={tab === "history" ? "history" : "appointments"}
       totalAppointments={appointments.length}
-      totalCompletedAppointments={appointments.filter((appointment) => appointment.status === "Completed").length}
+      allAppointments={appointments}
       selectedAppointment={selectedVisibleAppointment}
       filtersExpanded={appointmentFiltersExpanded}
       headingRef={appointmentQueueHeadingRef}
@@ -3001,11 +3010,9 @@ export function AdminPage() {
           date: "",
         }))
       }
-      onToday={() =>
-        setAppointmentFilters(appointmentFilterPreset("today", manilaDateKey()))
-      }
+      onToday={() => setAppointmentFilters((current) => ({ ...current, date: manilaDateKey() }))}
       onReset={() =>
-        setAppointmentFilters(createInitialAppointmentFilters())
+        setAppointmentFilters(createInitialAppointmentFilters(tab === "history" ? "Completed" : "Pending"))
       }
       onSelectAppointment={(appointment, trigger) => {
         appointmentReturnFocusRef.current = trigger;
@@ -3067,18 +3074,10 @@ export function AdminPage() {
                 · {customer?.role === "admin" ? "Administrator" : "Staff"}
               </span>
               <StaffNotificationBell
-                onOpenAppointments={() => openAppointments("all")}
+                onOpenAppointments={() => openAppointments("pending")}
                 onOpenAppointment={openNotificationAppointment}
               />
               <div className="flex items-center gap-2">
-                <Link
-                  to="/"
-                  aria-label="Back to homepage"
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-xs font-semibold text-brand-800 hover:border-brand-300 focus-visible:outline-2 lg:hidden focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-                >
-                  <IconArrowRight size={15} className="rotate-180" />
-                  <span className="hidden sm:inline">Back to homepage</span>
-                </Link>
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -3418,7 +3417,8 @@ export function AdminPage() {
             </Card>
           ) : tab === "schedule" ? (
             <ScheduleSettings
-              onOpenAppointments={() => openAppointments("all")}
+              onOpenAppointments={() => openAppointments("pending")}
+              onOpenConflict={(conflict) => openAppointments("conflict", conflict)}
             />
           ) : tab === "staff" ? (
             <div className="space-y-6">
@@ -3528,6 +3528,10 @@ export function AdminPage() {
             <dd className="text-right text-sm font-semibold text-ink-900">{noShowConfirm?.customerName}</dd>
           </div>
           <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3">
+            <dt className="text-sm text-ink-500">Phone</dt>
+            <dd className="text-right text-sm font-semibold text-ink-900">{noShowConfirm?.customerPhone || "No phone recorded"}</dd>
+          </div>
+          <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3">
             <dt className="text-sm text-ink-500">Reference</dt>
             <dd className="text-right text-sm font-semibold text-ink-900">{noShowConfirm?.reference}</dd>
           </div>
@@ -3588,6 +3592,30 @@ export function AdminPage() {
             ? "The cancellation stays in the appointment history and cannot be reversed from this workspace."
             : "Confirm this transition after checking the appointment details."}
         </p>
+        {statusConfirm?.to === "Cancelled" && (
+          <div className="mt-4">
+            <label htmlFor="admin-cancellation-reason" className="block text-sm font-semibold text-ink-900">
+              Cancellation reason
+              <textarea
+                id="admin-cancellation-reason"
+                required
+                maxLength={500}
+                rows={3}
+                disabled={statusBusy}
+                value={statusConfirm.reason || ""}
+                aria-invalid={Boolean(statusDialogError)}
+                aria-describedby="admin-cancellation-reason-hint"
+                onChange={(event) => {
+                  const reason = event.target.value;
+                  setStatusConfirm((current) => current ? { ...current, reason } : current);
+                  if (statusDialogError && reason.trim() && reason.trim().length <= 500) setStatusDialogError("");
+                }}
+                className="mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+            <p id="admin-cancellation-reason-hint" className="mt-1 text-right text-xs text-ink-500" aria-live="polite" aria-atomic="true">{String(statusConfirm.reason || "").trim().length}/500</p>
+          </div>
+        )}
         {statusDialogError && (
           <p
             className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
@@ -3611,6 +3639,7 @@ export function AdminPage() {
             variant={statusConfirm?.to === "Cancelled" ? "danger" : "primary"}
             className="min-h-11"
             loading={statusBusy}
+            disabled={statusBusy || (statusConfirm?.to === "Cancelled" && (!String(statusConfirm.reason || "").trim() || String(statusConfirm.reason || "").trim().length > 500))}
             onClick={confirmStatus}
           >
             {statusCopy.button}

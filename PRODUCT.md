@@ -46,7 +46,7 @@ An exact competitive or commercial positioning statement remains open and must n
 - Public registration creates customer accounts only. Staff and administrator access must remain protected by administrator-controlled provisioning and authorization.
 - The legacy PHP/MySQL surface is a rollback archive, not the active application.
 - The interface must remain responsive for mobile and desktop web use.
-- Keep the customer overview intentionally small and action-led; retain the Overview and Ratings & Reviews routes and compatibility redirect while making the primary navigation exactly Home, My Appointments, Ratings & Reviews, and My Profile. Notifications remain available through the notification bell, while Book appointment is a separate prominent action.
+- Keep the customer overview intentionally small and action-led; retain the Overview and Ratings & Reviews routes and compatibility redirect while making the primary navigation exactly Home, My Appointments, Ratings & Reviews, and My Profile. Notifications remain available through the notification bell; booking starts from the public header or the Home appointment card, while the customer sidebar stays focused on workspace destinations.
 - Business address, hours, policies, certifications, hygiene claims, and other optional seed content require confirmation before being treated as public proof.
 
 ## Brand Commitments

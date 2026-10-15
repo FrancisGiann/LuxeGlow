@@ -9,16 +9,21 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const adminPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/AdminPage.jsx'), 'utf8');
 const adminDialog = readFileSync(resolve(projectRoot, 'frontend/src/components/admin/AdminDialog.jsx'), 'utf8');
 
-test('appointment details offer primary confirm/completion without a Cancel action', () => {
+test('appointment details offer Confirm, completion, and reason-backed cancellation for active records', () => {
   assert.deepEqual(getAdminAppointmentActions('Pending'), [
     { status: 'Confirmed', label: 'Confirm', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
   assert.deepEqual(getAdminAppointmentActions('Confirmed'), [
     { status: 'Completed', label: 'Mark completed', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
   assert.deepEqual(getAdminAppointmentActions('Cancelled'), []);
-  assert.equal(getAdminAppointmentActions('Pending').some((action) => action.label === 'Cancel'), false);
+  assert.deepEqual(getAdminAppointmentActions('Completed'), []);
   assert.match(adminPage, /customer_cancellation_reason/);
+  assert.match(adminPage, /Cancellation reason/);
+  assert.match(adminPage, /statusConfirm\?\.to === "Cancelled"/);
+  assert.match(adminPage, /Enter a cancellation reason between 1 and 500 characters/);
   assert.match(adminPage, /respondToNoShow\(/);
   assert.match(adminPage, /appointment\.arrived_at && \(/);
   assert.match(adminPage, /!appointment\.arrived_at &&\s*onMarkArrived/);

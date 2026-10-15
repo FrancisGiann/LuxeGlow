@@ -15,9 +15,11 @@ test('database appointment status transitions match the staff UI and stay mirror
   assert.equal(migrationMirror, migration);
   assert.deepEqual(getAdminAppointmentActions('Pending'), [
     { status: 'Confirmed', label: 'Confirm', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
   assert.deepEqual(getAdminAppointmentActions('Confirmed'), [
     { status: 'Completed', label: 'Mark completed', variant: 'primary' },
+    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
   assert.deepEqual(getAdminAppointmentActions('Cancelled'), []);
   assert.match(migration, /old\.status = 'Pending' and new\.status in \('Confirmed', 'Cancelled'\)/);

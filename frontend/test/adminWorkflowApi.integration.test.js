@@ -24,6 +24,7 @@ let uploadStatus = 200;
 let uploadBody = { success: true, mocked: true, image_url: 'https://fixture.invalid/image.webp', image_public_id: 'mock-image' };
 let server;
 let api;
+let customerApi;
 let supabase;
 
 const json = (body, status = 200) => Response.json(body, { status });
@@ -142,6 +143,7 @@ process.env.VITE_SUPABASE_ANON_KEY = 'local-fixture-anon-key';
 before(async () => {
   server = await createServer({ root: frontendRoot, configFile: resolve(frontendRoot, 'vite.config.js'), server: { middlewareMode: true }, appType: 'custom' });
   api = await server.ssrLoadModule('/src/api/admin.js');
+  customerApi = await server.ssrLoadModule('/src/api/endpoints.js');
   ({ supabase } = await server.ssrLoadModule('/src/lib/supabase.js'));
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: adminId, exp: Math.floor(Date.now() / 1000) + 3600, role: 'authenticated' })}.abcdefgh`;
@@ -256,10 +258,44 @@ test('arrival, no-show choices, and staff appointment transitions call their sep
   assert.ok(appointments.get(noShowAppointmentId).no_show_reviewed_at);
   assert.deepEqual(await api.updateAppointmentStatus(appointmentId, 'Completed'), { success: true });
   assert.equal(appointments.get(appointmentId).status, 'Completed');
-  assert.deepEqual(await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled'), { success: true });
+  const beforeInvalidReason = calls.length;
+  for (const reason of ['', ' \t\n ', 'x'.repeat(501)]) {
+    assert.equal((await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled', reason)).success, false);
+  }
+  assert.equal(calls.length, beforeInvalidReason);
+  assert.deepEqual(await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled', 'Service unavailable'), { success: true });
   assert.equal(appointments.get(noShowAppointmentId).status, 'Cancelled');
+  const cancellationPatch = calls.find((call) => call.path.endsWith('/appointments') && call.method === 'PATCH' && call.body?.status === 'Cancelled');
+  assert.deepEqual(cancellationPatch.body, { status: 'Cancelled', cancellation_reason: 'Service unavailable' });
   assert.deepEqual(await api.rescheduleAppointment(appointmentId, '2026-10-12', '11:00'), { success: true });
   assert.equal(appointments.get(appointmentId).local_time, '11:00:00');
+});
+
+test('registration rejects malformed phone numbers before Supabase and preserves valid formatting', async () => {
+  const fields = { first_name: 'Mia', last_name: 'Santos', email: 'mia@example.test', password: 'GoodPassword9!', confirm_password: 'GoodPassword9!' };
+  const before = calls.length;
+  for (const phone of ['', 'letters only', '123456', '+12+3456789', '1234567890123456', 639171234567]) {
+    const result = await customerApi.registerCustomer({ ...fields, phone });
+    assert.equal(result.success, false);
+    assert.match(result.error, /phone number with 7 to 15 digits/i);
+  }
+  assert.equal(calls.length, before);
+
+  const originalSignUp = supabase.auth.signUp;
+  let signupOptions;
+  supabase.auth.signUp = async (options) => {
+    signupOptions = options;
+    return { data: { user: { id: '823e4567-e89b-42d3-a456-426614174000', email: fields.email }, session: null }, error: null };
+  };
+  try {
+    const result = await customerApi.registerCustomer({ ...fields, phone: '  +63 (917) 000-1122  ' });
+    assert.equal(result.success, true);
+    assert.equal(result.needs_verification, true);
+    assert.equal(signupOptions.options.data.phone, '+63 (917) 000-1122');
+    assert.equal(calls.length, before);
+  } finally {
+    supabase.auth.signUp = originalSignUp;
+  }
 });
 
 test('service image upload validates locally and only succeeds on the explicit mocked Edge response', async () => {

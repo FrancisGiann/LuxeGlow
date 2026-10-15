@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createStaffDirectory } from '../src/utils/staffDirectory.js';
 
-test('directory combines the confirmed team and admin/head accounts without merging shared IDs or names', () => {
+test('directory excludes the owner roster row and preserves staff, admin, and head entries', () => {
   const sharedId = 'shared-uuid';
   const directory = createStaffDirectory(
     [
@@ -18,11 +18,11 @@ test('directory combines the confirmed team and admin/head accounts without merg
   );
 
   assert.deepEqual(directory.map(({ key, roleLabel, name }) => ({ key, roleLabel, name })), [
-    { key: 'member:owner-id', roleLabel: 'Owner', name: 'Leth S. Alfabete' },
     { key: 'member:shared-uuid', roleLabel: 'Staff', name: 'Jen Reyes' },
     { key: 'account:shared-uuid', roleLabel: 'Head', name: 'Jen Reyes' },
     { key: 'account:admin-id', roleLabel: 'Admin', name: 'Ari Example' },
   ]);
+  assert.equal(directory.some((entry) => entry.id === 'owner-id'), false);
   assert.equal(directory.some((entry) => entry.id === 'legacy-id'), false);
   assert.equal(directory.some((entry) => entry.id === 'customer-id'), false);
 });

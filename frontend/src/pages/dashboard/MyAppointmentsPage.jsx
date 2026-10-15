@@ -33,7 +33,7 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
   const actionClassName = 'min-h-12 w-full whitespace-normal px-3.5 py-2 text-center leading-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 sm:w-auto sm:min-w-44';
 
   return (
-    <li className="grid gap-x-6 gap-y-3 border-b border-line px-1 py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start lg:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)_auto] lg:items-center">
+    <li className="grid gap-x-6 gap-y-3 border-b border-line px-3 py-5 odd:bg-surface even:bg-blush-100 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start lg:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)_auto] lg:items-center">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-blush-50 text-brand-300">
           {appointment.service_image ? <img src={appointment.service_image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <IconSparkle size={17} aria-hidden="true" />}

@@ -79,11 +79,11 @@ export async function listAdminAppointments() {
     await client.rpc('reconcile_expired_pending_appointments'),
     'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
   );
-  const appointmentSelection = 'id,reference_no,staff_id,staff_member_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name,unit_price)';
+  const appointmentSelection = 'id,reference_no,staff_id,staff_member_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name,unit_price)';
   const orderAppointments = (query) => query.order('created_at', { ascending: false }).order('id', { ascending: false });
   let appointmentResult = await orderAppointments(client.from('appointments').select(appointmentSelection));
   if (appointmentResult.error && isMissingStaffRosterMetadataError(appointmentResult.error)) {
-    appointmentResult = await orderAppointments(client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)'));
+    appointmentResult = await orderAppointments(client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)'));
   }
   const aggregateResult = await client.rpc('get_staff_rating_aggregates');
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');
@@ -97,11 +97,14 @@ export async function listAdminAppointments() {
   });
 }
 
-export async function updateAppointmentStatus(appointmentId, status) {
+export async function updateAppointmentStatus(appointmentId, status, cancellationReason) {
   if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
   if (!STATUSES.includes(status)) return { success: false, error: 'Invalid appointment status.' };
+  const reason = typeof cancellationReason === 'string' ? cancellationReason.trim() : '';
+  if (status === 'Cancelled' && (!reason || reason.length > 500)) return { success: false, error: 'Enter a cancellation reason between 1 and 500 characters.' };
   const client = await assertStaff();
-  throwIfError(await client.from('appointments').update({ status }).eq('id', appointmentId), 'Could not update appointment status.');
+  const patch = status === 'Cancelled' ? { status, cancellation_reason: reason } : { status };
+  throwIfError(await client.from('appointments').update(patch).eq('id', appointmentId), 'Could not update appointment status.');
   return { success: true };
 }
 

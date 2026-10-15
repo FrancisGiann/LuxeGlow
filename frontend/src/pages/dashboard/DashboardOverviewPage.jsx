@@ -40,7 +40,7 @@ function NextAppointment() {
         <EmptyState icon={IconCalendar} title="No upcoming visits" description="Your next booking will appear here once it is placed." />
       )}
       <div className="grid gap-3 border-t border-line bg-surface/50 px-6 py-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
-        <Link to="/book" className="flex min-h-11 items-center justify-center rounded-xl bg-brand-800 px-5 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-900">Book an appointment</Link>
+        <Link to="/book" className="flex min-h-11 items-center justify-center rounded-xl bg-brand-800 px-5 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-900">Book another appointment</Link>
         <Link to="/dashboard/appointments" className="flex min-h-11 items-center justify-center rounded-xl border border-line bg-surface px-5 text-sm font-bold text-ink-900 shadow-sm transition-colors hover:border-brand-300">View appointments</Link>
       </div>
     </Card>

@@ -47,7 +47,12 @@ export async function runAdminStatusConfirmation({
       return 'stale';
     }
 
-    await updateStatus(current.id, requestedStatus.to);
+    const updateResult = requestedStatus.to === 'Cancelled'
+      ? await updateStatus(current.id, requestedStatus.to, requestedStatus.reason)
+      : await updateStatus(current.id, requestedStatus.to);
+    if (updateResult?.success === false) {
+      throw new Error(updateResult.error || 'Could not update appointment status.');
+    }
     const refreshed = await loadAppointments();
     if (['Confirmed', 'Cancelled'].includes(requestedStatus.to)) {
       setSelectedAppointment(null);

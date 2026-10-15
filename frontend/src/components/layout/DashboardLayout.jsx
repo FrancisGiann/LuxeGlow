@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { logoutToPublicHome } from '../../utils/manualLogout';
 import { DashboardDataNotice } from '../dashboard/DashboardDataNotice';
 import { NotificationBell } from '../dashboard/NotificationBell';
 import { BrandLogo } from '../branding/BrandLogo';
-import { IconCalendar, IconGrid, IconLogout, IconMenu, IconSparkle, IconStar, IconUser, IconX } from '../icons';
+import { IconCalendar, IconGrid, IconLogout, IconMenu, IconStar, IconUser, IconX } from '../icons';
 
 const NAV_ITEMS = [
   { to: '/dashboard/overview', label: 'Home', icon: IconGrid },
@@ -24,15 +24,15 @@ const PAGE_TITLES = {
   '/dashboard/profile': 'My Profile',
 };
 
-function Brand() {
-  return <div className="flex justify-center px-5 pb-5 pt-4"><BrandLogo className="h-20 w-20" /></div>;
+function Brand({ onNavigate }) {
+  return <div className="flex justify-center px-5 pb-5 pt-4"><Link to="/" aria-label="Astrid Nails & Beauty Bar home" onClick={onNavigate} className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"><BrandLogo className="h-20 w-20" /></Link></div>;
 }
 
 function SidebarContent({ onNavigate }) {
   const { customer, logout } = useAuth();
   const navigate = useNavigate();
   const handleLogout = () => logoutToPublicHome(navigate, logout);
-  return <div className="flex h-full flex-col border-r border-line bg-surface"><Brand /><NavLink to="/book" onClick={onNavigate} className="mx-3 mb-5 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand-800 px-3 text-sm font-bold text-white shadow-card hover:bg-brand-900"><IconSparkle size={18} />Book appointment</NavLink><nav aria-label="Dashboard navigation" className="flex flex-col gap-1 px-3">{NAV_ITEMS.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `relative flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${isActive ? 'bg-blush-100 font-bold text-brand-800 before:absolute before:inset-y-2 before:-left-3 before:w-1 before:bg-brand-800 before:content-[""]' : 'font-medium text-ink-600 hover:bg-canvas hover:text-ink-900'}`}><Icon size={18} /><span className="flex-1">{label}</span></NavLink>)}</nav><div className="mt-auto border-t border-line p-4"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{(customer?.first_name || 'A').charAt(0).toUpperCase()}</span><div className="min-w-0"><p className="truncate text-sm font-bold text-ink-900">{customer?.first_name || 'Client'}</p><p className="truncate text-xs text-ink-500">{customer?.email}</p></div></div><button type="button" onClick={handleLogout} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-ink-500 hover:bg-blush-50 hover:text-danger"><IconLogout size={17} />Log out</button></div></div>;
+  return <div className="flex h-full flex-col border-r border-line bg-surface"><Brand onNavigate={onNavigate} /><nav aria-label="Dashboard navigation" className="flex flex-col gap-1 px-3">{NAV_ITEMS.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `relative flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${isActive ? 'bg-blush-100 font-bold text-brand-800 before:absolute before:inset-y-2 before:-left-3 before:w-1 before:bg-brand-800 before:content-[""]' : 'font-medium text-ink-600 hover:bg-canvas hover:text-ink-900'}`}><Icon size={18} /><span className="flex-1">{label}</span></NavLink>)}</nav><div className="mt-auto border-t border-line p-4"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{(customer?.first_name || 'A').charAt(0).toUpperCase()}</span><div className="min-w-0"><p className="truncate text-sm font-bold text-ink-900">{customer?.first_name || 'Client'}</p><p className="truncate text-xs text-ink-500">{customer?.email}</p></div></div><button type="button" onClick={handleLogout} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-ink-500 hover:bg-blush-50 hover:text-danger"><IconLogout size={17} />Log out</button></div></div>;
 }
 
 export function DashboardLayout() {

@@ -44,7 +44,7 @@ test('notification rows activate appointment details and keep the row free of ne
   assert.doesNotMatch(bell, /aria-label=\{`Mark \$\{notification\.title\} as read`\}/);
   assert.match(adminPage, /listAdminAppointments\(\)/);
   assert.match(adminPage, /notificationAppointmentModal/);
-  assert.match(adminPage, /onOpenAppointments=\{\(\) => openAppointments\(["']all["']\)\}/);
+  assert.match(adminPage, /onOpenAppointments=\{\(\) => openAppointments\(["']pending["']\)\}/);
   assert.match(adminPage, /onOpenAppointment=\{openNotificationAppointment\}/);
   assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(true\);\s*requestStatus\(appointment, nextStatus\);/);
   assert.match(adminPage, /const rescheduleNotificationAppointment = \(appointment\) => \{\s*closeNotificationAppointment\(true\);\s*openReschedule\(appointment\);/);

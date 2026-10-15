@@ -9,12 +9,12 @@ function accountName(account) {
 
 export function createStaffDirectory(members = [], accounts = []) {
   const memberEntries = members
-    .filter((member) => member?.id && ['owner', 'staff'].includes(member.record_kind))
+    .filter((member) => member?.id && member.record_kind === 'staff')
     .map((member) => ({
       key: `member:${member.id}`,
       id: String(member.id),
       kind: 'member',
-      roleLabel: member.record_kind === 'owner' ? 'Owner' : 'Staff',
+      roleLabel: 'Staff',
       name: String(member.full_name || 'Team member').trim(),
       member,
     }));
