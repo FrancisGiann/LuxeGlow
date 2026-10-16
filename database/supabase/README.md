@@ -72,9 +72,10 @@ you are migrating an existing salon database.
   maintenance when its delivery configuration is incomplete.
   `run_appointment_maintenance` cancels Pending appointments 15 minutes after
   their start, cancels Confirmed appointments with no recorded arrival or
-  explicit Keep review 24 hours after their start, and creates one 24-hour
-  reminder per confirmed appointment. A staff Keep decision records
-  `no_show_reviewed_at` and exempts that appointment from automatic cancellation.
+  recorded arrival 24 hours after their start, regardless of the no-show review
+  marker, and creates one 24-hour reminder per confirmed appointment. Staff may
+  acknowledge a no-show to dismiss repeat prompts, but acknowledgment does not
+  prevent automatic cancellation.
   After setup, confirm `process-notifications` is active in `cron.job`, inspect
   recent `cron.job_run_details`, and verify matching `net._http_response`
   entries return HTTP 200.

@@ -64,8 +64,9 @@ test('Appointments is the unknown-tab fallback and queue props have one implemen
   assert.match(adminPage, /tab === "appointments" \|\| tab === "history"/);
   assert.match(adminUtilities, /if \(kind === 'history'\) return createInitialAppointmentFilters\('Completed'\)/);
   assert.match(adminUtilities, /if \(kind === 'appointment'\) return createInitialAppointmentFilters\(APPOINTMENT_STATUSES\.includes\(appointment\?\.status\) \? appointment\.status : 'Pending'\)/);
-  assert.match(adminPage, /const displayedTotal = allAppointments\.filter\(\(appointment\) => appointment\.status === filters\.status\)\.length/);
-  assert.match(adminPage, /const availableStatuses = historyView \? \["Pending", "Confirmed", "Completed", "Cancelled"\] : \["Pending", "Confirmed"\]/);
+  assert.match(adminPage, /const pendingCount = appointments\.filter\(\(appointment\) => appointment\.status === "Pending"\)\.length/);
+  assert.match(adminPage, /const confirmedCount = appointments\.filter\(\(appointment\) => appointment\.status === "Confirmed"\)\.length/);
+  assert.match(adminPage, /\["Pending", "Confirmed", "Completed", "Cancelled"\]\.map/);
   const staffPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('export function AdminPage'));
   assert.doesNotMatch(staffPanel, /Appointments date|type="date"|Previous day|Next day/);
   assert.match(adminPage, /<StaffNotificationBell[\s\S]*?onOpenAppointments=\{\(\) => openAppointments\("pending"\)\}/);
@@ -73,7 +74,7 @@ test('Appointments is the unknown-tab fallback and queue props have one implemen
   assert.match(adminPage, /onOpenConflict=\{\(conflict\) => openAppointments\("conflict", conflict\)\}/);
 });
 
-test('status confirmation returns to details and no-show Keep records its separate action', () => {
+test('status confirmation returns to details and no-show acknowledgment does not change the 24-hour rule', () => {
   const statusDialog = adminPage.slice(
     adminPage.indexOf('open={!!statusConfirm}'),
     adminPage.indexOf('open={!!rescheduleTarget'),
@@ -86,23 +87,31 @@ test('status confirmation returns to details and no-show Keep records its separa
   assert.doesNotMatch(statusDialog, /updateAppointmentStatus/);
   assert.match(statusDialog, /onClick=\{closeStatusDialog\}[\s\S]*?Back to details/);
   assert.match(statusDialog, /statusDialogError[\s\S]*?role="alert"/);
-  assert.match(noShowDialog, /onClick=\{\(\) => respondToNoShowPrompt\(false\)\}[\s\S]*?Keep appointment/);
+  assert.match(noShowDialog, /onClick=\{respondToNoShowPrompt\}[\s\S]*?Acknowledge/);
+  assert.match(noShowDialog, /24 hours after its scheduled start[\s\S]*?does not prevent cancellation/);
+  assert.doesNotMatch(noShowDialog, /Cancel appointment|Keep appointment/);
   assert.match(adminPage, /const closeStatusDialog = \(\) => \{\s*closeAdminStatusConfirmation\(\{[\s\S]*?setPendingStatus: setStatusConfirm,[\s\S]*?setDialogError: setStatusDialogError/);
   assert.doesNotMatch(adminPage.slice(adminPage.indexOf('const closeStatusDialog'), adminPage.indexOf('const confirmStatus')), /setSelectedAppointment|updateAppointmentStatus/);
   assert.match(adminPage, /const confirmStatus = \(\) => \{[\s\S]*?void runAdminStatusConfirmation\(\{/);
   assert.match(adminPage, /const requestNotificationStatus = \(appointment, nextStatus\) => \{\s*closeNotificationAppointment\(true\);\s*requestStatus\(appointment, nextStatus\);/);
 });
 
-test('appointment queue keeps its search and summary visible while secondary filters collapse', () => {
+test('Appointments combines active statuses with visible date controls; History retains its exact-status filter disclosure', () => {
   const queue = adminPage.slice(adminPage.indexOf('function AppointmentQueue'), adminPage.indexOf('function NotificationAppointmentDialog'));
   const row = adminPage.slice(adminPage.indexOf('function AppointmentRow'), adminPage.indexOf('function AppointmentDetails'));
   assert.match(queue, /type="search"/);
   assert.match(queue, /aria-expanded=\{filtersExpanded\}[\s\S]*?aria-controls="appointment-filter-fields"/);
-  assert.match(queue, /id="appointment-filter-fields"[\s\S]*?hidden=\{!filtersExpanded\}/);
-  assert.match(queue, /Review Pending and Confirmed bookings/);
-  assert.match(queue, /Read the full appointment record by status/);
+  assert.match(queue, /id="appointment-filter-fields"[\s\S]*?hidden=\{historyView && !filtersExpanded\}/);
+  assert.match(queue, /All Pending and Confirmed appointments/);
+  assert.match(queue, /Review the full appointment log by status/);
+  assert.match(adminPage, /getAdminAppointmentQueue\(appointments, appointmentFilters, tab === "history" \? "history" : "appointments"\)/);
+  assert.match(queue, /historyView && \(/);
   assert.doesNotMatch(queue, /value="active"|value="all"|value="history"/);
-  assert.match(queue, /\{filterSummary\}[\s\S]*?\{appointments\.length\} of \{displayedTotal\}/);
+  assert.match(queue, /aria-pressed=\{allDatesActive\}/);
+  assert.match(queue, /aria-pressed=\{todayActive\}/);
+  assert.match(queue, /appointments\.length === 1 \? "appointment" : "appointments"/);
+  assert.match(queue, /appointments\.length === 1 \? "record" : "records"/);
+  assert.match(queue, /All dates[\s\S]*?Today[\s\S]*?Reset/);
   assert.match(queue, /Date &amp; time[\s\S]*?Customer[\s\S]*?Services[\s\S]*?Cancellation reason[\s\S]*?Status/);
   assert.match(row, /lg:grid-cols-/);
   assert.match(row, /lg:hidden">Cancellation reason/);

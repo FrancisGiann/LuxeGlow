@@ -12,6 +12,7 @@ const adminId = '123e4567-e89b-42d3-a456-426614174000';
 const targetId = '987e4567-e89b-42d3-a456-426614174000';
 const appointmentId = '423e4567-e89b-42d3-a456-426614174000';
 const noShowAppointmentId = '523e4567-e89b-42d3-a456-426614174000';
+const adminNoShowAppointmentId = '823e4567-e89b-42d3-a456-426614174000';
 const rosterOwnerId = '623e4567-e89b-42d3-a456-426614174000';
 const rosterStaffId = '723e4567-e89b-42d3-a456-426614174000';
 const calls = [];
@@ -100,6 +101,7 @@ globalThis.fetch = async (input, init = {}) => {
     }
   }
   if (url.pathname.endsWith('/functions/v1/upload-service-image')) return json(uploadBody, uploadStatus);
+  if (url.pathname.endsWith('/functions/v1/invite-staff')) return json({ success: true, user_id: targetId });
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const name = url.pathname.slice('/rest/v1/rpc/'.length);
     if (name === 'get_salon_closures') return json([...closures.values()].filter((item) => item.closure_date >= body.p_from && item.closure_date <= body.p_to));
@@ -122,7 +124,7 @@ globalThis.fetch = async (input, init = {}) => {
     if (name === 'respond_to_no_show') {
       const appointment = appointments.get(body.p_appointment_id);
       if (!appointment || appointment.status !== 'Confirmed') return json('not_eligible');
-      if (body.p_cancel) { appointment.status = 'Cancelled'; return json('cancelled'); }
+      if (body.p_cancel) return json({ message: 'Manual no-show cancellation is unavailable.' }, 403);
       appointment.no_show_reviewed_at = '2026-10-09T02:00:00.000Z';
       return json('kept');
     }
@@ -165,6 +167,7 @@ beforeEach(() => {
   appointments.clear();
   appointments.set(appointmentId, { id: appointmentId, status: 'Confirmed', arrived_at: null });
   appointments.set(noShowAppointmentId, { id: noShowAppointmentId, status: 'Confirmed', no_show_reviewed_at: null });
+  appointments.set(adminNoShowAppointmentId, { id: adminNoShowAppointmentId, status: 'Confirmed', no_show_reviewed_at: null });
   uploadStatus = 200;
   uploadBody = { success: true, mocked: true, image_url: 'https://fixture.invalid/image.webp', image_public_id: 'mock-image' };
 });
@@ -251,24 +254,45 @@ test('date closures and conflict lookup validate ranges and preserve the selecte
   await assert.rejects(api.listAdminClosures('bad-date', '2026-12-31'), /valid closure date range/i);
 });
 
-test('arrival, no-show choices, and staff appointment transitions call their separate APIs', async () => {
+test('arrival, no-show acknowledgment, and allowed staff transitions call their separate APIs', async () => {
   assert.deepEqual(await api.markAppointmentArrived(appointmentId), { success: true, arrived_at: '2026-10-09T02:00:00.000Z' });
   assert.equal(appointments.get(appointmentId).arrived_at, '2026-10-09T02:00:00.000Z');
   assert.deepEqual(await api.respondToNoShow(noShowAppointmentId, false), { success: true, outcome: 'kept' });
   assert.ok(appointments.get(noShowAppointmentId).no_show_reviewed_at);
   assert.deepEqual(await api.updateAppointmentStatus(appointmentId, 'Completed'), { success: true });
   assert.equal(appointments.get(appointmentId).status, 'Completed');
-  const beforeInvalidReason = calls.length;
-  for (const reason of ['', ' \t\n ', 'x'.repeat(501)]) {
-    assert.equal((await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled', reason)).success, false);
-  }
-  assert.equal(calls.length, beforeInvalidReason);
-  assert.deepEqual(await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled', 'Service unavailable'), { success: true });
-  assert.equal(appointments.get(noShowAppointmentId).status, 'Cancelled');
-  const cancellationPatch = calls.find((call) => call.path.endsWith('/appointments') && call.method === 'PATCH' && call.body?.status === 'Cancelled');
-  assert.deepEqual(cancellationPatch.body, { status: 'Cancelled', cancellation_reason: 'Service unavailable' });
+  const beforeManualCancellation = calls.length;
+  const rejectedStatus = await api.updateAppointmentStatus(noShowAppointmentId, 'Cancelled', 'Service unavailable');
+  const rejectedNoShow = await api.respondToNoShow(adminNoShowAppointmentId, true);
+  assert.equal(rejectedStatus.success, false);
+  assert.match(rejectedStatus.error, /Manual appointment cancellation is unavailable/i);
+  assert.equal(rejectedNoShow.success, false);
+  assert.match(rejectedNoShow.error, /cancelled automatically 24 hours/i);
+  assert.equal(calls.length, beforeManualCancellation, 'manual cancellation attempts stop before any Supabase request');
+  assert.equal(appointments.get(noShowAppointmentId).status, 'Confirmed');
+  assert.equal(appointments.get(adminNoShowAppointmentId).status, 'Confirmed');
   assert.deepEqual(await api.rescheduleAppointment(appointmentId, '2026-10-12', '11:00'), { success: true });
   assert.equal(appointments.get(appointmentId).local_time, '11:00:00');
+});
+
+test('manual cancellation is denied before writes for Head and Admin while both retain other workflows', async () => {
+  for (const role of ['admin', 'head']) {
+    profiles.set(adminId, { id: adminId, role, is_active: true });
+    const beforeWrites = calls.length;
+    const statusResult = await api.updateAppointmentStatus(appointmentId, 'Cancelled', 'No longer needed');
+    const noShowResult = await api.respondToNoShow(noShowAppointmentId, true);
+    assert.equal(statusResult.success, false);
+    assert.equal(noShowResult.success, false);
+    assert.match(statusResult.error, /Manual appointment cancellation is unavailable/i);
+    assert.match(noShowResult.error, /cancelled automatically 24 hours/i);
+    assert.equal(calls.length, beforeWrites, `${role} cancellation attempts must stop before Supabase`);
+  }
+
+  profiles.set(adminId, { id: adminId, role: 'head', is_active: true });
+  await assert.rejects(api.inviteStaff({ email: 'new-head@example.test', role: 'head' }), /Administrator access required/i);
+  assert.deepEqual(await api.respondToNoShow(noShowAppointmentId, false), { success: true, outcome: 'kept' });
+  assert.deepEqual(await api.updateAppointmentStatus(appointmentId, 'Completed'), { success: true });
+  assert.equal(appointments.get(appointmentId).status, 'Completed');
 });
 
 test('registration rejects malformed phone numbers before Supabase and preserves valid formatting', async () => {

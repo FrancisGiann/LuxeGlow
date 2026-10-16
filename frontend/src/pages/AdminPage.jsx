@@ -388,8 +388,6 @@ function statusConfirmationCopy(status) {
     return { title: "Confirm appointment?", button: "Confirm appointment" };
   if (status === "Completed")
     return { title: "Mark appointment completed?", button: "Mark completed" };
-  if (status === "Cancelled")
-    return { title: "Cancel appointment?", button: "Cancel appointment" };
   return { title: "Update appointment?", button: "Update status" };
 }
 
@@ -541,6 +539,7 @@ function AppointmentRow({ appointment, selected, onSelect, index, showCancellati
 
 function AppointmentDetailsActions({
   appointment,
+  role,
   onRequestStatus,
   onReschedule,
   onMarkArrived,
@@ -556,13 +555,14 @@ function AppointmentDetailsActions({
   const terminal = isTerminalAppointment(appointment);
   const arrivalAvailable = canRecordAppointmentArrival(appointment, arrivalClock);
   const hasArrivalTime = Number.isFinite(Date.parse(appointment.start_at));
-  const statusActions = getAdminAppointmentActions(appointment.status);
+  const isStaff = role === "admin" || role === "head";
+  const statusActions = getAdminAppointmentActions(appointment.status, role);
   const primaryActions = statusActions.filter((action) => action.variant === "primary");
   const secondaryActions = statusActions.filter((action) => action.variant !== "primary");
-  const canMarkArrived = appointment.status === "Confirmed" && !appointment.arrived_at && onMarkArrived;
-  const canReschedule = !appointment.arrived_at;
+  const canMarkArrived = isStaff && appointment.status === "Confirmed" && !appointment.arrived_at && onMarkArrived;
+  const canReschedule = isStaff && !appointment.arrived_at;
   const secondaryCount = Number(!!canMarkArrived) + Number(canReschedule) + secondaryActions.length;
-  const arrivalUnavailable = appointment.status === "Confirmed" && !appointment.arrived_at && !arrivalAvailable;
+  const arrivalUnavailable = isStaff && appointment.status === "Confirmed" && !appointment.arrived_at && !arrivalAvailable;
 
   if (terminal && !onViewInAppointments && !arrivalError) return null;
 
@@ -796,7 +796,6 @@ function AppointmentQueue({
   filters,
   section,
   totalAppointments,
-  allAppointments,
   selectedAppointment,
   filtersExpanded,
   headingRef,
@@ -809,18 +808,49 @@ function AppointmentQueue({
 }) {
   const historyView = section === "history";
   const showCancellationReason = historyView && filters.status === "Cancelled";
-  const availableStatuses = historyView ? ["Pending", "Confirmed", "Completed", "Cancelled"] : ["Pending", "Confirmed"];
-  const statusLabel = `${historyView ? "History" : "Appointments"} · ${filters.status}`;
-  const displayedTotal = allAppointments.filter((appointment) => appointment.status === filters.status).length;
-  const resultLabel = historyView ? "record" : "booking";
+  const today = manilaDateKey();
+  const pendingCount = appointments.filter((appointment) => appointment.status === "Pending").length;
+  const confirmedCount = appointments.filter((appointment) => appointment.status === "Confirmed").length;
   const gridColumns = showCancellationReason
     ? "sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(7.5rem,7.5rem)]"
     : "sm:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)_minmax(0,1.5fr)_minmax(7.5rem,7.5rem)]";
   const filterSummary = [
-    statusLabel,
+    historyView ? `History · ${filters.status}` : "Pending and Confirmed appointments",
     filters.date || "All dates",
     filters.search.trim() ? `Search “${filters.search.trim()}”` : "",
   ].filter(Boolean).join(" · ");
+  const allDatesActive = !filters.date;
+  const todayActive = filters.date === today;
+  const shortcutClass = (active) => `min-h-11 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 ${active ? "border-brand-800 bg-brand-50 text-brand-800" : "border-line bg-surface text-ink-700 hover:border-brand-300"}`;
+
+  const dateControls = (
+    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(12rem,1fr)_auto_auto_auto]">
+      <label className="min-w-0 text-sm font-semibold text-ink-900">
+        Date
+        <input
+          type="date"
+          value={filters.date}
+          onChange={(event) => onFilterChange("date", event.target.value)}
+          className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
+        />
+      </label>
+      <div className="grid grid-cols-3 gap-2 sm:contents">
+        <button type="button" aria-pressed={allDatesActive} onClick={onAllDates} className={`${shortcutClass(allDatesActive)} self-end`}>
+          All dates
+        </button>
+        <button type="button" aria-pressed={todayActive} onClick={onToday} className={`${shortcutClass(todayActive)} self-end`}>
+          Today
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          className="min-h-11 self-end rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <Card className="overflow-hidden p-5 sm:p-7">
@@ -829,7 +859,7 @@ function AppointmentQueue({
           {historyView ? "History" : "Appointments"}
         </h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          {historyView ? "Read the full appointment record by status and review cancellation details." : "Review Pending and Confirmed bookings across every date."} Times use Asia/Manila.
+          {historyView ? "Review the full appointment log by status, including cancellation details." : "All Pending and Confirmed appointments, across every date."} Times use Asia/Manila.
         </p>
       </div>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -849,74 +879,47 @@ function AppointmentQueue({
             />
           </span>
         </label>
-        <button
-          type="button"
-          aria-expanded={filtersExpanded}
-          aria-controls="appointment-filter-fields"
-          onClick={onToggleFilters}
-          className="min-h-11 shrink-0 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-        >
-          Filters{filtersExpanded ? " · Hide" : ""}
-        </button>
+        {historyView && (
+          <button
+            type="button"
+            aria-expanded={filtersExpanded}
+            aria-controls="appointment-filter-fields"
+            onClick={onToggleFilters}
+            className="min-h-11 shrink-0 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
+          >
+            Filters{filtersExpanded ? " · Hide" : ""}
+          </button>
+        )}
       </div>
       <div
         id="appointment-filter-fields"
-        hidden={!filtersExpanded}
-        className="mt-4 grid gap-3 border-b border-line pb-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto_auto_auto]"
+        hidden={historyView && !filtersExpanded}
+        className="mt-4 border-b border-line pb-4"
       >
-        <label className="text-sm font-semibold text-ink-900">
-          Date
-          <input
-            type="date"
-            value={filters.date}
-            onChange={(event) => onFilterChange("date", event.target.value)}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-          />
-        </label>
-        <label className="text-sm font-semibold text-ink-900">
-          Status
-          <select
-            value={filters.status}
-            onChange={(event) => onFilterChange("status", event.target.value)}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-          >
-            {availableStatuses.map(
-              (status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ),
-            )}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={onAllDates}
-          className="min-h-11 self-end rounded-lg px-3 text-sm font-semibold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-        >
-          All dates
-        </button>
-        <button
-          type="button"
-          onClick={onToday}
-          className="min-h-11 self-end rounded-lg px-3 text-sm font-semibold text-brand-800 underline decoration-line underline-offset-4 hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-        >
-          Today
-        </button>
-        <button
-          type="button"
-          onClick={onReset}
-          className="min-h-11 self-end rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink-700 hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800"
-        >
-          Reset filters
-        </button>
+        {historyView && (
+          <label className="mb-3 block max-w-xs text-sm font-semibold text-ink-900">
+            Status
+            <select
+              value={filters.status}
+              onChange={(event) => onFilterChange("status", event.target.value)}
+              className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
+            >
+              {["Pending", "Confirmed", "Completed", "Cancelled"].map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {dateControls}
       </div>
       <div className="mt-4 flex flex-col gap-1 border-b border-line pb-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <p className="min-w-0 break-words font-semibold text-ink-700" role="status" aria-live="polite">
           {filterSummary}
         </p>
         <p className="shrink-0 text-ink-500">
-          {appointments.length} of {displayedTotal} {resultLabel}{displayedTotal === 1 ? "" : "s"}
+          {historyView
+            ? `${appointments.length} ${appointments.length === 1 ? "record" : "records"}`
+            : `${appointments.length} ${appointments.length === 1 ? "appointment" : "appointments"} · ${pendingCount} pending · ${confirmedCount} confirmed`}
         </p>
       </div>
       <div className={`mt-3 hidden min-h-12 items-center gap-x-4 border-b border-line bg-canvas px-3 py-3 text-xs font-bold uppercase leading-snug tracking-[0.12em] text-ink-500 lg:grid ${gridColumns}`}>
@@ -951,6 +954,7 @@ function AppointmentQueue({
 function NotificationAppointmentDialog({
   state,
   appointment,
+  role,
   onClose,
   onRequestStatus,
   onReschedule,
@@ -973,6 +977,7 @@ function NotificationAppointmentDialog({
       footer={appointment && (!isTerminalAppointment(appointment) || onViewInAppointments) ? (
         <AppointmentDetailsActions
           appointment={appointment}
+          role={role}
           onRequestStatus={onRequestStatus}
           onReschedule={onReschedule}
           onMarkArrived={onMarkArrived}
@@ -2073,8 +2078,8 @@ export function AdminPage() {
     setTab(nextTab);
   }, [setTab]);
   const visibleAppointments = useMemo(
-    () => getAdminAppointmentQueue(appointments, appointmentFilters),
-    [appointments, appointmentFilters],
+    () => getAdminAppointmentQueue(appointments, appointmentFilters, tab === "history" ? "history" : "appointments"),
+    [appointments, appointmentFilters, tab],
   );
   const selectedVisibleAppointment = selectedAppointment
     ? visibleAppointments.find(
@@ -2194,6 +2199,7 @@ export function AdminPage() {
   useEffect(() => {
     const checkForDueNoShows = () => {
       if (
+        !isStaffRole(customer?.role) ||
         tab !== "appointments" ||
         statusConfirm ||
         reschedule ||
@@ -2242,7 +2248,7 @@ export function AdminPage() {
       window.clearTimeout(initialCheck);
       window.clearInterval(timer);
     };
-  }, [appointments, selectedVisibleAppointment, noShowConfirm, notificationAppointmentModal, reschedule, statusConfirm, tab]);
+  }, [appointments, customer?.role, selectedVisibleAppointment, noShowConfirm, notificationAppointmentModal, reschedule, statusConfirm, tab]);
 
   const closeNoShowPrompt = () => {
     if (noShowConfirm?.id) {
@@ -2257,6 +2263,7 @@ export function AdminPage() {
       (item) => String(item.id) === String(appointment?.id),
     );
     if (
+      !isStaffRole(customer?.role) ||
       !current ||
       current.status !== "Confirmed" ||
       current.arrived_at ||
@@ -2280,13 +2287,13 @@ export function AdminPage() {
     }
   };
 
-  const respondToNoShowPrompt = async (shouldCancel) => {
-    if (!noShowConfirm || noShowBusy) return;
+  const respondToNoShowPrompt = async () => {
+    if (!isStaffRole(customer?.role) || !noShowConfirm || noShowBusy) return;
     setNoShowBusy(true);
     setNoShowDialogError("");
     setError("");
     try {
-      const result = await respondToNoShow(noShowConfirm.id, shouldCancel);
+      const result = await respondToNoShow(noShowConfirm.id, false);
       if (!result.success) throw new Error(result.error);
       if (result.outcome === "not_due") {
         setNoShowDialogError(
@@ -2300,7 +2307,7 @@ export function AdminPage() {
         setNotice(`Appointment ${noShowConfirm.reference} was cancelled.`);
       } else if (result.outcome === "kept") {
         setNotice(
-          `Appointment ${noShowConfirm.reference} remains confirmed. This no-show prompt will not appear again.`,
+          `No-show acknowledged for ${noShowConfirm.reference}. If no arrival is recorded, it will be cancelled automatically 24 hours after its scheduled start.`,
         );
       } else if (result.outcome === "arrived") {
         setNotice(
@@ -2308,7 +2315,7 @@ export function AdminPage() {
         );
       } else if (result.outcome === "already_reviewed") {
         setNotice(
-          `Appointment ${noShowConfirm.reference} was already reviewed by another staff member.`,
+          `The no-show for ${noShowConfirm.reference} was already acknowledged by another staff member.`,
         );
       } else {
         setNotice(
@@ -2415,9 +2422,10 @@ export function AdminPage() {
   const requestStatus = (appointment, nextStatus) => {
     const current = appointments.find((item) => item.id === appointment?.id);
     if (
+      !isStaffRole(customer?.role) ||
       !current ||
       isTerminalAppointment(current) ||
-      !getAdminAppointmentActions(current.status).some(
+      !getAdminAppointmentActions(current.status, customer?.role).some(
         (action) => action.status === nextStatus,
       )
     )
@@ -2431,7 +2439,6 @@ export function AdminPage() {
       reference: current.reference_no,
       from: current.status,
       to: nextStatus,
-      reason: "",
     });
   };
 
@@ -2445,22 +2452,13 @@ export function AdminPage() {
   };
 
   const confirmStatus = () => {
-    let pendingStatus = statusConfirm;
-    if (statusConfirm?.to === "Cancelled") {
-      const reason = String(statusConfirm.reason || "").trim();
-      if (!reason || reason.length > 500) {
-        setStatusDialogError("Enter a cancellation reason between 1 and 500 characters.");
-        return;
-      }
-      pendingStatus = { ...statusConfirm, reason };
-    }
     void runAdminStatusConfirmation({
-      pendingStatus,
+      pendingStatus: statusConfirm,
       appointments,
       busyRef: statusBusyRef,
       isTransitionAllowed: (current, nextStatus) =>
         !isTerminalAppointment(current) &&
-        getAdminAppointmentActions(current.status).some(
+        getAdminAppointmentActions(current.status, customer?.role).some(
           (action) => action.status === nextStatus,
         ),
       updateStatus: updateAppointmentStatus,
@@ -2527,6 +2525,7 @@ export function AdminPage() {
   const resetInviteForm = () =>
     setInviteForm({ email: "", first_name: "", last_name: "", role: "head" });
   const openInvite = () => {
+    if (customer?.role !== "admin") return;
     setInviteDialogError("");
     setInviteDialogOpen(true);
   };
@@ -2538,7 +2537,7 @@ export function AdminPage() {
   };
   const invite = async (event) => {
     event.preventDefault();
-    if (inviteBusy) return;
+    if (customer?.role !== "admin" || inviteBusy) return;
     setNotice("");
     setInviteDialogError("");
     setInviteBusy(true);
@@ -2547,12 +2546,12 @@ export function AdminPage() {
       if (!result.success) throw new Error(result.error);
       resetInviteForm();
       setInviteDialogOpen(false);
-      setNotice("Invitation sent.");
+      setNotice("Account added. Setup email sent.");
       await load();
     } catch (inviteError) {
       setInviteDialogError(
         inviteError?.message ||
-          "Could not send the invitation. Check the details and try again.",
+          "Could not add the account or send its setup email. Check the details and try again.",
       );
     } finally {
       setInviteBusy(false);
@@ -2651,7 +2650,7 @@ export function AdminPage() {
     }
   };
   const openReschedule = (appointment) => {
-    if (!appointment || isTerminalAppointment(appointment) || appointment.arrived_at) return;
+    if (!isStaffRole(customer?.role) || !appointment || isTerminalAppointment(appointment) || appointment.arrived_at) return;
     setError("");
     setRescheduleDialogError("");
     setNoShowConfirm(null);
@@ -2993,7 +2992,6 @@ export function AdminPage() {
       filters={appointmentFilters}
       section={tab === "history" ? "history" : "appointments"}
       totalAppointments={appointments.length}
-      allAppointments={appointments}
       selectedAppointment={selectedVisibleAppointment}
       filtersExpanded={appointmentFiltersExpanded}
       headingRef={appointmentQueueHeadingRef}
@@ -3433,7 +3431,7 @@ export function AdminPage() {
                 onSelect={setSelectedStaffKey}
                 action={customer?.role === "admin" ? (
                   <Button type="button" size="sm" className="min-h-11" onClick={openInvite}>
-                    Invite account
+                    Add account
                   </Button>
                 ) : null}
               >
@@ -3474,6 +3472,7 @@ export function AdminPage() {
       <NotificationAppointmentDialog
         state={notificationAppointmentModal}
         appointment={notificationModalAppointment}
+        role={customer?.role}
         onClose={closeNotificationAppointment}
         onRequestStatus={requestNotificationStatus}
         onReschedule={rescheduleNotificationAppointment}
@@ -3497,6 +3496,7 @@ export function AdminPage() {
         footer={selectedVisibleAppointment && !isTerminalAppointment(selectedVisibleAppointment) ? (
           <AppointmentDetailsActions
             appointment={selectedVisibleAppointment}
+            role={customer?.role}
             onRequestStatus={requestStatus}
             onReschedule={openReschedule}
             onMarkArrived={recordAppointmentArrival}
@@ -3543,11 +3543,7 @@ export function AdminPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm leading-relaxed text-ink-600">
-          The scheduled start was at least 15 minutes ago. Keep it to record
-          your review, or cancel it to notify the customer and release the time.
-          If it remains unreviewed without a recorded arrival, it will be
-          cancelled automatically 24 hours after its scheduled start. Closing
-          this notice leaves the appointment unchanged.
+          The scheduled start was at least 15 minutes ago. Acknowledge this notice to record your review and dismiss repeat prompts. If no arrival is recorded, the appointment will still be cancelled automatically 24 hours after its scheduled start. Acknowledging does not prevent cancellation.
         </p>
         {noShowDialogError && (
           <p
@@ -3563,18 +3559,10 @@ export function AdminPage() {
             variant="soft"
             className="min-h-11"
             disabled={noShowBusy}
-            onClick={() => respondToNoShowPrompt(false)}
-          >
-            Keep appointment
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            className="min-h-11"
             loading={noShowBusy}
-            onClick={() => respondToNoShowPrompt(true)}
+            onClick={respondToNoShowPrompt}
           >
-            Cancel appointment
+            {noShowBusy ? "Acknowledging…" : "Acknowledge"}
           </Button>
         </div>
       </AdminDialog>
@@ -3588,34 +3576,8 @@ export function AdminPage() {
         fallbackFocusRef={appointmentQueueHeadingRef}
       >
         <p className="text-sm leading-relaxed text-ink-600">
-          {statusConfirm?.to === "Cancelled"
-            ? "The cancellation stays in the appointment history and cannot be reversed from this workspace."
-            : "Confirm this transition after checking the appointment details."}
+          Confirm this transition after checking the appointment details.
         </p>
-        {statusConfirm?.to === "Cancelled" && (
-          <div className="mt-4">
-            <label htmlFor="admin-cancellation-reason" className="block text-sm font-semibold text-ink-900">
-              Cancellation reason
-              <textarea
-                id="admin-cancellation-reason"
-                required
-                maxLength={500}
-                rows={3}
-                disabled={statusBusy}
-                value={statusConfirm.reason || ""}
-                aria-invalid={Boolean(statusDialogError)}
-                aria-describedby="admin-cancellation-reason-hint"
-                onChange={(event) => {
-                  const reason = event.target.value;
-                  setStatusConfirm((current) => current ? { ...current, reason } : current);
-                  if (statusDialogError && reason.trim() && reason.trim().length <= 500) setStatusDialogError("");
-                }}
-                className="mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-              />
-            </label>
-            <p id="admin-cancellation-reason-hint" className="mt-1 text-right text-xs text-ink-500" aria-live="polite" aria-atomic="true">{String(statusConfirm.reason || "").trim().length}/500</p>
-          </div>
-        )}
         {statusDialogError && (
           <p
             className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
@@ -3636,10 +3598,10 @@ export function AdminPage() {
           </Button>
           <Button
             type="button"
-            variant={statusConfirm?.to === "Cancelled" ? "danger" : "primary"}
+            variant="primary"
             className="min-h-11"
             loading={statusBusy}
-            disabled={statusBusy || (statusConfirm?.to === "Cancelled" && (!String(statusConfirm.reason || "").trim() || String(statusConfirm.reason || "").trim().length > 500))}
+            disabled={statusBusy}
             onClick={confirmStatus}
           >
             {statusCopy.button}
@@ -3922,8 +3884,8 @@ export function AdminPage() {
       </AdminDialog>
       <AdminDialog
         open={inviteDialogOpen}
-        title="Invite account"
-        description="Send an invitation to set up staff workspace access."
+        title="Add account"
+        description="Send a secure setup email so the new Head can choose a password and access the staff workspace."
         closeDisabled={inviteBusy}
         onClose={closeInvite}
       >
@@ -4003,8 +3965,8 @@ export function AdminPage() {
             >
               Cancel
             </Button>
-            <Button type="submit" className="min-h-11" loading={inviteBusy} disabled={inviteRoleDisabled}>
-              {inviteRoleDisabled ? "A Head is already assigned" : inviteBusy ? "Sending invitation…" : "Send invitation"}
+            <Button type="submit" className="min-h-11" loading={inviteBusy} disabled={inviteBusy || inviteRoleDisabled}>
+              {inviteRoleDisabled ? "A Head is already assigned" : inviteBusy ? "Adding account…" : "Add account"}
             </Button>
           </div>
         </form>

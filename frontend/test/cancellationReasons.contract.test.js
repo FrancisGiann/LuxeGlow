@@ -8,6 +8,10 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (path) => readFileSync(resolve(projectRoot, path), 'utf8');
 const migration = read('supabase/migrations/20261015100000_appointment_cancellation_reason.sql');
 const mirror = read('database/supabase/migrations/20261015100000_appointment_cancellation_reason.sql');
+const roleMigration = read('supabase/migrations/20261016000000_admin_only_manual_cancellation.sql');
+const roleMirror = read('database/supabase/migrations/20261016000000_admin_only_manual_cancellation.sql');
+const currentPolicy = read('supabase/migrations/20261016010000_no_show_auto_cancel_after_24h.sql');
+const currentPolicyMirror = read('database/supabase/migrations/20261016010000_no_show_auto_cancel_after_24h.sql');
 const adminApi = read('frontend/src/api/admin.js');
 const adminPage = read('frontend/src/pages/AdminPage.jsx');
 const initialMigration = read('supabase/migrations/20260827000000_initial.sql');
@@ -28,8 +32,7 @@ test('canonical cancellation reason migration is append-only, nullable for legac
   assert.doesNotMatch(migration, /set cancellation_reason\s*=\s*coalesce/i, 'legacy reasons must not be invented or backfilled');
   assert.match(adminPage, /String\(appointment\?\.cancellation_reason \|\| ""\)\.trim\(\)[\s\S]*?customer_cancellation_reason[\s\S]*?No reason recorded/);
   assert.match(adminApi, /cancellation_reason,customer_cancellation_reason,customer_reschedule_reason/);
-  assert.match(adminApi, /const patch = status === 'Cancelled' \? \{ status, cancellation_reason: reason \} : \{ status \}/);
-  assert.match(adminApi, /if \(status === 'Cancelled' && \(!reason \|\| reason\.length > 500\)\)/);
+  assert.match(adminApi, /if \(status === 'Cancelled'\) \{\s+void cancellationReason;\s+return \{ success: false, error: 'Manual appointment cancellation is unavailable/);
 });
 
 test('reason trigger requires a valid cancellation transition and denies reason-only or terminal edits', () => {
@@ -70,4 +73,38 @@ test('trusted cancellation writers attach fixed reasons while Keep and customer 
   assert.match(maintenance, /pg_advisory_xact_lock\(hashtextextended\('appointment-maintenance-reminders'/);
   assert.match(maintenance, /insert into public\.notification_outbox/);
   assert.match(migration, /revoke all on function public\.run_appointment_maintenance\(timestamptz\) from public;\s*grant execute on function public\.run_appointment_maintenance\(timestamptz\) to service_role/);
+});
+
+test('administrator-only cancellation is enforced at the database boundary without opening expiry or customer bypasses', () => {
+  assert.equal(roleMigration, roleMirror);
+  const protect = functionBody(roleMigration, 'protect_appointment_fields');
+  const noShow = functionBody(roleMigration, 'respond_to_no_show');
+  const reconcile = functionBody(roleMigration, 'reconcile_expired_pending_appointments');
+
+  assert.match(protect, /v_customer_action boolean := coalesce\(current_setting\('app\.allow_customer_appointment_action', true\) = 'true', false\)/);
+  assert.match(protect, /v_expired_pending_reconciliation boolean := coalesce\([\s\S]*?current_setting\('app\.allow_expired_pending_reconciliation', true\) = 'true'[\s\S]*?old\.status = 'Pending'[\s\S]*?old\.start_at < clock_timestamp\(\) - interval '15 minutes'[\s\S]*?false\s*\);/);
+  assert.match(protect, /if not \(public\.is_admin\(\) or v_customer_action or v_expired_pending_reconciliation\) then/);
+  assert.match(noShow, /if p_cancel and v_role <> 'admin' then[\s\S]*?Only administrators may cancel a no-show appointment/);
+  assert.match(reconcile, /perform set_config\('app\.allow_expired_pending_reconciliation', 'true', true\)/);
+  assert.match(reconcile, /exception when others then[\s\S]*?set_config\('app\.allow_expired_pending_reconciliation', coalesce\(v_previous_marker, 'false'\), true\)[\s\S]*?raise/);
+  assert.match(reconcile, /perform set_config\('app\.allow_expired_pending_reconciliation', coalesce\(v_previous_marker, 'false'\), true\);\s*return v_cancelled/);
+  assert.match(roleMigration, /revoke all on function public\.respond_to_no_show\(uuid, boolean\) from public, anon, service_role;\s*grant execute on function public\.respond_to_no_show\(uuid, boolean\) to authenticated/);
+  assert.match(roleMigration, /revoke all on function public\.reconcile_expired_pending_appointments\(\) from public, anon, service_role;\s*grant execute on function public\.reconcile_expired_pending_appointments\(\) to authenticated/);
+});
+
+test('current policy denies all salon manual cancellation and never exempts acknowledged no-shows', () => {
+  assert.equal(currentPolicy, currentPolicyMirror);
+  const protect = functionBody(currentPolicy, 'protect_appointment_fields');
+  const noShow = functionBody(currentPolicy, 'respond_to_no_show');
+  const maintenance = functionBody(currentPolicy, 'run_appointment_maintenance');
+
+  assert.doesNotMatch(protect, /public\.is_admin\(\)/);
+  assert.match(protect, /if not \(v_customer_action or v_expired_pending_reconciliation\) then/);
+  assert.match(protect, /and not v_customer_action\s+and not v_expired_pending_reconciliation\s+and not v_privileged/);
+  assert.match(protect, /old\.status = 'Pending' and new\.status = 'Confirmed'[\s\S]*?old\.status = 'Confirmed' and new\.status = 'Completed'/);
+  assert.match(noShow, /if p_cancel then\s+raise exception 'Manual no-show cancellation is unavailable/);
+  assert.doesNotMatch(noShow, /set status = 'Cancelled'/);
+  assert.match(maintenance, /Automatically cancelled because no arrival was recorded within 24 hours of the scheduled start\./);
+  assert.match(maintenance, /and arrived_at is null\s+and start_at <= p_now - interval '24 hours'/);
+  assert.doesNotMatch(maintenance, /no_show_reviewed_at is null/);
 });

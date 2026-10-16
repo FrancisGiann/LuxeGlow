@@ -9,24 +9,32 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const adminPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/AdminPage.jsx'), 'utf8');
 const adminDialog = readFileSync(resolve(projectRoot, 'frontend/src/components/admin/AdminDialog.jsx'), 'utf8');
 
-test('appointment details offer Confirm, completion, and reason-backed cancellation for active records', () => {
-  assert.deepEqual(getAdminAppointmentActions('Pending'), [
+test('Admins and Heads share workflow actions, while manual cancellation stays unavailable', () => {
+  assert.deepEqual(getAdminAppointmentActions('Pending', 'admin'), [
     { status: 'Confirmed', label: 'Confirm', variant: 'primary' },
-    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
-  assert.deepEqual(getAdminAppointmentActions('Confirmed'), [
+  assert.deepEqual(getAdminAppointmentActions('Confirmed', 'admin'), [
     { status: 'Completed', label: 'Mark completed', variant: 'primary' },
-    { status: 'Cancelled', label: 'Cancel appointment', variant: 'secondary' },
   ]);
-  assert.deepEqual(getAdminAppointmentActions('Cancelled'), []);
-  assert.deepEqual(getAdminAppointmentActions('Completed'), []);
+  assert.deepEqual(getAdminAppointmentActions('Pending', 'head'), [
+    { status: 'Confirmed', label: 'Confirm', variant: 'primary' },
+  ]);
+  assert.deepEqual(getAdminAppointmentActions('Confirmed', 'head'), [
+    { status: 'Completed', label: 'Mark completed', variant: 'primary' },
+  ]);
+  assert.deepEqual(getAdminAppointmentActions('Pending'), []);
+  assert.deepEqual(getAdminAppointmentActions('Pending', 'unknown'), []);
+  assert.deepEqual(getAdminAppointmentActions('Cancelled', 'admin'), []);
+  assert.deepEqual(getAdminAppointmentActions('Completed', 'head'), []);
   assert.match(adminPage, /customer_cancellation_reason/);
   assert.match(adminPage, /Cancellation reason/);
-  assert.match(adminPage, /statusConfirm\?\.to === "Cancelled"/);
-  assert.match(adminPage, /Enter a cancellation reason between 1 and 500 characters/);
+  assert.match(adminPage, /Acknowledge this notice to record your review/);
+  assert.match(adminPage, /will still be cancelled automatically 24 hours after its scheduled start/);
+  assert.doesNotMatch(adminPage, /Keep appointment|Cancel appointment/);
   assert.match(adminPage, /respondToNoShow\(/);
   assert.match(adminPage, /appointment\.arrived_at && \(/);
   assert.match(adminPage, /!appointment\.arrived_at &&\s*onMarkArrived/);
+  assert.match(adminPage, /getAdminAppointmentActions\(current\.status, customer\?\.role\)/);
 });
 
 test('both appointment detail entry points disable status and reschedule while arrival is saving', () => {

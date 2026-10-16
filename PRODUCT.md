@@ -43,6 +43,7 @@ An exact competitive or commercial positioning statement remains open and must n
 - Preserve all current customer, staff, and administrator functionality.
 - Preserve Supabase Auth, Postgres/RLS, Storage, Edge Functions, and the existing React/Vite application stack.
 - Preserve the status vocabulary: Pending, Confirmed, Completed, and Cancelled.
+- The staff workspace's Appointments queue combines Pending and Confirmed by default; History is the complete exact-status log. Heads and administrators can confirm, record arrival, reschedule, complete, and acknowledge a no-show. Neither role can manually cancel an appointment. Any Confirmed appointment without recorded arrival is cancelled automatically 24 hours after its scheduled start, whether or not staff acknowledged the notice. New staff accounts are added by an administrator and receive a secure password-setup email.
 - Public registration creates customer accounts only. Staff and administrator access must remain protected by administrator-controlled provisioning and authorization.
 - The legacy PHP/MySQL surface is a rollback archive, not the active application.
 - The interface must remain responsive for mobile and desktop web use.

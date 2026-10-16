@@ -42,7 +42,7 @@ test('AdminPage defines its render binding from loaded profiles and has no unsup
     adminPage,
     /const \{ disabled: inviteRoleDisabled \} = getHeadInviteState\(\s*inviteForm\.role,\s*staff,\s*\);/,
   );
-  assert.match(adminPage, /disabled=\{inviteRoleDisabled\}/);
+  assert.match(adminPage, /disabled=\{inviteBusy \|\| inviteRoleDisabled\}/);
   assert.match(adminPage, /inviteRoleDisabled \? "A Head is already assigned"/);
   assert.match(adminPage, /<option value="head">Head<\/option>/);
   assert.doesNotMatch(adminPage, /<option value="admin">Admin<\/option>/);

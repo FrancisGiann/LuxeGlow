@@ -26,7 +26,9 @@ test('invite and staff recovery links target the configured password setup route
   assert.match(resetStaff, /buildStaffPasswordEmail\(\{ isInvite, firstName, actionLink \}\)/);
   assert.doesNotMatch(invite, /password\s*:/i);
   assert.match(invite, /accepts_appointments: false/);
-  assert.match(adminPage, /Send an invitation to set up staff workspace access\./);
+  assert.match(adminPage, /title="Add account"[\s\S]*?description="Send a secure setup email so the new Head can choose a password and access the staff workspace\."/);
+  assert.match(adminPage, /inviteBusy \? "Adding account…" : "Add account"/);
+  assert.match(adminPage, /Could not add the account or send its setup email/);
   assert.doesNotMatch(adminPage, /Accepts appointments.*controls eligibility for new customer bookings/);
 });
 

@@ -100,10 +100,12 @@ export async function listAdminAppointments() {
 export async function updateAppointmentStatus(appointmentId, status, cancellationReason) {
   if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
   if (!STATUSES.includes(status)) return { success: false, error: 'Invalid appointment status.' };
-  const reason = typeof cancellationReason === 'string' ? cancellationReason.trim() : '';
-  if (status === 'Cancelled' && (!reason || reason.length > 500)) return { success: false, error: 'Enter a cancellation reason between 1 and 500 characters.' };
+  if (status === 'Cancelled') {
+    void cancellationReason;
+    return { success: false, error: 'Manual appointment cancellation is unavailable in the salon workspace.' };
+  }
   const client = await assertStaff();
-  const patch = status === 'Cancelled' ? { status, cancellation_reason: reason } : { status };
+  const patch = { status };
   throwIfError(await client.from('appointments').update(patch).eq('id', appointmentId), 'Could not update appointment status.');
   return { success: true };
 }
@@ -118,7 +120,8 @@ export async function markAppointmentArrived(appointmentId) {
 
 export async function respondToNoShow(appointmentId, shouldCancel) {
   if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId))) return { success: false, error: 'Invalid appointment.' };
-  if (typeof shouldCancel !== 'boolean') return { success: false, error: 'Choose whether to keep or cancel the appointment.' };
+  if (typeof shouldCancel !== 'boolean') return { success: false, error: 'Choose whether to acknowledge the no-show.' };
+  if (shouldCancel) return { success: false, error: 'Manual no-show cancellation is unavailable. If no arrival is recorded, the appointment is cancelled automatically 24 hours after its scheduled start.' };
   const client = await assertStaff();
   const { data, error } = await client.rpc('respond_to_no_show', {
     p_appointment_id: appointmentId,
@@ -431,9 +434,9 @@ export async function updateAdminAbout(fields) {
 }
 
 export async function inviteStaff(fields) {
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const { data, error } = await client.functions.invoke('invite-staff', { body: fields });
-  if (error) throw new Error(await functionErrorMessage(error, 'Could not invite staff member.'));
+  if (error) throw new Error(await functionErrorMessage(error, 'Could not add the account or send its setup email.'));
   return data;
 }
 

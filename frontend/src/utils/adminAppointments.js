@@ -78,6 +78,17 @@ function localTimeSeconds(value) {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+function scheduleSortKey(appointment) {
+  if (!isValidLocalDate(appointment?.local_date)) return null;
+  const seconds = localTimeSeconds(appointment?.local_time);
+  if (seconds === null) return null;
+  return `${appointment.local_date}T${String(seconds).padStart(5, '0')}`;
+}
+
+function deterministicAppointmentId(appointment) {
+  return stringValue(appointment?.id || appointment?.reference_no).trim();
+}
+
 export function appointmentFilterPreset(kind, today = manilaDateKey(), appointment = null) {
   if (kind === 'history') return createInitialAppointmentFilters('Completed');
   if (kind === 'today') return { date: isValidLocalDate(today) ? today : manilaDateKey(), status: 'Pending', search: '' };
@@ -109,34 +120,59 @@ export function sortAppointmentsByLocalTime(appointments) {
     .map(({ appointment }) => appointment);
 }
 
-export function getAdminAppointmentQueue(appointments, filters = {}) {
+export function sortAppointmentsByLocalSchedule(appointments) {
+  if (!Array.isArray(appointments)) return [];
+  return appointments
+    .map((appointment, index) => ({ appointment, index, key: scheduleSortKey(appointment) }))
+    .sort((left, right) => {
+      if (left.key !== null && right.key === null) return -1;
+      if (right.key !== null && left.key === null) return 1;
+      if (left.key !== null && right.key !== null && left.key !== right.key) {
+        return left.key.localeCompare(right.key);
+      }
+      const idOrder = deterministicAppointmentId(left.appointment)
+        .localeCompare(deterministicAppointmentId(right.appointment));
+      return idOrder || left.index - right.index;
+    })
+    .map(({ appointment }) => appointment);
+}
+
+export function getAdminAppointmentQueue(appointments, filters = {}, section = 'appointments') {
   const source = Array.isArray(appointments) ? appointments : [];
   const activeFilters = filters && typeof filters === 'object' ? filters : {};
+  const historyView = section === 'history';
   const date = stringValue(activeFilters.date).trim();
-  const status = APPOINTMENT_STATUSES.includes(activeFilters.status) ? activeFilters.status : 'Pending';
+  const status = APPOINTMENT_STATUSES.includes(activeFilters.status) ? activeFilters.status : 'Completed';
   const term = stringValue(activeFilters.search).trim().toLowerCase();
   const matching = source.filter((appointment) => {
     if (!appointment || typeof appointment !== 'object') return false;
     if (date && appointment.local_date !== date) return false;
-    if (appointment.status !== status) return false;
+    if (historyView) {
+      if (appointment.status !== status) return false;
+    } else if (!['Pending', 'Confirmed'].includes(appointment.status)) {
+      return false;
+    }
     return !term || searchableAppointmentText(appointment).includes(term);
   });
-  return date ? sortAppointmentsByLocalTime(matching) : matching;
+  if (historyView) return date ? sortAppointmentsByLocalTime(matching) : matching;
+  return sortAppointmentsByLocalSchedule(matching);
 }
 
 export function appointmentQueueEmptyMessage(totalAppointments, filters = {}, section = 'appointments') {
   const activeFilters = filters && typeof filters === 'object' ? filters : {};
+  const historyView = section === 'history';
   const hasFilters = Boolean(
     stringValue(activeFilters.date).trim()
-    || (activeFilters.status && activeFilters.status !== 'Pending')
+    || (historyView && activeFilters.status && activeFilters.status !== 'Completed')
     || stringValue(activeFilters.search).trim(),
   );
-  if (!totalAppointments && !hasFilters) return section === 'history' ? 'No appointment history yet.' : 'No appointments yet.';
+  if (!totalAppointments && !hasFilters) return historyView ? 'No appointment history yet.' : 'No appointments yet.';
+  if (!historyView && !hasFilters) return 'No active appointments.';
   if (!stringValue(activeFilters.date).trim() && !stringValue(activeFilters.search).trim()) {
-    if (activeFilters.status === 'Completed') return 'No completed appointments yet.';
-    if (activeFilters.status === 'Cancelled') return 'No cancelled appointments yet.';
-    if (activeFilters.status === 'Pending' && section === 'appointments') return 'No pending appointments.';
-    if (activeFilters.status === 'Confirmed' && section === 'appointments') return 'No confirmed appointments.';
+    if (historyView && activeFilters.status === 'Completed') return 'No completed appointments yet.';
+    if (historyView && activeFilters.status === 'Cancelled') return 'No cancelled appointments yet.';
+    if (historyView && activeFilters.status === 'Pending') return 'No pending appointments.';
+    if (historyView && activeFilters.status === 'Confirmed') return 'No confirmed appointments.';
   }
   return 'No appointments match these filters.';
 }
