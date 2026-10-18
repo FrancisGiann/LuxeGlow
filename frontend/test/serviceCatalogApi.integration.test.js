@@ -161,3 +161,15 @@ test('ordinary field and classification validation reject invalid data without a
   assert.match(invalidCategory.error, /supported service type/i);
   assert.equal(calls.some((call) => ['POST', 'PATCH'].includes(call.method)), false);
 });
+
+
+test('coercible service inputs are rejected before any write while free services and cents remain valid', async () => {
+  for (const patch of [{ name: {} }, { name: ['Name'] }, { price: '' }, { price: '   ' }, { price: null }, { price: true }, { price: [] }, { duration_minutes: true }, { duration_minutes: [] }, { is_active: 'false' }]) {
+    const result = await saveService(serviceFields('QA type check', patch));
+    assert.equal(result.success, false, JSON.stringify(patch));
+  }
+  assert.equal(calls.some((call) => ['POST', 'PATCH'].includes(call.method)), false);
+  for (const price of [0, 12.5, 1000000]) {
+    assert.equal((await saveService(serviceFields('合法 Café QA ' + price, { price }))).success, true);
+  }
+});

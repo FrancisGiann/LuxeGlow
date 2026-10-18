@@ -340,15 +340,21 @@ export async function resetStaffPassword(userId) {
 }
 
 export async function saveService(fields = {}, { existingId = null } = {}) {
-  const input = fields && typeof fields === 'object' ? fields : {};
+  const input = fields && typeof fields === 'object' && !Array.isArray(fields) ? fields : {};
+  const inputError = 'Check the service name, type, category, subcategory, price, and duration.';
+  if (['id', 'name', 'category', 'subcategory', 'item_type'].some((key) => input[key] != null && typeof input[key] !== 'string')
+      || (existingId != null && typeof existingId !== 'string')
+      || (input.is_active !== undefined && typeof input.is_active !== 'boolean')) return { success: false, error: inputError };
   const requestedId = String(existingId || input.id || '').trim();
   const id = requestedId || globalThis.crypto?.randomUUID?.();
   const name = String(input.name || '').trim();
   const category = String(input.category || '').trim();
   const subcategory = String(input.subcategory || '').trim();
   const itemType = String(input.item_type || '').trim();
-  const price = Number(input.price);
-  const duration = Number(input.duration_minutes);
+  const numericInput = (value) => typeof value === 'number'
+    || (typeof value === 'string' && value.trim() !== '');
+  const price = numericInput(input.price) ? Number(input.price) : Number.NaN;
+  const duration = numericInput(input.duration_minutes) ? Number(input.duration_minutes) : Number.NaN;
   if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(id || '')) || !name || name.length > 255 || category.length > 100 || subcategory.length > 100 || itemType.length > 30 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check the service name, type, category, subcategory, price, and duration.' };
   const client = await assertAdmin();
   let existing = null;
