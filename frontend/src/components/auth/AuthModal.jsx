@@ -8,6 +8,7 @@ import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
+import { containAuthDialogFocus, focusAuthDialog } from '../../utils/authDialogFocus';
 import { verificationCooldownSeconds } from '../../utils/verificationFeedback';
 import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
@@ -52,6 +53,8 @@ export function AuthModal() {
     passwordCompletion,
     sessionNotice,
   } = useAuth();
+  const dialogRef = useRef(null);
+  const authOpen = Boolean(modalView);
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -112,15 +115,19 @@ export function AuthModal() {
   }, [resendIn]);
 
   useEffect(() => {
-    if (!modalView) return undefined;
-    const onKey = (e) => e.key === 'Escape' && closeAuth();
-    window.addEventListener('keydown', onKey);
+    if (!authOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const releaseFocus = containAuthDialogFocus(dialogRef.current, closeAuth);
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      releaseFocus();
+      document.body.style.overflow = previousOverflow;
     };
-  }, [modalView, closeAuth]);
+  }, [authOpen, closeAuth]);
+
+  useEffect(() => {
+    if (modalView) focusAuthDialog(dialogRef.current);
+  }, [modalView]);
 
   if (!modalView) return null;
 
@@ -314,7 +321,7 @@ export function AuthModal() {
   const inviteCompletion = passwordCompletion?.type === 'invite';
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ink-900/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
       <div className="absolute inset-0" onClick={closeAuth} aria-hidden="true" />
       <div className="relative my-auto w-full max-w-md">
         <button

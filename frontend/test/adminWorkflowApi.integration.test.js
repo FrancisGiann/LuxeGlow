@@ -339,3 +339,22 @@ test('service image upload validates locally and only succeeds on the explicit m
   uploadBody = { error: 'Mock image provider unavailable.' };
   await assert.rejects(api.uploadServiceImage('classic-manicure', file), /Mock image provider unavailable/);
 });
+
+test('Head cannot write Admin-only setup and content through client APIs', async () => {
+  profiles.set(adminId, { id: adminId, role: 'head', is_active: true });
+  const mutations = [
+    () => api.saveFaq({ question: 'Synthetic question', answer: 'Synthetic answer' }),
+    () => api.deleteFaq(1),
+    () => api.saveService({ id: 'qa-service', name: 'Synthetic service', price: 150, duration_minutes: 30 }),
+    () => api.setServiceActive('qa-service', true),
+    () => api.setServiceHomepageFeatured('qa-service', true),
+    () => api.updateAdminAbout({ salon_policies: 'Synthetic policy' }),
+    () => api.saveAdminSchedule({ dayOfWeek: 1, openTime: '10:00', closeTime: '18:00', isClosed: false }),
+    () => api.saveAdminClosure('2026-11-19', 'Synthetic closure'),
+    () => api.deleteAdminClosure('2026-11-19'),
+  ];
+  const beforeWrites = calls.filter(({ method }) => method !== 'GET').length;
+  for (const mutate of mutations) await assert.rejects(mutate(), /Administrator access required/i);
+  assert.equal(calls.filter(({ method }) => method !== 'GET').length, beforeWrites,
+    'denied Head actions must stop before a mutation request');
+});

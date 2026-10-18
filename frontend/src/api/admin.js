@@ -191,7 +191,7 @@ export async function saveFaq(fields) {
   const answer = String(fields.answer || '').trim();
   const displayOrder = Number(fields.display_order || 0);
   if ((id !== undefined && (!Number.isInteger(id) || id < 1)) || !question || question.length > 500 || !answer || answer.length > 10000 || !Number.isInteger(displayOrder) || displayOrder < 0 || displayOrder > 100000) return { success: false, error: 'Check the FAQ question, answer, and display order.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const row = { question, answer, display_order: displayOrder, is_published: fields.is_published !== false };
   if (id !== undefined) row.id = id;
   throwIfError(await client.from('faqs').upsert(row).select().single(), 'Could not save FAQ.');
@@ -200,7 +200,7 @@ export async function saveFaq(fields) {
 
 export async function deleteFaq(id) {
   if (!Number.isInteger(Number(id)) || Number(id) < 1) return { success: false, error: 'Invalid FAQ.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   throwIfError(await client.from('faqs').delete().eq('id', Number(id)), 'Could not delete FAQ.');
   return { success: true };
 }
@@ -350,7 +350,7 @@ export async function saveService(fields = {}, { existingId = null } = {}) {
   const price = Number(input.price);
   const duration = Number(input.duration_minutes);
   if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(id || '')) || !name || name.length > 255 || category.length > 100 || subcategory.length > 100 || itemType.length > 30 || !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(duration) || duration < 5 || duration > 1440) return { success: false, error: 'Check the service name, type, category, subcategory, price, and duration.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   let existing = null;
   if (existingId) {
     const existingResult = await client.from('services').select('id,category,subcategory,item_type').eq('id', id).maybeSingle();
@@ -380,7 +380,7 @@ export async function saveService(fields = {}, { existingId = null } = {}) {
 export async function uploadServiceImage(serviceId, file) {
   if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type) || !Number.isFinite(file.size) || file.size <= 0 || file.size > 5 * 1024 * 1024) return { success: false, error: 'Use a JPEG, PNG, or WebP image up to 5 MB.' };
   if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(serviceId))) return { success: false, error: 'Invalid service ID.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const body = new FormData();
   body.append('service_id', String(serviceId));
   body.append('image', file, file.name || 'service-image');
@@ -391,14 +391,14 @@ export async function uploadServiceImage(serviceId, file) {
 }
 
 export async function setServiceActive(serviceId, isActive) {
-  const client = await assertStaff();
+  const client = await assertAdmin();
   throwIfError(await client.from('services').update({ is_active: !!isActive }).eq('id', serviceId), 'Could not update service.');
   return { success: true };
 }
 
 export async function setServiceHomepageFeatured(serviceId, isFeatured) {
   if (!/^[a-z0-9][a-z0-9_-]{0,49}$/i.test(String(serviceId))) return { success: false, error: 'Invalid service ID.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const result = await client.from('services').update({ is_homepage_featured: !!isFeatured }).eq('id', String(serviceId)).select('id,is_homepage_featured').maybeSingle();
   if (result.error) {
     if (isMissingHomepageCurationError(result.error)) return { success: false, error: 'Homepage selection needs the latest database migration.' };
@@ -425,7 +425,7 @@ export async function getAdminAbout() {
 }
 
 export async function updateAdminAbout(fields) {
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const data = Object.fromEntries(['business_name', 'description', 'mission_statement', 'phone', 'email', 'address', 'salon_policies', 'map_embed_url'].map((key) => [key, String(fields[key] || '').slice(0, 10000) || null]));
   const current = await getAdminAbout();
   if (!current?.id) throw new Error('Business information has not been seeded.');
@@ -468,7 +468,7 @@ export async function listAdminClosures(from, to) {
 
 export async function saveAdminSchedule({ dayOfWeek, openTime, closeTime, isClosed }) {
   if (!Number.isInteger(Number(dayOfWeek)) || Number(dayOfWeek) < 1 || Number(dayOfWeek) > 7 || (isClosed ? openTime || closeTime : !/^\d{2}:\d{2}$/.test(String(openTime)) || !/^\d{2}:\d{2}$/.test(String(closeTime)))) return { success: false, error: 'Check the day and opening hours.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const result = await client.rpc('save_salon_hours', { p_day_of_week: Number(dayOfWeek), p_open_time: isClosed ? null : openTime, p_close_time: isClosed ? null : closeTime, p_is_closed: !!isClosed });
   if (result.error) throw new Error(result.error.message || 'Could not save salon hours.');
   return { success: true, schedule: result.data };
@@ -476,7 +476,7 @@ export async function saveAdminSchedule({ dayOfWeek, openTime, closeTime, isClos
 
 export async function saveAdminClosure(closureDate, reason = '') {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate)) || String(reason).length > 500) return { success: false, error: 'Check the closure date and reason.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const result = await client.rpc('save_salon_closure', { p_closure_date: closureDate, p_reason: String(reason).trim() || null });
   if (result.error) throw new Error(result.error.message || 'Could not save closure.');
   return { success: true, closure: result.data };
@@ -484,7 +484,7 @@ export async function saveAdminClosure(closureDate, reason = '') {
 
 export async function deleteAdminClosure(closureDate) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(closureDate))) return { success: false, error: 'Choose a valid closure date.' };
-  const client = await assertStaff();
+  const client = await assertAdmin();
   const result = await client.rpc('delete_salon_closure', { p_closure_date: closureDate });
   if (result.error) throw new Error(result.error.message || 'Could not remove closure.');
   return { success: true };
