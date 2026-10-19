@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync(new URL('../src/components/layout/DashboardLayout.jsx',import.meta.url),'utf8');
+const effect=source.slice(source.indexOf('  useLayoutEffect(() => {'),source.indexOf('  return <div className="min-h-screen'));
+function harness(matches=false){let open=true,listener,released=false,contained=false,cleanup;const body={style:{overflow:'auto'}};const media={matches,addEventListener(_type,fn){listener=fn;},removeEventListener(_type,fn){assert.equal(listener,fn);listener=null;}};vm.runInNewContext(effect,{useLayoutEffect(fn){cleanup=fn();},drawerOpen:open,drawerRef:{current:{id:'drawer'}},document:{body},window:{matchMedia(query){assert.equal(query,'(min-width: 1024px)');return media;}},setDrawerOpen(value){open=value;},containAuthDialogFocus(dialog,_onEscape){assert.equal(dialog.id,'drawer');contained=true;return ()=>{released=true;};}});return {body,media,get open(){return open;},get contained(){return contained;},get released(){return released;},desktop(){media.matches=true;listener();},cleanup(){cleanup();},get listener(){return listener;}};}
+test('Customer drawer contains focus and restores prior scrolling on cleanup',()=>{const h=harness();assert.equal(h.contained,true);assert.equal(h.body.style.overflow,'hidden');h.cleanup();assert.equal(h.released,true);assert.equal(h.body.style.overflow,'auto');assert.equal(h.listener,null);});
+test('desktop resize closes the mobile drawer rather than leaving hidden focus containment',()=>{const h=harness();h.desktop();assert.equal(h.open,false);h.cleanup();assert.equal(h.body.style.overflow,'auto');const desktop=harness(true);assert.equal(desktop.open,false);desktop.cleanup();});

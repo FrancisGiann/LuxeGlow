@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { logoutToPublicHome } from '../../utils/manualLogout';
+import { containAuthDialogFocus } from '../../utils/authDialogFocus';
 import { DashboardDataNotice } from '../dashboard/DashboardDataNotice';
 import { NotificationBell } from '../dashboard/NotificationBell';
 import { BrandLogo } from '../branding/BrandLogo';
@@ -37,6 +38,7 @@ function SidebarContent({ onNavigate }) {
 
 export function DashboardLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef(null);
   const [retryingDashboard, setRetryingDashboard] = useState(false);
   const { error: dashboardError, refresh } = useDashboard();
   const location = useLocation();
@@ -50,8 +52,22 @@ export function DashboardLayout() {
     }
   };
   useEffect(() => setDrawerOpen(false), [location.pathname]);
-  useEffect(() => { if (!drawerOpen) return undefined; const close = (event) => event.key === 'Escape' && setDrawerOpen(false); const previous = document.body.style.overflow; document.body.style.overflow = 'hidden'; window.addEventListener('keydown', close); return () => { document.body.style.overflow = previous; window.removeEventListener('keydown', close); }; }, [drawerOpen]);
-  return <div className="min-h-screen bg-canvas"><aside className="fixed inset-y-0 left-0 z-[950] hidden w-[224px] lg:block"><SidebarContent /></aside>{drawerOpen && <div id="dashboard-mobile-menu" className="fixed inset-0 z-[1050] lg:hidden"><button type="button" className="absolute inset-0 h-full w-full cursor-default border-0 bg-ink-900/50" onClick={() => setDrawerOpen(false)} aria-label="Close dashboard menu" /><aside role="dialog" aria-modal="true" aria-label="Dashboard menu" className="absolute inset-y-0 left-0 w-[290px] max-w-[88vw] shadow-pop"><button type="button" onClick={() => setDrawerOpen(false)} aria-label="Close menu" className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-canvas"><IconX /></button><SidebarContent onNavigate={() => setDrawerOpen(false)} /></aside></div>}<div className="lg:pl-[224px]"><header className="sticky top-0 z-[900] border-b border-line bg-canvas/95 backdrop-blur-sm"><div className="flex min-h-16 items-center gap-4 px-5 sm:px-8 lg:px-10"><button type="button" onClick={() => setDrawerOpen(true)} aria-label="Open dashboard menu" aria-expanded={drawerOpen} aria-controls="dashboard-mobile-menu" className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 lg:hidden"><IconMenu /></button><div className="flex-1"><p className="hidden text-xs font-bold uppercase tracking-[0.16em] text-ink-400 sm:block">Customer workspace</p><h1 className="truncate font-display text-xl font-medium text-ink-900">{title}</h1></div><NotificationBell /><NavLink to="/dashboard/profile" className="flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface py-1.5 pl-1.5 pr-3 hover:border-brand-300"><TopbarAvatar /><span className="hidden text-sm font-semibold text-ink-900 sm:block">Account</span></NavLink></div></header><main className="px-5 pb-16 pt-8 sm:px-8 lg:px-10">{dashboardError && <DashboardDataNotice onRetry={retryDashboard} retrying={retryingDashboard} />}<Outlet /></main></div></div>;
+  useLayoutEffect(() => {
+    if (!drawerOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => { if (desktop.matches) setDrawerOpen(false); };
+    document.body.style.overflow = 'hidden';
+    const releaseFocus = containAuthDialogFocus(drawerRef.current, () => setDrawerOpen(false));
+    desktop.addEventListener('change', closeOnDesktop);
+    closeOnDesktop();
+    return () => {
+      desktop.removeEventListener('change', closeOnDesktop);
+      document.body.style.overflow = previousOverflow;
+      releaseFocus();
+    };
+  }, [drawerOpen]);
+  return <div className="min-h-screen bg-canvas"><aside className="fixed inset-y-0 left-0 z-[950] hidden w-[224px] lg:block"><SidebarContent /></aside>{drawerOpen && <div id="dashboard-mobile-menu" className="fixed inset-0 z-[1050] lg:hidden"><button type="button" className="absolute inset-0 h-full w-full cursor-default border-0 bg-ink-900/50" onClick={() => setDrawerOpen(false)} aria-label="Close dashboard menu" /><aside ref={drawerRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Dashboard menu" className="absolute inset-y-0 left-0 w-[290px] max-w-[88vw] shadow-pop"><button type="button" onClick={() => setDrawerOpen(false)} aria-label="Close menu" className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-canvas"><IconX /></button><SidebarContent onNavigate={() => setDrawerOpen(false)} /></aside></div>}<div className="lg:pl-[224px]"><header className="sticky top-0 z-[900] border-b border-line bg-canvas/95 backdrop-blur-sm"><div className="flex min-h-16 items-center gap-4 px-5 sm:px-8 lg:px-10"><button type="button" onClick={() => setDrawerOpen(true)} aria-label="Open dashboard menu" aria-expanded={drawerOpen} aria-controls="dashboard-mobile-menu" className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-surface text-ink-700 lg:hidden"><IconMenu /></button><div className="flex-1"><p className="hidden text-xs font-bold uppercase tracking-[0.16em] text-ink-400 sm:block">Customer workspace</p><h1 className="truncate font-display text-xl font-medium text-ink-900">{title}</h1></div><NotificationBell /><NavLink to="/dashboard/profile" className="flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface py-1.5 pl-1.5 pr-3 hover:border-brand-300"><TopbarAvatar /><span className="hidden text-sm font-semibold text-ink-900 sm:block">Account</span></NavLink></div></header><main className="px-5 pb-16 pt-8 sm:px-8 lg:px-10">{dashboardError && <DashboardDataNotice onRetry={retryDashboard} retrying={retryingDashboard} />}<Outlet /></main></div></div>;
 }
 
 function TopbarAvatar() {
