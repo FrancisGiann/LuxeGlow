@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getAbout } from '../../api/endpoints';
@@ -7,6 +7,7 @@ import { AuthModal } from '../auth/AuthModal';
 import { BrandLogo } from '../branding/BrandLogo';
 import { getInitials } from '../../utils/format';
 import { isStaffRole } from '../../utils/roles';
+import { bindPublicMenuEscape } from '../../utils/publicMenuEscape';
 import { IconMail, IconMapPin, IconMenu, IconPhone, IconX } from '../icons';
 
 const NAV_LINKS = [
@@ -19,6 +20,7 @@ const NAV_LINKS = [
 function Navbar() {
   const { isAuthenticated, customer, openAuth } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuTrigger = useRef(null);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +34,11 @@ function Navbar() {
   }, []);
 
   useEffect(() => setMenuOpen(false), [location]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    return bindPublicMenuEscape({ target: document, onClose: () => setMenuOpen(false), trigger: menuTrigger.current });
+  }, [menuOpen]);
 
   const goHome = () => {
     if (location.pathname !== '/') navigate('/');
@@ -69,7 +76,7 @@ function Navbar() {
           {!isStaff && <button type="button" onClick={() => navigate('/book')} className="min-h-11 rounded-xl bg-brand-800 px-5 text-sm font-bold text-white shadow-card hover:bg-brand-900">Book</button>}
         </div>
 
-        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 xl:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="Toggle menu" aria-expanded={menuOpen} aria-controls="mobile-navigation">
+        <button ref={menuTrigger} type="button" className="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-ink-700 xl:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="Toggle menu" aria-expanded={menuOpen} aria-controls="mobile-navigation">
           {menuOpen ? <IconX /> : <IconMenu />}
         </button>
       </div>
@@ -86,7 +93,7 @@ function Navbar() {
                 {!isStaff && <Link to="/book" className="rounded-xl bg-brand-800 px-4 py-3 text-center text-sm font-bold text-white">Book an appointment</Link>}
                 <Link to={isStaff ? '/admin' : '/dashboard'} className="rounded-xl border border-line px-4 py-3 text-center text-sm font-bold text-ink-900">{isStaff ? 'Staff workspace' : 'My dashboard'}</Link>
               </>
-            ) : <button type="button" onClick={() => openAuth('login')} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Log in / Register</button>}
+            ) : <button type="button" onClick={() => { menuTrigger.current?.focus(); setMenuOpen(false); openAuth('login'); }} className="rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-900">Log in / Register</button>}
           </div>
         </div>
       )}
