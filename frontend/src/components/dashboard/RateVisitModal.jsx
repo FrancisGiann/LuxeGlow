@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createReview, getRatableAppointments } from '../../api/endpoints';
 import { useDashboard } from '../../context/DashboardContext';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui/Button';
 import { Select, Textarea } from '../ui/Field';
 import { IconStar, IconX } from '../icons';
+import { containAuthDialogFocus } from '../../utils/authDialogFocus';
+import { handleStarRatingKeyDown } from '../../utils/ratingKeyboard';
 
 export function StarPicker({ value, onChange, size = 28, readOnly = false, label = 'Star rating' }) {
   const [hover, setHover] = useState(0);
@@ -23,18 +25,19 @@ export function StarPicker({ value, onChange, size = 28, readOnly = false, label
   }
   const active = hover || value;
   return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
+    <div className="flex gap-1.5" role="radiogroup" aria-label={label} onKeyDown={(event) => handleStarRatingKeyDown(event, value, onChange)}>
       {[1, 2, 3, 4, 5].map((star) => (
         <button
           key={star}
           type="button"
           role="radio"
           aria-checked={value === star}
+          tabIndex={value === star || (!value && star === 1) ? 0 : -1}
           aria-label={`${star} star${star > 1 ? 's' : ''}`}
           onMouseEnter={() => setHover(star)}
           onMouseLeave={() => setHover(0)}
           onClick={() => onChange(star)}
-          className={`transition-transform hover:scale-110 ${star <= active ? 'text-gold-400' : 'text-line-strong'}`}
+          className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800 transition-transform hover:scale-110 ${star <= active ? 'text-gold-400' : 'text-line-strong'}`}
         >
           <IconStar size={size} filled={star <= active} />
         </button>
@@ -45,6 +48,10 @@ export function StarPicker({ value, onChange, size = 28, readOnly = false, label
 
 export function RateVisitModal({ onClose, presetAppointmentId }) {
   const { refresh } = useDashboard();
+  const dialogRef = useRef(null);
+  const closeHandler = useRef(onClose);
+  const titleId = useId();
+  const descriptionId = useId();
   const toast = useToast();
   const [ratable, setRatable] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -73,15 +80,17 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
     };
   }, [presetAppointmentId]);
 
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
+  useLayoutEffect(() => { closeHandler.current = onClose; }, [onClose]);
+
+  useLayoutEffect(() => {
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    const releaseFocus = containAuthDialogFocus(dialogRef.current, () => closeHandler.current());
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      document.body.style.overflow = previousOverflow;
+      releaseFocus();
     };
-  }, [onClose]);
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -110,13 +119,14 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
   const selected = ratable?.find((a) => String(a.appointment_id) === appointmentId);
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto overscroll-contain bg-ink-900/75 px-4 py-6 backdrop-blur-md sm:items-center sm:px-6 sm:py-8" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto overscroll-contain bg-ink-900/75 px-4 py-6 backdrop-blur-md sm:px-6 sm:py-8" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="relative my-6 w-full max-w-md sm:my-8">
+      <div className="relative my-6 w-full max-w-md sm:my-auto">
         <button
           onClick={onClose}
-          aria-label="Close"
-          className="absolute -top-2 right-0 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-500 shadow-card transition-colors hover:text-ink-900 sm:-right-2"
+          type="button"
+          aria-label="Close rating dialog"
+          className="absolute -top-2 right-0 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-500 shadow-card transition-colors hover:text-ink-900 sm:-right-2"
         >
           <IconX size={16} />
         </button>
@@ -126,15 +136,15 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gold-100 text-gold-600">
               <IconStar filled />
             </span>
-            <h2 className="font-display text-2xl font-bold">Rate Your Visit</h2>
-            <p className="text-sm text-ink-500">Your feedback helps us serve you better.</p>
+            <h2 id={titleId} className="font-display text-2xl font-bold">Rate Your Visit</h2>
+            <p id={descriptionId} className="text-sm text-ink-500">Your feedback helps us serve you better.</p>
           </div>
 
           <div className="mt-6 flex flex-col gap-4">
             {ratable === null && !loadError && (
-              <div className="h-11 animate-pulse rounded-xl bg-canvas" />
+              <div className="h-11 animate-pulse rounded-xl bg-canvas" role="status" aria-label="Loading visits" />
             )}
-            {loadError && <p className="rounded-xl bg-danger/10 px-4 py-3 text-sm font-medium text-danger">{loadError}</p>}
+            {loadError && <p role="alert" className="rounded-xl bg-danger/10 px-4 py-3 text-sm font-medium text-danger">{loadError}</p>}
             {ratable?.length === 0 && (
               <p className="rounded-xl bg-brand-50 px-4 py-3 text-center text-sm font-medium text-ink-700">
                 Every completed visit already has a review. Book your next appointment when you are ready.
@@ -164,7 +174,7 @@ export function RateVisitModal({ onClose, presetAppointmentId }) {
 
                 {selected?.staff_id && (
                   <details key={appointmentId} className="rounded-xl border border-line px-4 py-3">
-                    <summary className="cursor-pointer text-sm font-semibold text-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
+                    <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-800">
                       Rate your team member (optional)
                     </summary>
                     <div className="mt-4 flex flex-col items-center gap-2">

@@ -1,0 +1,9 @@
+# Rating dialog mobile and keyboard refinement — 19 October 2026
+
+The Customer rating dialog lacked an accessible name, left initial focus behind it, allowed Tab to escape, and used 36px Close / 28px star targets. Its desktop centering also put the top above the scroll origin on short landscape screens.
+
+The dialog now identifies its heading/description, focuses inside, contains Tab/Shift+Tab, closes on Escape, restores the invoking control and the previous body overflow value, and keeps its top reachable in landscape. Close, stars and the optional staff-rating disclosure have at least 44px targets. Radio groups support one tab stop, arrow wrapping and Home/End selection. Loading and API failure states have accessible status/alert semantics. Existing API submission, eligibility, optional staff rating, moderation and business data remain unchanged.
+
+Current validation: 260 frontend tests passed in one sequential run before the final two layout refinements. After those refinements, 14 focused dialog/auth/review regressions and a fresh production build passed. Production build retains its existing bundle-size warning. Actual component fixtures use synthetic API stubs with submission disabled; loading, empty, failure and eligible/expanded states passed 360/375/390/412/768/1280 checks without page/control overflow or undersized visible controls. A 740×360 landscape check keeps Close at y24 and provides a scrollable form. Actual keyboard checks cover Shift+Tab/Tab containment, star arrow wrapping, stable text-entry focus, Escape, return focus and prior overflow restoration. No review was submitted.
+
+The live Customer session was unavailable during implementation; deployment and authenticated live verification are recorded in the overall QA report. Fixture results do not stand in for an eligible live visit or a submitted review. No database, account, permission or billing change is included.
