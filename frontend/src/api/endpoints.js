@@ -197,23 +197,16 @@ export async function requestPasswordReset(email) {
 }
 
 export async function completePasswordReset(fields = {}) {
-  const { email, code, password, confirmPassword, expectedUserId, flowType } = fields && typeof fields === 'object' ? fields : {};
+  const { password, confirmPassword, expectedUserId, flowType } = fields && typeof fields === 'object' ? fields : {};
   const passwordValue = typeof password === 'string' ? password : '';
   const confirmPasswordValue = typeof confirmPassword === 'string' ? confirmPassword : '';
   const passwordError = getPasswordPolicyError(passwordValue);
   if (passwordError) return { success: false, error: passwordError };
   if (passwordValue !== confirmPasswordValue) return { success: false, error: 'Passwords do not match.' };
   const client = requireSupabase();
-  if (String(code || '').trim()) {
-    if (String(flowType || '') !== 'recovery') return { success: false, error: 'Invitation links must be opened from the invitation email.' };
-    const { data: verification, error: verifyError } = await client.auth.verifyOtp({ email: normalizeEmail(email), token: String(code), type: 'recovery' });
-    if (verifyError || !verification?.session) return { success: false, error: 'That reset code is invalid or expired.' };
-    if (expectedUserId && verification.session.user?.id !== expectedUserId) return { success: false, error: 'That reset link belongs to a different account.' };
-  } else {
-    const { data: sessionData, error: sessionError } = await client.auth.getSession();
-    if (sessionError || !sessionData.session || !['invite', 'recovery'].includes(String(flowType || '')) || !expectedUserId) return { success: false, error: 'Open the password-reset link from your email first.' };
-    if (expectedUserId && sessionData.session.user?.id !== expectedUserId) return { success: false, error: 'That reset link belongs to a different account.' };
-  }
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError || !sessionData.session || !['invite', 'recovery'].includes(String(flowType || '')) || !expectedUserId) return { success: false, error: 'Open the invitation or password-reset link from your email first.' };
+  if (sessionData.session.user?.id !== expectedUserId) return { success: false, error: 'That reset link belongs to a different account.' };
   const { error } = await client.auth.updateUser({ password: passwordValue });
   if (error) return { success: false, error: error.message || 'Could not update the password.' };
   // Revoke every refresh token after a password change. The callback session

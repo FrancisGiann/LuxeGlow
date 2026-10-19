@@ -64,7 +64,6 @@ export function AuthModal() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginFailureState, setLoginFailureState] = useState(emptyLoginFailureState);
   const [resetEmail, setResetEmail] = useState('');
-  const [resetCode, setResetCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
   const [resendForEmail, setResendForEmail] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
@@ -95,7 +94,6 @@ export function AuthModal() {
   useEffect(() => {
     setError(passwordSetup?.error || '');
     setPhoneError('');
-    setResetCode('');
     if (!modalView || (modalView === 'login' && previousModalViewRef.current !== 'login')) {
       setLoginFailureState(emptyLoginFailureState());
     }
@@ -274,22 +272,7 @@ export function AuthModal() {
   const handleCompleteReset = async (e) => {
     e.preventDefault();
     const fields = Object.fromEntries(new FormData(e.currentTarget));
-    const code = resetCode.trim();
-    const email = (resetEmail || passwordSetup?.email || '').trim();
-    const codeCanEstablishRecoverySession = passwordSetup?.type === 'recovery' && Boolean(code);
-    if (passwordSetup?.error || (!passwordSetup?.ready && !codeCanEstablishRecoverySession)) return;
-    if (code && passwordSetup?.type !== 'recovery') {
-      setError('Recovery codes are only valid for password-reset emails. Open the invitation link to set a staff password.');
-      return;
-    }
-    if (code && !/^\d{6}$/.test(code)) {
-      setError('Enter all 6 digits, or use the secure reset link from your email.');
-      return;
-    }
-    if (code && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Enter the email address that received the recovery code.');
-      return;
-    }
+    if (passwordSetup?.error || !passwordSetup?.ready) return;
     const passwordError = getPasswordPolicyError(fields.password);
     if (passwordError) {
       setError(passwordError);
@@ -303,12 +286,10 @@ export function AuthModal() {
     setBusy(true);
     try {
       const res = await completePasswordReset({
-        email,
-        code,
         password: fields.password,
         confirmPassword: fields.confirm_password,
       });
-      if (!res.ok) setError(res.error || 'That code is invalid or expired.');
+      if (!res.ok) setError(res.error || 'Could not update your password. Please open a new link.');
     } catch {
       setError('Could not reset your password right now. Please try again.');
     } finally {
@@ -316,8 +297,7 @@ export function AuthModal() {
     }
   };
 
-  const codeCanEstablishRecoverySession = passwordSetup?.type === 'recovery' && Boolean(resetCode.trim());
-  const passwordSetupBlocked = Boolean(passwordSetup?.error) || !(passwordSetup?.ready || codeCanEstablishRecoverySession);
+  const passwordSetupBlocked = Boolean(passwordSetup?.error) || !passwordSetup?.ready;
   const inviteCompletion = passwordCompletion?.type === 'invite';
 
   return (
@@ -327,7 +307,7 @@ export function AuthModal() {
         <button
           onClick={closeAuth}
           aria-label="Close"
-          className="absolute -top-2 right-0 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-500 shadow-card transition-colors hover:text-ink-900 sm:-right-2"
+          className="absolute -top-2 right-0 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-500 shadow-card transition-colors hover:text-ink-900 sm:-right-2"
         >
           <IconX size={17} />
         </button>
@@ -340,7 +320,7 @@ export function AuthModal() {
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Verify this email address to continue.'}
             {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
-            {modalView === 'forgot-reset' && (passwordSetup?.ready ? 'Use the secure link, or enter the code if your email provides one.' : passwordSetup?.type === 'recovery' ? 'Open the reset link, or enter the recovery code from that email.' : 'Open the invitation or reset link from your email before choosing a password.')}
+            {modalView === 'forgot-reset' && (passwordSetupBlocked ? 'This page needs a valid invitation or password-reset link from your email.' : 'Choose a password to secure your account.')}
             {modalView === 'password-success' && (inviteCompletion ? 'Your staff account is ready for secure sign-in.' : 'Choose where to sign in next.')}
           </p>
           {sessionNotice && <p className="mt-4 rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center text-sm font-semibold text-brand-800" role="status">{sessionNotice}</p>}
@@ -382,43 +362,18 @@ export function AuthModal() {
           {/* ── PASSWORD RESET COMPLETION ── */}
           {modalView === 'forgot-reset' && (
             <form onSubmit={handleCompleteReset} className="mt-6 flex flex-col gap-4" noValidate>
-              {(resetEmail || passwordSetup?.email) ? <div className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Account</p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-brand-800">{resetEmail || passwordSetup?.email}</p>
-              </div> : <Input
-                id="reset-email"
-                type="email"
-                label="Email address for a recovery code"
-                value={resetEmail}
-                onChange={(event) => setResetEmail(event.target.value)}
-                autoComplete="email"
-                required={Boolean(resetCode.trim())}
-                hint="Leave this blank when you opened the secure reset link."
-              />}
-              <div className="py-2 text-center">
-                <p className="text-sm font-semibold text-brand-800">Choose a new password.</p>
-                <p className="text-sm text-ink-500">{passwordSetup?.type === 'invite' ? 'Use the invitation link to confirm your email and set your password.' : 'Use the secure link, or enter the recovery code if your email provides one.'}</p>
-              </div>
-              {passwordSetup?.type !== 'invite' && <Input
-                  id="reset-code"
-                  label="Optional 6-digit recovery code"
-                  value={resetCode}
-                  onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  hint="Leave this blank when you opened the secure reset link."
-                />}
+              {passwordSetup?.email && <p className="break-all text-sm text-ink-500">{passwordSetup.email}</p>}
+              {!passwordSetupBlocked && <>
               <Input id="reset-password" name="password" type="password" label="New password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
               <Input id="reset-confirm-password" name="confirm_password" type="password" label="Confirm new password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy} disabled={passwordSetupBlocked}>{passwordSetup?.type === 'invite' ? 'Set password' : 'Reset password'}</Button>
-              <p className="pt-1 text-center text-sm text-ink-500">
-                Need another reset email?{' '}
-                <button type="button" onClick={() => openPasswordReset(resetEmail)} className="font-semibold text-brand-800 hover:text-brand-900">Start again</button>
-                <span className="mx-1">·</span>
-                <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
-              </p>
+              </>}
+              {passwordSetupBlocked && error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
+              <div className="flex flex-wrap justify-center gap-x-4 text-sm">
+                <button type="button" onClick={() => openPasswordReset(passwordSetup?.email || resetEmail)} className="min-h-11 font-semibold text-brand-800 hover:text-brand-900">Request another link</button>
+                <button type="button" onClick={() => openAuth('login')} className="min-h-11 font-semibold text-brand-800 hover:text-brand-900">Back to login</button>
+              </div>
             </form>
           )}
 

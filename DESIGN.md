@@ -26,7 +26,7 @@ Admin remains a protected one-active-tab workspace. Administrators and Heads lan
 
 ## Supported states and behavior
 
-Loading, empty, error, success, toast, modal, receipt/print, validation, and mobile states are explicit. Auth remains role-aware: signup email verification is link-only, while optional six-digit recovery codes remain accepted when a password-reset email template provides one; a blank recovery code preserves the secure `PASSWORD_RECOVERY` session flow. Existing Supabase/RLS-backed APIs, routes, role boundaries, and timezone behavior remain in place; the append-only appointment reason migration preserves null for historical rows without a recorded reason.
+Loading, empty, error, success, toast, modal, receipt/print, validation, and mobile states are explicit. Auth remains role-aware: signup verification, staff invitations, and password resets use email links only. Password completion shows two password fields only after a verified invitation or recovery callback; missing, invalid, or expired links show recovery instructions instead. Existing Supabase/RLS-backed APIs, routes, role boundaries, and timezone behavior remain in place; the append-only appointment reason migration preserves null for historical rows without a recorded reason.
 
 ## Image provenance and review artifacts
 

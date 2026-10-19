@@ -48,20 +48,19 @@ test('auth callback handling opens password setup for invite and recovery sessio
   assert.match(authContext, /setModalView\('forgot-reset'\)/);
   assert.match(authContext, /useState\(initialSetup \? 'forgot-reset' : null\)/);
   assert.match(authModal, /passwordSetup\?\.type === 'invite' \? 'Set password' : 'Reset password'/);
-  assert.match(authModal, /passwordSetup\?\.type !== 'invite'/);
+  assert.doesNotMatch(authModal, /reset-code|reset-email|resetCode|recovery code/i);
+  assert.match(authModal, /!passwordSetupBlocked && <>/);
 });
 
 test('password updates require a verified callback session and revoke all sessions after success', () => {
-  assert.match(endpoints, /verifyOtp\(\{ email: normalizeEmail\(email\), token: String\(code\), type: 'recovery' \}\)/);
-  assert.match(endpoints, /String\(flowType \|\| ''\) !== 'recovery'/);
-  assert.match(endpoints, /!verification\?\.session/);
+  assert.doesNotMatch(endpoints.slice(endpoints.indexOf('export async function completePasswordReset'), endpoints.indexOf('export async function logoutCustomer')), /verifyOtp/);
   assert.match(endpoints, /!\['invite', 'recovery'\]\.includes\(String\(flowType \|\| ''\)\)/);
   assert.match(endpoints, /\|\| !expectedUserId/);
   assert.match(endpoints, /auth\.updateUser\(\{ password: passwordValue \}\)/);
   assert.match(endpoints, /await client\.auth\.signOut\(\{ scope: 'global' \}\)\.catch/);
   assert.doesNotMatch(endpoints, /auth\.signOut\(\{ scope: 'local' \}\)/);
   assert.match(authContext, /expectedUserId: passwordSetup\?\.userId/);
-  assert.match(authModal, /!passwordSetup\?\.ready && !codeCanEstablishRecoverySession/);
+  assert.match(authModal, /passwordSetup\?\.error \|\| !passwordSetup\?\.ready/);
   assert.match(authModal, /passwordSetupBlocked/);
 });
 
