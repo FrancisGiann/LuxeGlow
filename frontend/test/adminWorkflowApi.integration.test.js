@@ -358,3 +358,20 @@ test('Head cannot write Admin-only setup and content through client APIs', async
   assert.equal(calls.filter(({ method }) => method !== 'GET').length, beforeWrites,
     'denied Head actions must stop before a mutation request');
 });
+
+
+test('profile updates reject malformed phones before requests and preserve valid formatting', async () => {
+  const fields = { firstName: 'QA', lastName: 'Customer' };
+  for (const phone of ['', 'invalid', '123456', '+12+3456789', '1234567890123456', 639171234567]) {
+    const result = await customerApi.updateCustomerProfile({ ...fields, phone });
+    assert.equal(result.success, false);
+    assert.match(result.error, /phone number with 7 to 15 digits/i);
+  }
+  assert.equal(calls.length, 0, 'invalid phone input must never contact Auth or write a profile');
+  const result = await customerApi.updateCustomerProfile({ ...fields, phone: '  +63 (900) 000-0000  ' });
+  assert.equal(result.success, true);
+  assert.equal(profiles.get(adminId).phone, '+63 (900) 000-0000');
+  const updates = calls.filter((call) => call.path === '/rest/v1/profiles' && call.method === 'PATCH');
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].query.get('id'), 'eq.' + adminId);
+});

@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
+import { isValidPhoneNumber } from '../../utils/phoneNumber';
 
 export function ProfilePage() {
   const { customer: dashCustomer, refresh: refreshDashboard } = useDashboard();
@@ -39,6 +40,7 @@ export function ProfilePage() {
     const next = {};
     if (!form.firstName.trim()) next.firstName = 'First name is required.';
     if (!form.phone.trim()) next.phone = 'Phone number is required.';
+    else if (!isValidPhoneNumber(form.phone)) next.phone = 'Enter a phone number with 7 to 15 digits.';
     if (form.password) {
       const passwordError = getPasswordPolicyError(form.password);
       if (passwordError) next.password = passwordError;

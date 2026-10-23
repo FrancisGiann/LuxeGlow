@@ -400,6 +400,7 @@ export async function createReview(appointmentId, visitRating, staffRating = nul
 
 export async function updateCustomerProfile(fields = {}) {
   const { firstName, lastName, phone, newPassword } = fields && typeof fields === 'object' ? fields : {};
+  if (!isValidPhoneNumber(phone)) return { success: false, error: 'Enter a phone number with 7 to 15 digits.' };
   const hasPassword = newPassword !== undefined && newPassword !== null && newPassword !== '';
   if (hasPassword) {
     const passwordError = getPasswordPolicyError(newPassword);
