@@ -3707,6 +3707,7 @@ export function AdminPage() {
                     : "text"
                 }
                 min={key === "price" ? "0" : key === "duration_minutes" ? "5" : undefined}
+                step={key === "price" ? "0.01" : undefined}
                 onChange={(event) =>
                   setServiceForm((form) => ({
                     ...form,
