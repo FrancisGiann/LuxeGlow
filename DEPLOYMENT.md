@@ -22,6 +22,50 @@ is not part of deployment.
    notification worker schedule and cron header configured in the Supabase
    project.
 
+## Hostinger: astridnails.online
+
+Use **Web App → Import Git Repository** with the existing FrancisGiann GitHub
+connection, repository `FrancisGiann/LuxeGlow`, branch `main`, and the purchased
+domain `astridnails.online`. Confirm the domain before the first deployment.
+Keep automatic deployment on pushes enabled.
+
+Select the Vite/React frontend application type with these build settings:
+
+- Root directory: `frontend`
+- Node version: 24.x (or 22.x at least 22.12)
+- Install command: `npm ci`
+- Build command: `npm run build`
+- Output directory: `dist` (relative to the frontend root)
+
+The tracked `frontend/.env.production` contains only browser-public values and
+sets `VITE_SITE_URL=https://astridnails.online`, with both path bases `/`.
+Any Hostinger environment overrides must match these values. Never upload the
+legacy root `.env` or configure server-only secrets in the frontend host.
+The legacy PHP directory is not this application's deployment root.
+
+Verify Hostinger's SPA fallback serves `/services`, `/book`, `/admin`, and
+`/dashboard/overview` while leaving real assets, `robots.txt`, and `sitemap.xml`
+intact. Private routes have client-side `noindex,nofollow`; configure equivalent
+`X-Robots-Tag` response headers for `/admin`, `/dashboard`, `/reset-password`,
+and their descendants if the host exposes response-header rules. The root
+`vercel.json` headers apply only to Vercel.
+
+Before declaring authentication ready, inspect Supabase Auth URL Configuration
+and the deployed Edge Functions. The login preflight checked on 2026-10-24
+still returned `Access-Control-Allow-Origin: https://luxe-glow-astrid.vercel.app`.
+The new browser origin requires `ALLOWED_ORIGIN=https://astridnails.online`
+in the existing project and redeployment of functions that use that setting.
+Set the Auth Site URL to `https://astridnails.online` and register the exact
+`https://astridnails.online/reset-password` redirect, preserving any other
+explicitly supported redirects. Keep `APP_ROUTER_BASE=/`. These backend
+settings need separate authorization before applying and are separate from the
+frontend GitHub build; do not rotate keys, expand OAuth scopes, run migrations,
+or create appointments for this release.
+
+After publishing, verify HTTPS, root metadata and canonical, sitemap URLs,
+public image/JS/CSS requests, and guest redirects from private routes. Search
+engines decide whether and when to index the public pages.
+
 ## Vercel setup
 
 Import the repository with the Root Directory left at the repository root.
