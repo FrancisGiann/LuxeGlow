@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "Astrid Nails & Beauty Bar",
+  "short_name": "Astrid Nails",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#f8f4f2",
+  "theme_color": "#f6ede7",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
