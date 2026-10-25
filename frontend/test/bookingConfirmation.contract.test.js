@@ -25,7 +25,7 @@ test('successful bookings redirect to the dashboard and receipt printing remains
 test('appointment actions keep distinct customer-facing labels', () => {
   for (const label of [
     'View booking details',
-    'Change date or time',
+    'Request a reschedule',
     'Cancel booking',
     'Print booking confirmation',
   ]) {

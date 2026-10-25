@@ -79,11 +79,11 @@ export async function listAdminAppointments() {
     await client.rpc('reconcile_expired_pending_appointments'),
     'Could not refresh expired appointments. Confirm the latest database migration is applied and try again.',
   );
-  const appointmentSelection = 'id,reference_no,staff_id,staff_member_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name,unit_price)';
+  const appointmentSelection = 'reschedule_requests:appointment_reschedule_requests(*),id,reference_no,staff_id,staff_member_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),staff_member:staff_members!appointments_staff_member_id_fkey(full_name),appointment_services(service_name,unit_price)';
   const orderAppointments = (query) => query.order('created_at', { ascending: false }).order('id', { ascending: false });
   let appointmentResult = await orderAppointments(client.from('appointments').select(appointmentSelection));
   if (appointmentResult.error && isMissingStaffRosterMetadataError(appointmentResult.error)) {
-    appointmentResult = await orderAppointments(client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)'));
+    appointmentResult = await orderAppointments(client.from('appointments').select('reschedule_requests:appointment_reschedule_requests(*),id,reference_no,staff_id,local_date,local_time,start_at,total_duration_minutes,total_price,status,arrived_at,no_show_reviewed_at,cancellation_reason,customer_cancellation_reason,customer_reschedule_reason,created_at,profiles!appointments_customer_id_fkey(first_name,last_name,email,phone),staff:profiles!appointments_staff_id_fkey(first_name,last_name),appointment_services(service_name,unit_price)'));
   }
   const aggregateResult = await client.rpc('get_staff_rating_aggregates');
   const rows = throwIfError(appointmentResult, 'Could not load appointments.');
@@ -323,12 +323,14 @@ export async function updateAdminProfile(id, fields) {
   return { success: true };
 }
 
-export async function rescheduleAppointment(appointmentId, date, time) {
-  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !/^\d{2}:\d{2}$/.test(String(time))) return { success: false, error: 'Choose a valid date and 30-minute time.' };
+export async function reviewRescheduleRequest(requestId, approve, reason = '') {
+  if (!/^[0-9a-f-]{36}$/i.test(String(requestId)) || typeof approve !== 'boolean') return { success: false, error: 'Choose a valid reschedule request.' };
+  const cleanReason = String(reason).trim();
+  if (!approve && (!cleanReason || cleanReason.length > 500)) return { success: false, error: 'Enter a reason for declining the request.' };
   const client = await assertStaff();
-  const { error } = await client.rpc('reschedule_appointment', { p_appointment_id: appointmentId, p_date: date, p_time: time });
-  if (error) throw new Error(error.message || 'Could not reschedule appointment.');
-  return { success: true };
+  const { data, error } = await client.rpc('review_appointment_reschedule', { p_request_id: requestId, p_approve: approve, p_reason: approve ? null : cleanReason });
+  if (error) throw new Error(error.message || 'Could not review the request.');
+  return { success: true, request: data };
 }
 
 export async function resetStaffPassword(userId) {

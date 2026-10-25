@@ -46,7 +46,7 @@ import {
   markAppointmentArrived,
   respondToNoShow,
   resetStaffPassword,
-  rescheduleAppointment,
+  reviewRescheduleRequest,
   saveFaq,
   saveService,
   setServiceActive,
@@ -81,6 +81,8 @@ import {
 import { activateStaffAccountImmediately } from "../utils/adminStaffActivation";
 import { getAdminAppointmentActions } from "../utils/adminAppointmentActions";
 import { createStaffDirectory } from "../utils/staffDirectory";
+import { pendingReschedule, requestedTimeLabel, rescheduleOutcome } from "../utils/rescheduleRequests";
+import { RescheduleRequestHistory } from "../components/booking/RescheduleRequestHistory";
 import { StaffDirectory } from "../components/admin/StaffDirectory";
 
 const createServiceDraft = () => ({
@@ -560,7 +562,7 @@ function AppointmentDetailsActions({
   const primaryActions = statusActions.filter((action) => action.variant === "primary");
   const secondaryActions = statusActions.filter((action) => action.variant !== "primary");
   const canMarkArrived = isStaff && appointment.status === "Confirmed" && !appointment.arrived_at && onMarkArrived;
-  const canReschedule = isStaff && !appointment.arrived_at;
+  const canReschedule = isStaff && !appointment.arrived_at && !!pendingReschedule(appointment);
   const secondaryCount = Number(!!canMarkArrived) + Number(canReschedule) + secondaryActions.length;
   const arrivalUnavailable = isStaff && appointment.status === "Confirmed" && !appointment.arrived_at && !arrivalAvailable;
 
@@ -625,7 +627,7 @@ function AppointmentDetailsActions({
                       disabled={arrivalBusy}
                       onClick={() => onReschedule(appointment)}
                     >
-                      Reschedule
+                      Review request
                     </Button>
                   )}
                   {secondaryActions.map((action) => (
@@ -1978,8 +1980,13 @@ export function AdminPage() {
     display_order: 0,
   });
   const [reschedule, setReschedule] = useState(null);
+  const rescheduleSubmitRef = useRef(false);
+  const rescheduleOutcomeRef = useRef(null);
   const [rescheduleBusy, setRescheduleBusy] = useState(false);
   const [rescheduleDialogError, setRescheduleDialogError] = useState("");
+  useEffect(() => {
+    if (reschedule?.resolved) rescheduleOutcomeRef.current?.focus();
+  }, [reschedule?.resolved]);
   const [statusConfirm, setStatusConfirm] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const statusBusyRef = useRef(false);
@@ -2609,58 +2616,38 @@ export function AdminPage() {
       setError(faqError.message);
     }
   };
-  const saveReschedule = async (event) => {
-    event.preventDefault();
-    if (!reschedule || rescheduleBusy) return;
-    const current = appointments.find(
-      (appointment) => appointment.id === reschedule.id,
-    );
-    if (!current || isTerminalAppointment(current)) {
-      setReschedule(null);
-      setRescheduleDialogError("");
-      return;
-    }
-    if (current.arrived_at) {
-      setError("This appointment has already been marked as arrived and cannot be rescheduled.");
-      setReschedule(null);
-      setRescheduleDialogError("");
-      return;
-    }
+  const saveReschedule = async (approve) => {
+    if (!reschedule || rescheduleBusy || rescheduleSubmitRef.current) return;
+    rescheduleSubmitRef.current = true;
     setRescheduleBusy(true);
-    setError("");
     setRescheduleDialogError("");
     try {
-      const result = await rescheduleAppointment(
-        reschedule.id,
-        reschedule.date,
-        reschedule.time,
-      );
+      const result = await reviewRescheduleRequest(reschedule.request.id, approve, reschedule.reason || "");
       if (!result.success) throw new Error(result.error);
-      setRescheduleDialogError("");
-      setNotice("Appointment rescheduled.");
+      const outcome = rescheduleOutcome(result.request);
       await load();
+      if (!outcome.success) {
+        setRescheduleDialogError(outcome.message);
+        setReschedule((current) => current ? { ...current, resolved: true } : null);
+        return;
+      }
+      setNotice(outcome.message);
       setReschedule(null);
-    } catch (rescheduleError) {
-      const message =
-        rescheduleError?.message || "Could not reschedule appointment.";
-      setError(message);
-      setRescheduleDialogError(message);
+    } catch (failure) {
+      setRescheduleDialogError(failure.message || "Could not review the request. Refresh before retrying.");
     } finally {
+      rescheduleSubmitRef.current = false;
       setRescheduleBusy(false);
     }
   };
   const openReschedule = (appointment) => {
-    if (!isStaffRole(customer?.role) || !appointment || isTerminalAppointment(appointment) || appointment.arrived_at) return;
+    const request = pendingReschedule(appointment);
+    if (!isStaffRole(customer?.role) || !request || isTerminalAppointment(appointment) || appointment.arrived_at) return;
     setError("");
     setRescheduleDialogError("");
     setNoShowConfirm(null);
     setNoShowDialogError("");
-    setReschedule({
-      id: appointment.id,
-      reference: appointment.reference_no,
-      date: appointment.local_date,
-      time: appointment.local_time?.slice(0, 5),
-    });
+    setReschedule({ id: appointment.id, reference: appointment.reference_no, request, reason: "" });
   };
   const closeReschedule = () => {
     if (rescheduleBusy) return;
@@ -2987,6 +2974,13 @@ export function AdminPage() {
     (tab === "staff" ? "Accounts" : "Appointments");
   const statusCopy = statusConfirmationCopy(statusConfirm?.to);
   const appointmentQueue = (
+    <div className="space-y-5">
+      {tab === "appointments" && <section className="rounded-xl border border-line bg-surface p-4" aria-labelledby="reschedule-queue-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="reschedule-queue-heading" className="font-semibold text-ink-900">Reschedule requests ({appointments.filter((appointment) => pendingReschedule(appointment)).length})</h2><Button type="button" variant="soft" size="sm" onClick={() => load()}>Refresh requests</Button></div>
+        <p className="mt-2 text-sm text-ink-600">Current appointments stay scheduled while requests await review.</p>
+        {!appointments.some((appointment) => pendingReschedule(appointment)) && <p className="mt-3 text-sm text-ink-600" role="status">No reschedule requests awaiting review.</p>}
+        <ul className="mt-3 divide-y divide-line">{appointments.filter((appointment) => pendingReschedule(appointment)).map((appointment) => <li key={appointment.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><span className="break-words text-sm text-ink-800">{appointment.reference_no} · {requestedTimeLabel(pendingReschedule(appointment))}</span><Button type="button" variant="soft" size="sm" onClick={() => openReschedule(appointment)}>Review request</Button></li>)}</ul>
+      </section>}
     <AppointmentQueue
       appointments={visibleAppointments}
       filters={appointmentFilters}
@@ -3017,6 +3011,7 @@ export function AdminPage() {
         setSelectedAppointment(appointment);
       }}
     />
+    </div>
   );
 
   return (
@@ -3509,6 +3504,7 @@ export function AdminPage() {
           />
         ) : null}
       >
+        {selectedVisibleAppointment && <RescheduleRequestHistory requests={selectedVisibleAppointment.reschedule_requests} />}
         {selectedVisibleAppointment && (
           <AppointmentDetails
             appointment={selectedVisibleAppointment}
@@ -3609,69 +3605,31 @@ export function AdminPage() {
         </div>
       </AdminDialog>
       <AdminDialog
-        open={!!rescheduleTarget && !isTerminalAppointment(rescheduleTarget) && !rescheduleTarget.arrived_at}
-        title={`Reschedule ${reschedule?.reference || "appointment"}`}
-        description="Choose a 30-minute slot in Lucena City local time."
+        open={!!reschedule}
+        title={`Review reschedule ${reschedule?.reference || "request"}`}
+        description="Approve only the time requested by the customer. Availability is checked again on approval."
         closeDisabled={rescheduleBusy}
         onClose={closeReschedule}
         returnFocusRef={appointmentReturnFocusRef}
         fallbackFocusRef={appointmentQueueHeadingRef}
       >
-        <form onSubmit={saveReschedule} className="grid gap-4">
-          {rescheduleDialogError && (
-            <p
-              className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger"
-              role="alert"
-            >
-              {rescheduleDialogError}
-            </p>
-          )}
-          <label className="text-sm font-semibold text-ink-900">
-            Date
-            <input
-              type="date"
-              required
-              value={reschedule?.date || ""}
-              onChange={(event) =>
-                setReschedule((current) => ({
-                  ...current,
-                  date: event.target.value,
-                }))
-              }
-              className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-            />
-          </label>
-          <label className="text-sm font-semibold text-ink-900">
-            Time
-            <input
-              type="time"
-              required
-              step="1800"
-              value={reschedule?.time || ""}
-              onChange={(event) =>
-                setReschedule((current) => ({
-                  ...current,
-                  time: event.target.value,
-                }))
-              }
-              className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100"
-            />
-          </label>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="soft"
-              className="min-h-11"
-              disabled={rescheduleBusy}
-              onClick={closeReschedule}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" className="min-h-11" loading={rescheduleBusy}>
-              Save reschedule
-            </Button>
-          </div>
-        </form>
+        {reschedule && <div className="space-y-4">
+          <p className="text-sm text-ink-800">Current appointment: {rescheduleTarget?.local_date || "—"} · {rescheduleTarget?.local_time?.slice(0, 5) || "—"} (Manila)</p>
+          <p className="break-words font-semibold text-ink-900">Requested: {requestedTimeLabel(reschedule.request)}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-ink-800">Customer reason: {reschedule.request.reason}</p>
+          <p className="text-sm text-ink-600">The current time stays scheduled until approval. Approval keeps the booking status and assigned team member.</p>
+          {rescheduleDialogError && <p ref={rescheduleOutcomeRef} tabIndex={-1} className="break-words text-sm font-semibold text-danger" role="alert">{rescheduleDialogError}</p>}
+          {!reschedule.resolved && <>
+            <label className="block text-sm font-semibold text-ink-900">Reason for rejection
+              <textarea rows={3} maxLength={500} disabled={rescheduleBusy} value={reschedule.reason} onChange={(event) => setReschedule((current) => ({ ...current, reason: event.target.value }))} className="mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-3" />
+            </label>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="soft" disabled={rescheduleBusy || !reschedule.reason.trim()} onClick={() => saveReschedule(false)}>Reject request</Button>
+              <Button type="button" loading={rescheduleBusy} disabled={rescheduleBusy} onClick={() => saveReschedule(true)}>Approve requested time</Button>
+            </div>
+          </>}
+          <Button type="button" variant="soft" disabled={rescheduleBusy} onClick={closeReschedule}>Close</Button>
+        </div>}
       </AdminDialog>
       <AdminDialog
         size="wide"

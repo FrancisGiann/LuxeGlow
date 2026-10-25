@@ -37,7 +37,7 @@ test('customer management controls are limited in the UI and send a required rea
   assert.match(appointments, /!\['Pending', 'Confirmed'\]\.includes\(appointment\.status\)/);
   assert.match(appointments, /appointment\.arrived_at/);
   assert.match(appointments, /start > Date\.now\(\)/);
-  assert.match(appointments, /Change date or time/);
+  assert.match(appointments, /Request a reschedule/);
   assert.match(appointments, /Cancel booking/);
   assert.match(appointments, /const RESCHEDULE_REASONS = \['Schedule conflict', 'Change of plans', 'Feeling unwell', 'Others'\]/);
   assert.match(rescheduleDialog, /<select id="reschedule-reason" required/);
@@ -45,7 +45,7 @@ test('customer management controls are limited in the UI and send a required rea
   assert.match(rescheduleDialog, /<textarea id="reschedule-other-reason" required maxLength=\{500\}/);
   assert.match(rescheduleDialog, /reasonChoice === 'Others' \? otherReason\.trim\(\) : reasonChoice/);
   assert.match(rescheduleDialog, /onSave\(appointment, date, time, cleanReason\)/);
-  assert.match(endpoints, /rpc\('customer_reschedule_appointment'/);
+  assert.match(endpoints, /rpc\('request_appointment_reschedule'/);
   assert.match(endpoints, /rpc\('customer_cancel_appointment'/);
 });
 

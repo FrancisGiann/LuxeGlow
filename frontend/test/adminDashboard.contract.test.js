@@ -55,7 +55,7 @@ test('staff-facing workspace and role labels stay clear on shared and admin head
 
 test('Appointments is the unknown-tab fallback and queue props have one implementation', () => {
   assert.match(adminPage, /NAV_ITEMS\.find\(\(\[key\]\) => key === tab\)\?\.\[1\][\s\S]*?"Appointments"/);
-  assert.match(adminPage, /const appointmentQueue = \(\s*<AppointmentQueue/);
+  assert.match(adminPage, /const appointmentQueue = \([\s\S]*?<AppointmentQueue/);
   assert.match(adminPage, /tab === "appointments" \|\| tab === "history" \|\| !NAV_ITEMS\.some\(\(\[key\]\) => key === tab\) \? \(\s*appointmentQueue/);
   assert.match(adminPage, /\) : appointmentQueue\}/);
   assert.equal((adminPage.match(/<AppointmentQueue\b/g) || []).length, 1);

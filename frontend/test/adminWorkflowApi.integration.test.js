@@ -271,8 +271,7 @@ test('arrival, no-show acknowledgment, and allowed staff transitions call their 
   assert.equal(calls.length, beforeManualCancellation, 'manual cancellation attempts stop before any Supabase request');
   assert.equal(appointments.get(noShowAppointmentId).status, 'Confirmed');
   assert.equal(appointments.get(adminNoShowAppointmentId).status, 'Confirmed');
-  assert.deepEqual(await api.rescheduleAppointment(appointmentId, '2026-10-12', '11:00'), { success: true });
-  assert.equal(appointments.get(appointmentId).local_time, '11:00:00');
+  assert.equal(api.rescheduleAppointment, undefined, 'staff cannot initiate an arbitrary reschedule');
 });
 
 test('manual cancellation is denied before writes for Head and Admin while both retain other workflows', async () => {

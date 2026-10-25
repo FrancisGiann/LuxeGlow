@@ -28,7 +28,7 @@ An exact competitive or commercial positioning statement remains open and must n
 ## Operating Context
 
 - Customers browse services, open a service-led `/book?service=<id>` flow, keep a session-scoped guest draft, authenticate at the final submit action, select treatments and an optional staff preference, choose an available date and 30-minute time slot, submit a pending appointment, receive notifications, review appointment history, print appointment records, and review completed visits. Authentication never submits a saved draft automatically.
-- Head users update appointment status, reschedule appointments, and inspect customer history.
+- Head users update appointment status and inspect customer history. Customers request rescheduling; both Head and Admin can approve or reject the request.
 - Administrators manage everything, including services, hours, website content, and team access. Administrators can manage the passive staff roster and assign the Head role.
 - Appointment scheduling uses Asia/Manila time and currently allows dates up to 60 days ahead.
 - The seeded weekly schedule is Monday–Saturday 10:00–20:00 and Sunday 11:00–18:00 until staff edit it. Each day has one continuous interval; full-day closures are separate exceptions. A booking may end exactly at closing, but never after it.
@@ -43,7 +43,7 @@ An exact competitive or commercial positioning statement remains open and must n
 - Preserve all current customer, staff, and administrator functionality.
 - Preserve Supabase Auth, Postgres/RLS, Storage, Edge Functions, and the existing React/Vite application stack.
 - Preserve the status vocabulary: Pending, Confirmed, Completed, and Cancelled.
-- The staff workspace's Appointments queue combines Pending and Confirmed by default; History is the complete exact-status log. Heads and administrators can confirm, record arrival, reschedule, complete, and acknowledge a no-show. Neither role can manually cancel an appointment. Any Confirmed appointment without recorded arrival is cancelled automatically 24 hours after its scheduled start, whether or not staff acknowledged the notice. New staff accounts are added by an administrator and receive a secure password-setup email.
+- The staff workspace's Appointments queue combines Pending and Confirmed by default; History is the complete exact-status log. Heads and administrators can confirm, record arrival, complete, and acknowledge a no-show. Customers submit reschedule requests without moving their current appointment; approving a request rechecks the requested slot atomically and retains the appointment status and staff assignment. Direct staff-initiated rescheduling is removed. Both Head and Admin approve or reject customer reschedule requests. Neither role can manually cancel an appointment. Any Confirmed appointment without recorded arrival is cancelled automatically 24 hours after its scheduled start, whether or not staff acknowledged the notice. New staff accounts are added by an administrator and receive a secure password-setup email.
 - Public registration creates customer accounts only. Staff and administrator access must remain protected by administrator-controlled provisioning and authorization.
 - The legacy PHP/MySQL surface is a rollback archive, not the active application.
 - The interface must remain responsive for mobile and desktop web use.

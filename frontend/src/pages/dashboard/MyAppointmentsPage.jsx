@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDashboard } from '../../context/DashboardContext';
 import { AdminDialog } from '../../components/admin/AdminDialog';
-import { cancelMyAppointment, getAvailableSlots, rescheduleMyAppointment } from '../../api/endpoints';
+import { cancelMyAppointment, getRescheduleSlots, rescheduleMyAppointment } from '../../api/endpoints';
 import { useToast } from '../../components/ui/Toast';
 import { Card } from '../../components/ui/Card';
 import { EmptyState, SkeletonRows } from '../../components/ui/EmptyState';
@@ -10,6 +10,8 @@ import { StatusPill } from '../../components/ui/StatusPill';
 import { Button } from '../../components/ui/Button';
 import { RateVisitModal } from '../../components/dashboard/RateVisitModal';
 import { BookingReceiptModal } from '../../components/booking/BookingReceiptModal';
+import { pendingReschedule, requestedTimeLabel } from '../../utils/rescheduleRequests';
+import { RescheduleRequestHistory } from '../../components/booking/RescheduleRequestHistory';
 import { classifyAppointments, filterCompletedAppointmentsByDate } from '../../utils/appointments';
 import { toAppointmentDate } from '../../utils/format';
 import { IconCalendar, IconGrid, IconPrinter, IconSparkle, IconStar } from '../../components/icons';
@@ -60,6 +62,8 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
         ) : null}
       </div>
 
+      {pendingReschedule(appointment) && <p className="col-span-full break-words text-sm font-semibold text-brand-800" role="status">Requested: {requestedTimeLabel(pendingReschedule(appointment))}. Your current appointment remains scheduled until approval.</p>}
+      <RescheduleRequestHistory requests={appointment.reschedule_requests} />
       <div className="col-span-full flex w-full flex-wrap justify-start gap-2 sm:justify-end">
         {['Pending', 'Confirmed'].includes(appointment.status) && (
           <Button type="button" variant="primary" size="sm" className={actionClassName} onClick={() => onView(appointment)}>
@@ -74,7 +78,7 @@ function AppointmentRow({ appointment, onRate, onReceipt, onView, onReschedule, 
         {manageable && (
           <>
             <Button type="button" variant="soft" size="sm" className={actionClassName} onClick={() => onReschedule(appointment)}>
-              Change date or time
+              {pendingReschedule(appointment) ? 'Update reschedule request' : 'Request a reschedule'}
             </Button>
             <Button type="button" variant="soft" size="sm" className={`${actionClassName} border-danger/30 text-danger hover:border-danger/50 hover:bg-danger/5`} onClick={() => onCancel(appointment)}>
               Cancel booking
@@ -99,11 +103,11 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
   const loading = loadedDate !== date;
   useEffect(() => {
     let alive = true;
-    getAvailableSlots(date, Math.max(1, Number(appointment.total_duration_minutes) || 30), appointment.staff_id)
+    getRescheduleSlots(appointment.id, date)
       .then((next) => { if (alive) { setSlots(next); setError(''); setLoadedDate(date); setTime((current) => current && next.some((slot) => slot.time === current && slot.available) ? current : ''); } })
       .catch((failure) => { if (alive) { setSlots([]); setError(failure.message || 'Could not load available times.'); setLoadedDate(date); } });
     return () => { alive = false; };
-  }, [appointment.staff_id, appointment.total_duration_minutes, date]);
+  }, [appointment.id, date]);
   const save = async (event) => {
     event.preventDefault();
     if (!time || busy) return;
@@ -120,13 +124,13 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
     setError('');
     setReasonError('');
     try { await onSave(appointment, date, time, cleanReason); }
-    catch (failure) { setError(failure.message || 'Could not reschedule this appointment.'); }
+    catch (failure) { setError(failure.message || 'Could not submit this request.'); }
     finally { setBusy(false); }
   };
   const invalidChoice = Boolean(reasonError) && !RESCHEDULE_REASONS.includes(reasonChoice);
   const invalidOtherReason = Boolean(reasonError) && reasonChoice === 'Others';
   const reasonErrorDescription = reasonError ? ' reschedule-reason-error' : '';
-  return <AdminDialog open title="Change appointment time" description="Choose a new date and an available start time. Your request will return to Pending for salon confirmation." onClose={onClose} closeDisabled={busy} size="wide">
+  return <AdminDialog open title="Request a reschedule" description="Choose a new time for salon approval. Your current appointment stays scheduled. The requested time is not reserved until approval; a new request replaces your earlier pending request." onClose={onClose} closeDisabled={busy} size="wide">
     <form onSubmit={save} className="space-y-4">
       <label className="block text-sm font-semibold text-ink-900">New date<input type="date" required min={manilaDate()} max={maxBookingDate()} value={date} onChange={(event) => { setDate(event.target.value); setTime(''); }} className="mt-1 block min-h-11 w-full rounded-xl border border-line bg-surface px-4 text-sm" /></label>
       <div>
@@ -148,7 +152,7 @@ function RescheduleDialog({ appointment, onClose, onSave }) {
         {loading ? <p className="py-5 text-sm text-ink-500" role="status">Checking availability…</p> : error && !slots.length ? <p className="text-sm text-danger" role="alert">{error}</p> : slots.filter((slot) => slot.available).length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.filter((slot) => slot.available).map((slot) => <button key={slot.time} type="button" aria-pressed={time === slot.time} onClick={() => setTime(slot.time)} className={`min-h-11 rounded-lg border px-2 text-sm font-bold ${time === slot.time ? 'border-brand-800 bg-brand-800 text-white' : 'border-line bg-surface text-ink-700 hover:border-brand-400'}`}>{slot.time}</button>)}</div> : <p className="text-sm text-ink-500">No times are available for this date.</p>}
       </div>
       {error && slots.length > 0 && <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Back</Button><Button type="submit" loading={busy} disabled={!time || loading || !reasonChoice || (reasonChoice === 'Others' && !otherReason.trim())}>{busy ? 'Saving…' : 'Save new time'}</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" variant="soft" onClick={onClose} disabled={busy}>Back</Button><Button type="submit" loading={busy} disabled={!time || loading || !reasonChoice || (reasonChoice === 'Others' && !otherReason.trim())}>{busy ? 'Submitting…' : 'Submit request'}</Button></div>
     </form>
   </AdminDialog>;
 }
@@ -192,7 +196,7 @@ export function MyAppointmentsPage() {
     if (!result.success) throw new Error(result.error);
     await refresh();
     setRescheduleFor(null);
-    toast('New time requested. It is pending salon confirmation.', 'success');
+    toast('Reschedule requested. Your current appointment remains scheduled until approval.', 'success');
   };
   const saveCancellation = async (appointment, reason) => {
     const result = await cancelMyAppointment(appointment.id, reason);

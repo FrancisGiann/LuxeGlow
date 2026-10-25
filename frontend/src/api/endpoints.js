@@ -300,6 +300,7 @@ const dashboardAppointment = (row) => {
   const review = Array.isArray(row.reviews) ? row.reviews[0] : row.reviews;
   const firstService = services.find((service) => service?.services) || services[0];
   return {
+    reschedule_requests: row.reschedule_requests || [],
     id: row.id, appointment_id: row.id, reference_no: row.reference_no,
     date: manilaDateLabel(row.local_date, row.local_time),
     time: manilaTimeLabel(row.local_date, row.local_time), raw_date: row.local_date, raw_time: row.local_time,
@@ -323,7 +324,7 @@ export async function getDashboard() {
   );
   const [profileResult, appointmentsResult, notificationsResult, appointmentStaffResult] = await Promise.all([
     client.from('profiles').select('*').eq('id', session.user.id).single(),
-    client.from('appointments').select('id,reference_no,staff_id,local_date,local_time,start_at,arrived_at,total_duration_minutes,total_price,status,created_at,appointment_services(service_name,services(name,item_type,description,updated_at,image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
+    client.from('appointments').select('reschedule_requests:appointment_reschedule_requests(*),id,reference_no,staff_id,local_date,local_time,start_at,arrived_at,total_duration_minutes,total_price,status,created_at,appointment_services(service_name,services(name,item_type,description,updated_at,image_path,category)),reviews(id,rating,staff_rating,review_text,created_at)').eq('customer_id', session.user.id).order('local_date', { ascending: false }).order('local_time', { ascending: false }),
     client.from('user_notifications').select('id,appointment_id,type,title,message,is_read,created_at').eq('customer_id', session.user.id).order('created_at', { ascending: false }).limit(30),
     client.rpc('get_my_appointment_staff'),
   ]);
@@ -481,6 +482,12 @@ export async function createAppointment({ serviceIds, staffId, date, time }) {
   }
 }
 
+export async function getRescheduleSlots(appointmentId, date) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(appointmentId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error('Choose a valid appointment and date.');
+  const data = unwrap(await requireSupabase().rpc('get_reschedule_slots', { p_appointment_id: appointmentId, p_date: date }), 'Could not load reschedule availability.');
+  return (data || []).map((row) => ({ time: row.slot_time, available: !!row.available }));
+}
+
 export async function rescheduleMyAppointment(appointmentId, date, time, reason) {
   const cleanReason = String(reason || '').trim();
   const match = String(time || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
@@ -497,13 +504,13 @@ export async function rescheduleMyAppointment(appointmentId, date, time, reason)
   }
   if (hours > 23 || Number(match[2]) > 59) return { success: false, error: 'Choose a valid date and 30-minute time.' };
   const localTime = `${String(hours).padStart(2, '0')}:${match[2]}`;
-  const data = unwrap(await requireSupabase().rpc('customer_reschedule_appointment', {
+  const data = unwrap(await requireSupabase().rpc('request_appointment_reschedule', {
     p_appointment_id: appointmentId,
     p_date: date,
     p_time: localTime,
     p_reason: cleanReason,
-  }), 'Could not reschedule your appointment.');
-  return { success: true, appointment: data };
+  }), 'Could not submit your reschedule request.');
+  return { success: true, request: data };
 }
 
 export async function cancelMyAppointment(appointmentId, reason) {
