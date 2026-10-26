@@ -9,6 +9,7 @@ const migrationPath = resolve(projectRoot, 'supabase/migrations/20260905000000_b
 const mirrorPath = resolve(projectRoot, 'database/supabase/migrations/20260905000000_booking_schedule_staff_ratings.sql');
 const migration = readFileSync(migrationPath, 'utf8');
 const bookingPage = readFileSync(resolve(projectRoot, 'frontend/src/pages/BookingPage.jsx'), 'utf8');
+const staffPicker = readFileSync(resolve(projectRoot, 'frontend/src/components/booking/StaffPicker.jsx'), 'utf8');
 const endpoints = readFileSync(resolve(projectRoot, 'frontend/src/api/endpoints.js'), 'utf8');
 const admin = readFileSync(resolve(projectRoot, 'frontend/src/api/admin.js'), 'utf8');
 const dashboardLayout = readFileSync(resolve(projectRoot, 'frontend/src/components/layout/DashboardLayout.jsx'), 'utf8');
@@ -84,7 +85,7 @@ test('guest booking draft returns to a separate review and confirmation is authe
     /getSalonDateStatus/,
     /No preference/,
     /No ratings yet\./,
-  ]) assert.match(bookingPage, contract);
+  ]) assert.match(`${bookingPage}\n${staffPicker}`, contract);
   assert.match(bookingPage, /useDashboard\(\)/);
   const successfulBooking = bookingPage.slice(bookingPage.indexOf('if (result.success)'), bookingPage.indexOf('} else {', bookingPage.indexOf('if (result.success)')));
   assert.match(successfulBooking, /removeItem\(BOOKING_DRAFT_KEY\)/);

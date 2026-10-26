@@ -79,8 +79,8 @@ test('admin edits a selected staff member title and booking picker omits an unse
   const accountPanel = adminPage.slice(adminPage.indexOf('function StaffAccountPanel'), adminPage.indexOf('function TeamMemberDetailsPanel'));
   assert.doesNotMatch(accountPanel, /position_title|accepts_appointments|Bookable/);
   assert.doesNotMatch(adminPage, /CustomEvent|admin-staff-profile-updated/);
-  assert.match(bookingPage, /member\.position_title &&/);
-  assert.match(bookingPage, /member\.average_rating > 0/);
+  assert.match(read('frontend/src/components/booking/StaffPicker.jsx'), /member\.position_title &&/);
+  assert.match(read('frontend/src/components/booking/StaffPicker.jsx'), /member\.average_rating > 0/);
 });
 
 test('one directory selects a person and shows only the matching account or member controls', () => {
