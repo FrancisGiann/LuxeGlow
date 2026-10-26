@@ -9,6 +9,7 @@ import { IconCheckCircle, IconX } from '../icons';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
 import { containAuthDialogFocus, focusAuthDialog } from '../../utils/authDialogFocus';
+import { normalizeSignupEmail, signupEmailError, suggestedSignupEmail } from '../../utils/signupEmail';
 import { verificationCooldownSeconds } from '../../utils/verificationFeedback';
 import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
@@ -61,6 +62,8 @@ export function AuthModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginFailureState, setLoginFailureState] = useState(emptyLoginFailureState);
   const [resetEmail, setResetEmail] = useState('');
@@ -94,6 +97,8 @@ export function AuthModal() {
   useEffect(() => {
     setError(passwordSetup?.error || '');
     setPhoneError('');
+    setEmailError('');
+    if (modalView !== 'register') setSignupEmail('');
     if (!modalView || (modalView === 'login' && previousModalViewRef.current !== 'login')) {
       setLoginFailureState(emptyLoginFailureState());
     }
@@ -132,6 +137,7 @@ export function AuthModal() {
   const resendKey = String(verifyEmail || '').trim().toLowerCase();
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
   const passwordResetSuggested = shouldSuggestPasswordReset(loginFailureState, loginEmail);
+  const emailSuggestion = suggestedSignupEmail(signupEmail);
 
   const openPasswordReset = (email = loginEmail) => {
     setError('');
@@ -205,6 +211,14 @@ export function AuthModal() {
     e.preventDefault();
     setError('');
     const f = Object.fromEntries(new FormData(e.currentTarget));
+    f.email = normalizeSignupEmail(f.email);
+    const nextEmailError = signupEmailError(f.email);
+    setEmailError(nextEmailError);
+    if (nextEmailError) {
+      e.currentTarget.elements.namedItem('email')?.focus();
+      return;
+    }
+    setSignupEmail(f.email);
     if (!isValidPhoneNumber(f.phone)) {
       setPhoneError('Enter a phone number with 7 to 15 digits.');
       return;
@@ -408,7 +422,29 @@ export function AuthModal() {
                 <Input id="reg-first" name="first_name" label="First name" placeholder="Juan" autoComplete="given-name" required />
                 <Input id="reg-last" name="last_name" label="Last name" placeholder="Dela Cruz" autoComplete="family-name" required />
               </div>
-              <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="username" required />
+              <div>
+                <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="email" required
+                  value={signupEmail} error={emailError} aria-invalid={Boolean(emailError)} aria-describedby="reg-email-feedback"
+                  onChange={(event) => {
+                    setSignupEmail(event.target.value);
+                    if (emailError) setEmailError(signupEmailError(event.target.value));
+                  }}
+                  onBlur={() => {
+                    setSignupEmail(normalizeSignupEmail(signupEmail));
+                    setEmailError(signupEmailError(signupEmail));
+                  }}
+                />
+                <div id="reg-email-feedback" className="mt-1.5 text-xs text-ink-500" aria-live="polite">
+                  {emailError ? <span className="sr-only">{emailError}</span> : (emailSuggestion ? <>
+                    Did you mean {emailSuggestion}?{' '}
+                    <button type="button" className="font-semibold text-brand-800 underline" onClick={() => {
+                      setSignupEmail(emailSuggestion);
+                      setEmailError('');
+                    }}>Use suggested address</button>
+                    <span className="block">You can also keep the address you entered.</span>
+                  </> : 'Check the address carefully. You will need to verify it by email.')}
+                </div>
+              </div>
               <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required error={phoneError} aria-invalid={Boolean(phoneError)} onChange={(event) => {
                 const nextPhone = sanitizePhoneInput(event.currentTarget.value);
                 event.currentTarget.value = nextPhone;
