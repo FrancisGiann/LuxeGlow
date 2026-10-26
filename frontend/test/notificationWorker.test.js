@@ -4,16 +4,18 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 const source = readFileSync(new URL('../../supabase/functions/process-notifications/index.ts', import.meta.url), 'utf8');
 const handlerSource = source.slice(source.indexOf('Deno.serve('));
-function fixture({ failSend = false, missingRecipient = false, reminderStatus = 'Confirmed', kind = 'pending' } = {}) {
+function fixture({ failSend = false, failHandoff = false, missingRecipient = false, reminderStatus = 'Confirmed', kind = 'pending' } = {}) {
   const updates = []; const messages = []; let handler;
   const job = { id: 9001, appointment_id: 'qa-appointment', recipient_id: 'qa-customer', kind, payload: {} };
   const admin = {
     async rpc(name) { return { data: name === 'claim_notification_outbox' ? [job] : null, error: null }; },
     from(table) {
-      const chain = { select() { return chain; }, eq() { return chain; },
+      const chain = { select() { return chain; }, eq() { return chain; }, is() { return chain; },
         update(value) { updates.push({ table, value }); return chain; },
         async single() { return { data: missingRecipient ? null : { email: 'customer@example.test', first_name: 'QA' }, error: null }; },
-        async maybeSingle() { return { data: table === 'appointments' ? { status: reminderStatus, start_at: new Date(Date.now()+3600000).toISOString() } : { id: job.id }, error: null }; },
+        async maybeSingle() { return table === 'notification_outbox' && failHandoff
+          ? { data: null, error: new Error('handoff write failed') }
+          : { data: table === 'appointments' ? { status: reminderStatus, start_at: new Date(Date.now()+3600000).toISOString() } : { id: job.id }, error: null }; },
         then(resolve, reject) { return Promise.resolve({ error: null }).then(resolve, reject); }
       }; return chain;
     }
@@ -22,6 +24,7 @@ function fixture({ failSend = false, missingRecipient = false, reminderStatus = 
     transporter: { async sendMail(message) { messages.push(message); if (failSend) throw new Error('fixture transport error'); } },
     createClient: () => admin, corsHeaders: {}, json: (body, status = 200) => ({ body, status }),
     sendNotificationEmail: async (options, sendMail) => sendMail({ to: options.profile.email }),
+    buildNotificationEmail: (options) => ({ to: options.profile.email }),
     fromAddress: 'sender@example.test', fromName: 'QA', Date, console: { error() {} }, Response,
   });
   return { updates, messages, run: () => handler({ method: 'POST', headers: { get: () => 'qa-token' } }) };
@@ -34,6 +37,24 @@ test('worker retries SMTP failure after five minutes without marking delivery se
 });
 test('missing recipient retries without attempting provider delivery', async () => {
   const f = fixture({ missingRecipient: true }); const r = await f.run(); assert.equal(r.body.failed, 1); assert.equal(f.messages.length, 0); assert.ok(f.updates.at(-1).value.available_at);
+});
+test('welcome profile and handoff failures retry before SMTP starts', async () => {
+  for (const options of [{ missingRecipient: true }, { failHandoff: true }]) {
+    const f = fixture({ kind: 'welcome', ...options });
+    const r = await f.run();
+    assert.equal(r.body.failed, 1);
+    assert.equal(f.messages.length, 0);
+    assert.ok(f.updates.at(-1).value.available_at);
+  }
+});
+test('welcome SMTP uncertainty is held after durable handoff', async () => {
+  const f = fixture({ kind: 'welcome', failSend: true });
+  const r = await f.run();
+  assert.equal(r.body.failed, 1);
+  assert.equal(f.messages.length, 1);
+  assert.ok(f.updates[0].value.welcome_delivery_started_at);
+  assert.match(f.updates.at(-1).value.last_error, /outcome uncertain/);
+  assert.equal(f.updates.at(-1).value.available_at, undefined);
 });
 test('stale cancelled appointment reminders are acknowledged without sending', async () => {
   const f = fixture({ kind: 'reminder', reminderStatus: 'Cancelled' }); const r = await f.run(); assert.equal(r.body.sent, 0); assert.equal(r.body.failed, 0); assert.equal(f.messages.length, 0); assert.ok(f.updates.at(-1).value.sent_at);

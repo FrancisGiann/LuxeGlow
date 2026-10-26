@@ -206,6 +206,7 @@ Deno.serve(async (request) => {
   let sent = 0;
   let failed = 0;
   for (const job of jobs || []) {
+    let welcomeDeliveryStarted = false;
     try {
       if (job.kind === 'reminder') {
         const { data: queuedJob, error: queuedJobError } = await admin
@@ -245,19 +246,35 @@ Deno.serve(async (request) => {
       }
       const { data: profile, error: profileError } = await admin.from('profiles').select('email,first_name').eq('id', job.recipient_id).single();
       if (profileError || !profile?.email) throw new Error('Recipient profile is missing an email');
-      await sendNotificationEmail({
-        job,
-        profile,
-        fromAddress,
-        fromName,
-      }, (message) => transporter.sendMail(message));
+      const emailOptions = { job, profile, fromAddress, fromName };
+      if (job.kind === 'welcome') {
+        // Validate the message before the durable SMTP handoff. Failures here
+        // can use the ordinary outbox retry path without duplicate delivery.
+        const email = buildNotificationEmail(emailOptions);
+        const { data: started, error: startError } = await admin
+          .from('notification_outbox')
+          .update({ welcome_delivery_started_at: new Date().toISOString() })
+          .eq('id', job.id)
+          .is('welcome_delivery_started_at', null)
+          .select('id')
+          .maybeSingle();
+        if (startError) throw startError;
+        if (!started) throw new Error('Welcome delivery handoff was not recorded');
+        welcomeDeliveryStarted = true;
+        await transporter.sendMail(email);
+      } else {
+        await sendNotificationEmail(emailOptions, (message) => transporter.sendMail(message));
+      }
 
       const { error: updateError } = await admin.from('notification_outbox').update({ sent_at: new Date().toISOString(), claimed_at: null, last_error: null }).eq('id', job.id);
       if (updateError) throw updateError;
       sent += 1;
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).slice(0, 500);
-      const { error: retryError } = await admin.from('notification_outbox').update({ claimed_at: null, available_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), last_error: message }).eq('id', job.id);
+      const failureUpdate = welcomeDeliveryStarted
+        ? { claimed_at: null, last_error: `Welcome delivery outcome uncertain: ${message}` }
+        : { claimed_at: null, available_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), last_error: message };
+      const { error: retryError } = await admin.from('notification_outbox').update(failureUpdate).eq('id', job.id);
       if (retryError) console.error('notification retry scheduling failed', job.id, retryError.message);
       console.error('notification job failed', job.id, message);
       failed += 1;
