@@ -34,6 +34,7 @@ import {
   serviceTypeOptions,
 } from "../utils/serviceMetadata";
 import {
+  createAdminStaffMember,
   deleteFaq,
   getAdminAbout,
   getCustomerHistory,
@@ -83,6 +84,7 @@ import { getAdminAppointmentActions } from "../utils/adminAppointmentActions";
 import { createStaffDirectory } from "../utils/staffDirectory";
 import { pendingReschedule, requestedTimeLabel, rescheduleOutcome } from "../utils/rescheduleRequests";
 import { RescheduleRequestHistory } from "../components/booking/RescheduleRequestHistory";
+import { AddBookingStaff } from "../components/admin/AddBookingStaff";
 import { StaffDirectory } from "../components/admin/StaffDirectory";
 
 const createServiceDraft = () => ({
@@ -1900,9 +1902,10 @@ function TeamMemberDetailsPanel({
                   disabled={busyId !== null}
                   onClick={() => onChange(staffMember, { is_bookable: !staffMember.is_bookable })}
                 >
-                  {staffMember.is_bookable ? "Mark not bookable" : "Make bookable"}
+                  {staffMember.is_bookable ? "Remove from booking" : "Add to booking"}
                 </Button>
               </div>
+              <p className="mt-3 text-sm text-ink-500">Removing from booking hides this person from future preference choices. Existing appointments, ratings, and roster identity are kept. No login account is changed.</p>
               <TeamMemberTitleEditor
                 key={`${staffMember.id}:${staffMember.position_title || ""}`}
                 staffMember={staffMember}
@@ -2661,6 +2664,24 @@ export function AdminPage() {
   const rescheduleNotificationAppointment = (appointment) => {
     closeNotificationAppointment(true);
     openReschedule(appointment);
+  };
+  const addRosterMember = async (fields) => {
+    if (customer?.role !== "admin" || rosterBusyRef.current !== null) {
+      return { success: false, error: "Another staff update is in progress." };
+    }
+    rosterBusyRef.current = "new";
+    setRosterBusyId("new");
+    try {
+      const result = await createAdminStaffMember(fields);
+      if (!result.success) return result;
+      setTeamRoster((current) => [...current, result.member]);
+      setSelectedStaffKey(`member:${result.member.id}`);
+      setRosterFeedback({ id: String(result.member.id), kind: "success", message: `${result.member.full_name} added to booking choices.` });
+      return result;
+    } finally {
+      rosterBusyRef.current = null;
+      setRosterBusyId(null);
+    }
   };
   const updateRosterMember = async (member, fields) => {
     const id = String(member?.id || "");
@@ -3425,9 +3446,12 @@ export function AdminPage() {
                 selectedKey={selectedStaffKey}
                 onSelect={setSelectedStaffKey}
                 action={customer?.role === "admin" ? (
-                  <Button type="button" size="sm" className="min-h-11" onClick={openInvite}>
-                    Add account
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <AddBookingStaff onSave={addRosterMember} disabled={rosterBusyId !== null || Boolean(teamRosterError)} />
+                    <Button type="button" size="sm" variant="soft" className="min-h-11" onClick={openInvite}>
+                      Add account
+                    </Button>
+                  </div>
                 ) : null}
               >
                 {selectedStaffEntry?.kind === "account" ? (

@@ -1,3 +1,4 @@
+import { validateStaffRosterEntry } from '../utils/staffRoster';
 import { requireSupabase } from '../lib/supabase';
 import { isMissingServiceCatalogMetadataError } from './endpoints';
 import { isCanonicalServiceMetadata } from '../utils/serviceMetadata';
@@ -242,6 +243,19 @@ export async function listAdminStaffMembers() {
       rating_count: ratingsByStaff.get(String(member.id))?.rating_count || 0,
     };
   });
+}
+
+export async function createAdminStaffMember(fields) {
+  const validated = validateStaffRosterEntry(fields);
+  if (!validated.success) return validated;
+  const client = await assertAdmin();
+  const result = await client.rpc('create_booking_staff', {
+    p_full_name: validated.value.full_name,
+    p_position_title: validated.value.position_title,
+  });
+  const member = throwIfError(result, 'Could not add booking staff.');
+  if (!member?.id) return { success: false, error: 'Could not confirm the new staff entry. Refresh the staff list before retrying.' };
+  return { success: true, member: { ...member, average_rating: 0, rating_count: 0 } };
 }
 
 export async function updateAdminStaffMember(id, fields) {

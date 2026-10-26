@@ -119,7 +119,7 @@ test('one directory selects a person and shows only the matching account or memb
   assert.match(details, /staffMember\?\.record_kind === "owner"/);
   assert.match(details, /!isOwner && canManage/);
   assert.match(details, /Deactivate|Activate/);
-  assert.match(details, /Make bookable|Mark not bookable/);
+  assert.match(details, /Add to booking|Remove from booking/);
   assert.match(details, /TeamMemberTitleEditor[\s\S]*?staffMember=\{staffMember\}/);
   assert.match(details, /<AssignedAppointments appointments=\{appointments\} staffId=\{staffMember\.id\}/);
   assert.doesNotMatch(details, /Archived|legacyMembers|record_kind === "legacy"/);
