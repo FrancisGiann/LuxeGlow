@@ -16,6 +16,9 @@ const calls = [];
 const userId = '123e4567-e89b-42d3-a456-426614174000';
 const targetId = '987e4567-e89b-42d3-a456-426614174000';
 let resendStatus = 200;
+let resendCode = 'over_email_send_rate_limit';
+let resendMessage = 'Email rate limit exceeded';
+let resendThrows = false;
 let resetStatus = 200;
 let loginStatus = 401;
 let loginFunctionBody = { error: 'Invalid email or password.' };
@@ -39,9 +42,10 @@ globalThis.fetch = async (input, init = {}) => {
   calls.push({ path: `${url.pathname}${url.search}`, method, body });
 
   if (url.pathname.endsWith('/auth/v1/resend')) {
+    if (resendThrows) throw new Error('synthetic network failure');
     return resendStatus === 200
       ? Response.json({})
-      : Response.json({ msg: 'Email rate limit exceeded', error_code: 'over_email_send_rate_limit' }, {
+      : Response.json({ msg: resendMessage, error_code: resendCode }, {
         status: resendStatus,
         headers: { 'Retry-After': '75' },
       });
@@ -101,6 +105,9 @@ before(async () => {
 beforeEach(() => {
   calls.length = 0;
   resendStatus = 200;
+  resendCode = "over_email_send_rate_limit";
+  resendMessage = "Email rate limit exceeded";
+  resendThrows = false;
   resetStatus = 200;
   loginStatus = 401;
   loginFunctionBody = { error: 'Invalid email or password.' };
@@ -123,7 +130,7 @@ after(async () => {
 
 test('verification resend normalizes the address and starts its cooldown after success', async () => {
   const result = await resendVerificationEmail(' Person@Example.com ');
-  assert.deepEqual(result, { success: true, retry_after: 60 });
+  assert.deepEqual(result, { success: true, cooldown_seconds: 60 });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].path, '/auth/v1/resend');
   assert.equal(calls[0].body.email, 'person@example.com');
@@ -134,8 +141,10 @@ test('verification resend returns a cooldown after Supabase rate limits the requ
   resendStatus = 429;
   const result = await resendVerificationEmail('person@example.com');
   assert.equal(result.success, false);
-  assert.equal(result.retry_after, 60);
-  assert.match(result.error, /rate limit/i);
+  assert.equal(result.cooldown_seconds, 60);
+  assert.equal(result.retry_after, undefined);
+  assert.equal(result.rate_limited, true);
+  assert.equal(result.error, "Could not request a verification email. Please try again later.");
 });
 
 test('verification resend rejects malformed addresses before making a request', async () => {
@@ -299,4 +308,34 @@ test('staff invitations retain the Edge Function error message', async () => {
   );
   const invocation = calls.find((call) => call.path === '/functions/v1/invite-staff');
   assert.deepEqual(invocation.body, { email: 'new-head@example.com', first_name: 'New', last_name: 'Head', role: 'head' });
+});
+
+for (const code of ['over_email_send_rate_limit', 'over_request_rate_limit']) {
+  test(`verification classifies SDK code ${code} without a response header`, async () => {
+    resendStatus = 400;
+    resendCode = code;
+    const result = await resendVerificationEmail('person@example.com');
+    assert.equal(result.rate_limited, true);
+    assert.equal(result.cooldown_seconds, 60);
+    assert.equal(result.retry_after, undefined);
+  });
+}
+test('verification provider/account errors remain generic and are not rate limits', async () => {
+  resendStatus = 400;
+  resendCode = 'email_address_not_authorized';
+  resendMessage = 'User already exists: private provider detail';
+  const result = await resendVerificationEmail('person@example.com');
+  assert.equal(result.rate_limited, false);
+  assert.equal(result.error, 'Could not request a verification email. Please try again later.');
+  assert.doesNotMatch(JSON.stringify(result), /already exists|private provider|not_authorized/);
+});
+test('verification network failures remain generic', async () => {
+  resendThrows = true;
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const result = await resendVerificationEmail('person@example.com');
+    assert.equal(result.rate_limited, false);
+    assert.equal(result.error, 'Could not request a verification email. Please try again later.');
+  } finally { console.error = originalConsoleError; }
 });

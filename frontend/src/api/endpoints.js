@@ -1,3 +1,4 @@
+import { VERIFICATION_REQUEST_FAILED_MESSAGE, VERIFICATION_RETRY_DELAY_SECONDS } from '../utils/verificationFeedback';
 import { publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
@@ -181,10 +182,13 @@ export async function resendVerificationEmail(email) {
   }
   const { error } = await requireSupabase().auth.resend({ type: 'signup', email: normalizedEmail });
   if (error) {
-    const retryAfter = retryAfterFromError(error) || (Number(error.status) === 429 ? 60 : 0);
-    return { success: false, error: error.message || 'Could not resend the verification email.', retry_after: retryAfter };
+    // AuthApiError exposes status/code, not the original Retry-After header.
+    // This is a local retry guard, not the server's sending-limit expiry.
+    const rateLimited = Number(error.status) === 429 ||
+      ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code);
+    return { success: false, rate_limited: rateLimited, error: VERIFICATION_REQUEST_FAILED_MESSAGE, cooldown_seconds: VERIFICATION_RETRY_DELAY_SECONDS };
   }
-  return { success: true, retry_after: 60 };
+  return { success: true, cooldown_seconds: VERIFICATION_RETRY_DELAY_SECONDS };
 }
 
 export async function requestPasswordReset(email) {

@@ -354,11 +354,12 @@ export function AuthProvider({ children }) {
 
   const resend = useCallback(async (email = verifyEmail) => {
     const data = await api.resendVerificationEmail(email);
-    const retryAfter = Number(data.retry_after ?? data.remaining ?? 0);
+    const cooldownSeconds = Number(data.cooldown_seconds);
     return {
       ok: !!data.success,
       error: data.error,
-      retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 0,
+      rateLimited: data.rate_limited === true,
+      cooldownSeconds: Number.isFinite(cooldownSeconds) && cooldownSeconds > 0 ? Math.ceil(cooldownSeconds) : 0,
     };
   }, [verifyEmail]);
 

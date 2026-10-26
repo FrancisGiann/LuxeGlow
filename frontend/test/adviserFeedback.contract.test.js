@@ -77,7 +77,7 @@ test('verification screen gives a local sign-in path after cross-device confirma
   assert.doesNotMatch(loginView, /Resend verification email|handleLoginResend|verificationMessage/);
   assert.doesNotMatch(authModal, /handleLoginResend|loginResendRemaining|verificationMessage/);
   assert.match(verificationView, /Need a link\?[\s\S]*?onClick=\{handleResend\}[\s\S]*?Resend email/);
-  assert.match(authModal, /const handleResend = async \(\) => \{[\s\S]*?verificationCooldownSeconds\(res\)[\s\S]*?Could not resend the verification email right now/);
+  assert.match(authModal, /const handleResend = async \(\) => \{[\s\S]*?verificationCooldownSeconds\(res\)[\s\S]*?verificationRequestFeedback\(res\)/);
   assert.match(loginFlow, /if \(data\.needs_verification\) \{\s*setVerifyEmail\(email\);\s*setModalView\('verify'\)/);
   assert.match(authModal, /If you confirm on another device, return here and sign in to continue/);
   assert.match(authModal, /<Button type="button" variant="soft" onClick=\{handleVerificationSignIn\}>Sign in<\/Button>/);

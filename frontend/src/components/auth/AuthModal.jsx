@@ -10,7 +10,7 @@ import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } fro
 import { isStaffRole } from '../../utils/roles';
 import { containAuthDialogFocus, focusAuthDialog } from '../../utils/authDialogFocus';
 import { normalizeSignupEmail, signupEmailError, suggestedSignupEmail } from '../../utils/signupEmail';
-import { verificationCooldownSeconds } from '../../utils/verificationFeedback';
+import { verificationCooldownSeconds, verificationRequestFeedback } from '../../utils/verificationFeedback';
 import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
   changeLoginFailureEmail,
@@ -252,12 +252,11 @@ export function AuthModal() {
       const res = await resend();
       setResendForEmail(resendKey);
       setResendIn(verificationCooldownSeconds(res));
-      if (res.ok) toast('Verification email requested. Check your inbox and spam folder.', 'info');
-      else toast(res.error || 'Could not resend the verification email right now.', 'error');
+      toast(verificationRequestFeedback(res), res.ok ? 'info' : 'error');
     } catch {
       setResendForEmail(resendKey);
-      setResendIn(60);
-      toast('Could not resend the verification email right now. Please try again.', 'error');
+      setResendIn(verificationCooldownSeconds(null));
+      toast(verificationRequestFeedback(null), 'error');
     } finally {
       resendLockRef.current = false;
       setResendBusy(false);
@@ -477,7 +476,7 @@ export function AuthModal() {
               <div className="text-center text-sm text-ink-500">
                 Need a link?{' '}
                 <button type="button" onClick={handleResend} disabled={resendRemaining > 0 || resendBusy} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
-                  {resendBusy ? 'Sending…' : resendRemaining > 0 ? `Resend in ${Math.floor(resendRemaining / 60)}:${String(resendRemaining % 60).padStart(2, '0')}` : 'Resend email'}
+                  {resendBusy ? 'Sending…' : resendRemaining > 0 ? `Try again in ${Math.floor(resendRemaining / 60)}:${String(resendRemaining % 60).padStart(2, '0')}` : 'Resend email'}
                 </button>
               </div>
               <Button type="button" variant="soft" onClick={handleVerificationSignIn}>Sign in</Button>
