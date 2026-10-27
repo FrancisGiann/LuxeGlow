@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.login-rate-limit]
 verify_jwt = false
+
+# Public signup signal is protected by an atomic service-only database limiter.
+[functions.signup-email-availability]
+verify_jwt = false

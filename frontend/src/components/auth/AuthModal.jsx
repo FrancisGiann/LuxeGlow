@@ -10,6 +10,8 @@ import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } fro
 import { isStaffRole } from '../../utils/roles';
 import { containAuthDialogFocus, focusAuthDialog } from '../../utils/authDialogFocus';
 import { normalizeSignupEmail, signupEmailError, suggestedSignupEmail } from '../../utils/signupEmail';
+import { createSignupAvailabilityChecker, EMAIL_UNAVAILABLE_MESSAGE } from '../../utils/signupAvailability';
+import { checkSignupEmailAvailability } from '../../api/endpoints';
 import { verificationCooldownSeconds, verificationRequestFeedback } from '../../utils/verificationFeedback';
 import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
@@ -64,6 +66,10 @@ export function AuthModal() {
   const [phoneError, setPhoneError] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [emailAvailability, setEmailAvailability] = useState({ status: 'idle' });
+  const [emailChecker] = useState(() => createSignupAvailabilityChecker(checkSignupEmailAvailability, setEmailAvailability));
+  const registrationLockRef = useRef(false);
+  useEffect(() => () => emailChecker.cancel(), [emailChecker]);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginFailureState, setLoginFailureState] = useState(emptyLoginFailureState);
   const [resetEmail, setResetEmail] = useState('');
@@ -98,6 +104,7 @@ export function AuthModal() {
     setError(passwordSetup?.error || '');
     setPhoneError('');
     setEmailError('');
+    emailChecker.change();
     if (modalView !== 'register') setSignupEmail('');
     if (!modalView || (modalView === 'login' && previousModalViewRef.current !== 'login')) {
       setLoginFailureState(emptyLoginFailureState());
@@ -109,7 +116,7 @@ export function AuthModal() {
       loginEmailIdentityRef.current = '';
       loginIdentityGenerationRef.current += 1;
     }
-  }, [modalView, passwordSetup?.error, passwordSetup?.type, passwordSetup?.userId]);
+  }, [modalView, passwordSetup?.error, passwordSetup?.type, passwordSetup?.userId, emailChecker]);
 
   useEffect(() => {
     if (resendIn <= 0) return undefined;
@@ -138,6 +145,7 @@ export function AuthModal() {
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
   const passwordResetSuggested = shouldSuggestPasswordReset(loginFailureState, loginEmail);
   const emailSuggestion = suggestedSignupEmail(signupEmail);
+  const signupEmailFeedback = emailError || (emailAvailability.status === 'unavailable' ? EMAIL_UNAVAILABLE_MESSAGE : '');
 
   const openPasswordReset = (email = loginEmail) => {
     setError('');
@@ -209,6 +217,7 @@ export function AuthModal() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    if (registrationLockRef.current) return;
     setError('');
     const f = Object.fromEntries(new FormData(e.currentTarget));
     f.email = normalizeSignupEmail(f.email);
@@ -233,13 +242,18 @@ export function AuthModal() {
       setError('Passwords do not match.');
       return;
     }
+    registrationLockRef.current = true;
     setBusy(true);
     try {
       const res = await register(f);
-      if (!res.ok) setError(res.error);
+      if (!res.ok) {
+        if (res.emailUnavailable) setEmailError(EMAIL_UNAVAILABLE_MESSAGE);
+        else setError(res.error);
+      }
     } catch {
       setError('Something went wrong during registration.');
     } finally {
+      registrationLockRef.current = false;
       setBusy(false);
     }
   };
@@ -423,22 +437,36 @@ export function AuthModal() {
               </div>
               <div>
                 <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="email" required
-                  value={signupEmail} error={emailError} aria-invalid={Boolean(emailError)} aria-describedby="reg-email-feedback"
+                  value={signupEmail} disabled={busy} error={signupEmailFeedback} aria-invalid={Boolean(signupEmailFeedback)} aria-describedby="reg-email-feedback"
                   onChange={(event) => {
+                    emailChecker.change(event.target.value);
                     setSignupEmail(event.target.value);
+                    setError('');
                     if (emailError) setEmailError(signupEmailError(event.target.value));
                   }}
                   onBlur={() => {
                     setSignupEmail(normalizeSignupEmail(signupEmail));
                     setEmailError(signupEmailError(signupEmail));
+                    void emailChecker.check(signupEmail);
                   }}
                 />
                 <div id="reg-email-feedback" className="mt-1.5 text-xs text-ink-500" aria-live="polite">
-                  {emailError ? <span className="sr-only">{emailError}</span> : (emailSuggestion ? <>
+                  {signupEmailFeedback ? <>
+                    <span className="sr-only">{signupEmailFeedback}</span>
+                    {(emailAvailability.status === 'unavailable' || emailError === EMAIL_UNAVAILABLE_MESSAGE) && <span className="flex gap-3">
+                      <button type="button" className="font-semibold text-brand-800 underline" onClick={() => { updateLoginEmail(signupEmail); openAuth('login'); }}>Sign in</button>
+                      <button type="button" className="font-semibold text-brand-800 underline" onClick={() => openPasswordReset(signupEmail)}>Forgot password?</button>
+                    </span>}
+                  </> : emailAvailability.status === 'checking' ? 'Checking email…' : emailAvailability.status === 'error' ? <>
+                    {emailAvailability.message}{' '}
+                    <button type="button" className="font-semibold text-brand-800 underline" onClick={() => void emailChecker.check(signupEmail)}>Retry</button>
+                  </> : (emailSuggestion ? <>
                     Did you mean {emailSuggestion}?{' '}
                     <button type="button" className="font-semibold text-brand-800 underline" onClick={() => {
+                      emailChecker.change(emailSuggestion);
                       setSignupEmail(emailSuggestion);
                       setEmailError('');
+                      void emailChecker.check(emailSuggestion);
                     }}>Use suggested address</button>
                     <span className="block">You can also keep the address you entered.</span>
                   </> : 'Check the address carefully. You will need to verify it by email.')}

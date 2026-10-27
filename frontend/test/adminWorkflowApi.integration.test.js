@@ -46,6 +46,7 @@ globalThis.fetch = async (input, init = {}) => {
   const body = contentType.includes('application/json') && init.body ? JSON.parse(init.body) : init.body;
   calls.push({ method, path: url.pathname, query: url.searchParams, body, request });
 
+  if (url.pathname.endsWith('/functions/v1/signup-email-availability')) return json({ available: true });
   if (url.pathname.endsWith('/auth/v1/user')) return json({ id: adminId, email: 'admin@example.test', user_metadata: {} });
   if (url.pathname.endsWith('/rest/v1/profiles')) {
     if (method === 'GET') {
@@ -315,7 +316,8 @@ test('registration rejects malformed phone numbers before Supabase and preserves
     assert.equal(result.success, true);
     assert.equal(result.needs_verification, true);
     assert.equal(signupOptions.options.data.phone, '+63 (917) 000-1122');
-    assert.equal(calls.length, before);
+    assert.equal(calls.length, before + 1);
+    assert.equal(calls.at(-1).path, '/functions/v1/signup-email-availability');
   } finally {
     supabase.auth.signUp = originalSignUp;
   }

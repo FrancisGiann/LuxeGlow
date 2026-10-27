@@ -349,7 +349,7 @@ export function AuthProvider({ children }) {
       }
       return { ok: true };
     }
-    return { ok: false, error: data.error || 'Registration failed.' };
+    return { ok: false, error: data.error || 'Registration failed.', emailUnavailable: data.email_unavailable === true };
   }, [refreshSession, closeAuth, invalidateSessionRefresh]);
 
   const resend = useCallback(async (email = verifyEmail) => {

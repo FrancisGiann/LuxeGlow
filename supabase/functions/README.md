@@ -143,3 +143,150 @@ signature checks after multipart parsing. Start two valid uploads for the same
 service at the same time and confirm one succeeds while the other returns JSON
 `409`; the service row must contain only the winning upload's URL/public ID,
 and the losing Cloudinary asset is cleaned up best-effort.
+
+
+## Signup email availability (approval required before rollout)
+
+`signup-email-availability` is used only by Create account, on email-field blur
+and immediately before signup. It returns exactly `{ available: boolean }` on
+success. `false` means the address is unavailable for a new account; it reveals
+membership by design but never reveals account state, verification, role, UUID,
+profile data, or mailbox ownership. Login/recovery do not use this endpoint.
+No external mailbox verifier, SMTP probe, email delivery, or account creation is
+performed by the check.
+
+Apply the new canonical migration
+`database/supabase/migrations/20261027030000_signup_email_availability.sql`
+(mirrored under `supabase/migrations/`) before deploying this function. It creates
+only a private rate-limit table and a service-role-only RPC. The RPC atomically
+locks the per-email and global budgets before looking up `auth.users`: 3 checks per normalized email
+and 60 across the project per 15 minutes, including available results. It stores
+HMAC-SHA256 email hashes, not raw email addresses. It does not read or store IPs. Old limiter rows are pruned
+in bounded batches. Nothing grants browser roles access to profiles, Auth users,
+the limiter table, or the RPC. Do not expose this RPC directly to anon.
+
+After approval, deploy with:
+
+```sh
+supabase functions deploy signup-email-availability --no-verify-jwt
+```
+
+It reuses existing server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`LOGIN_RATE_LIMIT_SECRET` (at least 32 characters), and exact `ALLOWED_ORIGIN`.
+No new production credentials, Auth hooks/settings, or SMS setup are required. Missing
+configuration, database errors and malformed results fail
+closed. An exact Origin check supplements the shared database limiter; CORS is
+not authentication and cannot prevent scripted callers. The implementation deliberately ignores `x-forwarded-for`, `cf-connecting-ip`,
+body-supplied IPs and all similar client headers. Official Supabase architecture
+and rate-limiter examples do not establish an ingress overwrite guarantee for
+this project; the first forwarded-IP value must not be trusted for enforcement.
+The database per-email and project-wide budgets apply regardless of supplied
+headers or IP rotation. A per-email budget may temporarily block a legitimate
+signup after an attacker checks that address, and the 60/project budget may deny
+all checks until its 15-minute window resets. This is a deliberate conservative
+anonymous enumeration cap, not a per-person/IP guarantee. The endpoint still
+reveals account membership by request, up to the budget; CAPTCHA/attested ingress
+could be separately approved later. Do not increase limits just to mask abuse.
+
+Header/limiter references reviewed:
+- https://supabase.com/docs/guides/functions/architecture
+- https://supabase.com/docs/guides/functions/examples/rate-limiting
+- https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Forwarded-For
+
+
+Deploy migration, then endpoint, then frontend. The frontend intentionally
+blocks signup on check errors, so rolling it out first would prevent signup.
+It preserves all entered details and allows retry. HTTP 429 shows a bounded wait
+message using Retry-After (at most 15 minutes); it is not a duplicate-email
+warning. Window expiry permits checks again, with no permanent account block. If rolling back, roll back
+the frontend first; keep this backend until no deployed frontend depends on it.
+
+The check reserves no address. `registerCustomer` always rechecks on submission,
+then uses ordinary `auth.signUp`; Supabase Auth remains the final server-side
+uniqueness and transaction boundary even if a caller skips the SPA or two
+requests race. Supabase's native Auth migration defines the unique
+`users_email_partial_key` for non-SSO users, and its signup implementation
+normalizes email and checks for duplicates. Do not replace the Auth signup path
+with direct profile inserts or admin user creation. Existing pending accounts
+may be reused by Auth rather than recreated. Auth may deliberately return an
+obfuscated user for an existing confirmed address; this code does not reinterpret
+that response, turn off confirmation, or weaken Auth's privacy settings. Explicit
+`user_already_exists` / `email_exists` errors become the same inline unavailable
+message. The lookup normalizes case/outer spaces and does not collapse plus tags
+or provider-specific dots. This is one account per email, not one account per
+person across different emails. SMS/phone uniqueness remains outside this task.
+
+The current RPC checks only existing `auth.users.email`. Future aliases must
+extend that private predicate behind the same boolean interface only after their
+own migration and authorization; there is no reference to a missing alias table
+or SMS branch here.
+
+Local validation:
+
+```sh
+cd frontend
+node --test test/signupAvailability.test.js test/signupAvailabilityHandler.test.js test/signupEmail.integration.test.js test/signupEmail.test.js
+# Optional isolated PostgreSQL/WASM execution, package installed outside repo:
+PGLITE_MODULE=file:///tmp/luxeglow-email-pgtest/node_modules/@electric-sql/pglite/dist/index.js node test/signupAvailabilityDatabase.test.js
+HAPPY_DOM_MODULE=file:///tmp/luxeglow-email-pgtest/node_modules/happy-dom/lib/index.js node test/signupAvailabilityUi.test.js
+```
+
+The PostgreSQL harness uses an in-memory synthetic `auth.users` fixture, executes
+the actual migration, and checks role grants, normalization, all-state membership,
+limits, reset and failure behavior. It does not attest to hosted Auth configuration
+or run concurrent hosted signups. The optional DOM harness renders the real
+signup component with synthetic API/context fixtures to verify red styling,
+retained details, stale responses, and final-submit rejection. Before rollout, verify the native email unique
+index exists (schema metadata only), and use a local Supabase environment with
+email delivery disabled/captured to exercise concurrent duplicate signup and
+privacy-masked responses. Never enumerate real addresses as a smoke test.
+
+Primary Auth implementation references:
+- https://github.com/supabase/auth/blob/master/internal/api/signup.go
+- https://github.com/supabase/auth/blob/master/internal/api/mail.go
+- https://github.com/supabase/auth/blob/master/migrations/20221215195500_modify_users_email_unique_index.up.sql
+
+
+Integration/preflight evidence for this change:
+- Baseline is deployed welcome commit `d64f13a98dca0649b01db15eac860aa79a67295d`,
+  exactly one commit above public main `338860320fc8fb6b77d55dbfb789a233e2df0d85`.
+  Welcome worker/migration and invitation code are unchanged by this patch.
+- Version `20261027010000` is reserved by the paused SMS draft and
+  `20261027020000` by its recovery draft. Availability uses **20261027030000**
+  in both migration directories. No paused SMS files are integrated.
+- `docs/signup-email-availability-preflight.sql` contains schema-only read-only
+  checks for hosted Auth uniqueness and migration history. This task has no
+  connected Supabase management session/credential; those live checks remain
+  unexecuted. No credentials were created/requested or exported.
+- Official Auth source audit is pinned to
+  `c3348e8f1cb31454e9783e4eb9eab1e71ad9652f`. The optional
+  `nativeAuthDuplicateSource.test.js` audits normalization/duplicate handling
+  and executes its native index migration against synthetic PostgreSQL. Both
+  requests may observe availability first; the native unique index admits one
+  normalized insert and rejects the other. This is source/database evidence,
+  not execution of this project's hosted GoTrue service or proof of its version.
+- GoTrue lowercases valid email; app preflight trims outer whitespace. A direct
+  malformed whitespace signup must fail Auth format validation, not create a
+  separate whitespace identity. Never infer mailbox ownership from membership.
+- `scripts/qa/signup_availability_postgrest.py` tests actual PostgREST RPC/table/email-inventory role gates
+  and budget exhaustion/reset using already-installed images in disposable `network=none`
+  containers without host ports, app credentials or live account access. It
+  cleans up only its own named test containers. Its JWT is synthetic/local.
+
+Additional local-only commands:
+
+```sh
+# Three pinned public Auth files can be fetched into this temporary source root.
+AUTH_SOURCE_ROOT=/tmp/luxeglow-auth-source-c3348e8 PGLITE_MODULE=file:///tmp/luxeglow-email-pgtest/node_modules/@electric-sql/pglite/dist/index.js node --test test/nativeAuthDuplicateSource.test.js
+# From the repository root, explicitly isolated synthetic PostgREST only:
+python3 scripts/qa/signup_availability_postgrest.py
+```
+
+
+Preflight outcome: local PostgREST 16.4 against PostgreSQL 16 passed anonymous and
+authenticated denial for the service-only RPC, private limiter table and Auth
+email inventory; service-only minimal membership results; both budget limits;
+and recovery after the 15-minute window. Account inventory remained unchanged.
+An earlier readiness failure was a harness log-capitalization mismatch, corrected
+before the gate passed. No hosted queries or production writes substituted for
+these local tests. All local test subprocesses and HTTP requests have deadlines.

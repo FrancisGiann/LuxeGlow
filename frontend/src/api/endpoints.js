@@ -8,6 +8,7 @@ import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '..
 import { isRatableVisit, normalizeReviewRating } from '../utils/reviewRatings';
 import { isValidPhoneNumber } from '../utils/phoneNumber';
 import { normalizeSignupEmail, signupEmailError } from '../utils/signupEmail';
+import { EMAIL_CHECK_ERROR, EMAIL_UNAVAILABLE_MESSAGE } from '../utils/signupAvailability';
 
 const asError = (error, fallback = 'Request failed.') => {
   const result = new Error(String(error?.message || fallback));
@@ -154,6 +155,25 @@ export async function loginUnified(email, password) {
 export const loginCustomer = loginUnified;
 export const loginStaff = loginUnified;
 
+/** Signup-only hint; never call from login or recovery. No ownership inference. */
+export async function checkSignupEmailAvailability(email, signal) {
+  const normalizedEmail = normalizeSignupEmail(email);
+  if (signupEmailError(normalizedEmail)) return { ok: false, error: signupEmailError(normalizedEmail) };
+  try {
+    const { data, error } = await requireSupabase().functions.invoke('signup-email-availability', {
+      body: { email: normalizedEmail }, signal, timeout: 8000,
+    });
+    if (Number(error?.context?.status) === 429) {
+      const seconds = Number(error.context.headers?.get?.('Retry-After'));
+      const retryAfter = Number.isFinite(seconds) && seconds > 0 ? Math.min(900, Math.ceil(seconds)) : 900;
+      const minutes = Math.ceil(retryAfter / 60);
+      return { ok: false, retryAfter, error: `Email checks are temporarily limited. Try again in about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Your details remain in this form.` };
+    }
+    if (error || typeof data?.available !== 'boolean') return { ok: false, error: EMAIL_CHECK_ERROR };
+    return { ok: true, available: data.available };
+  } catch { return { ok: false, error: EMAIL_CHECK_ERROR }; }
+}
+
 export async function registerCustomer(fields) {
   const input = fields && typeof fields === 'object' ? fields : {};
   const firstName = String(input.first_name || '').trim();
@@ -169,8 +189,16 @@ export async function registerCustomer(fields) {
   const passwordError = getPasswordPolicyError(password);
   if (passwordError) return { success: false, error: passwordError };
   if (password !== confirmPassword) return { success: false, error: 'Passwords do not match.' };
+  // Recheck on every submission; an earlier available result reserves nothing.
+  const availability = await checkSignupEmailAvailability(email);
+  if (!availability.ok) return { success: false, error: availability.error || EMAIL_CHECK_ERROR };
+  if (!availability.available) return { success: false, email_unavailable: true, error: EMAIL_UNAVAILABLE_MESSAGE };
   const client = requireSupabase();
+  // Auth's unique constraint remains authoritative for bypasses and races.
   const { data, error } = await client.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, phone } } });
+  if (error?.code === 'user_already_exists' || error?.code === 'email_exists') {
+    return { success: false, email_unavailable: true, error: EMAIL_UNAVAILABLE_MESSAGE };
+  }
   if (error) return { success: false, error: error.message || 'Registration failed.' };
   return { success: true, needs_verification: !data.session, user: data.user };
 }
