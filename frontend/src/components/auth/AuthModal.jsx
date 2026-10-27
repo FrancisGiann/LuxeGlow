@@ -145,7 +145,9 @@ export function AuthModal() {
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
   const passwordResetSuggested = shouldSuggestPasswordReset(loginFailureState, loginEmail);
   const emailSuggestion = suggestedSignupEmail(signupEmail);
-  const signupEmailFeedback = emailError || (emailAvailability.status === 'unavailable' ? EMAIL_UNAVAILABLE_MESSAGE : '');
+  const signupEmailUnavailable = emailAvailability.status === 'unavailable' || emailError === EMAIL_UNAVAILABLE_MESSAGE;
+  const signupSubmissionBlocked = signupEmailUnavailable || emailAvailability.status === 'checking';
+  const signupEmailFeedback = emailError || (signupEmailUnavailable ? EMAIL_UNAVAILABLE_MESSAGE : '');
 
   const openPasswordReset = (email = loginEmail) => {
     setError('');
@@ -218,6 +220,10 @@ export function AuthModal() {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (registrationLockRef.current) return;
+    if (signupSubmissionBlocked) {
+      e.currentTarget.elements.namedItem('email')?.focus();
+      return;
+    }
     setError('');
     const f = Object.fromEntries(new FormData(e.currentTarget));
     f.email = normalizeSignupEmail(f.email);
@@ -446,6 +452,7 @@ export function AuthModal() {
                   }}
                   onBlur={() => {
                     setSignupEmail(normalizeSignupEmail(signupEmail));
+                    if (signupEmailUnavailable) return;
                     setEmailError(signupEmailError(signupEmail));
                     void emailChecker.check(signupEmail);
                   }}
@@ -480,7 +487,7 @@ export function AuthModal() {
               <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
               <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy}>Create account</Button>
+              <Button type="submit" block size="lg" loading={busy} disabled={signupSubmissionBlocked} aria-describedby={signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>Create account</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Already have an account?{' '}
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Log in instead</button>
