@@ -29,3 +29,9 @@ export function isValidPhoneNumber(value) {
   const digits = phone.match(/[0-9]/g) || [];
   return digits.length >= 7 && digits.length <= 15;
 }
+
+export function normalizePhMobile(value) {
+  const input = String(value || '').replace(/[\s().-]/g, '');
+  const normalized = /^09\d{9}$/.test(input) ? `+63${input.slice(1)}` : /^639\d{9}$/.test(input) ? `+${input}` : input;
+  return /^\+639\d{9}$/.test(normalized) ? normalized : null;
+}

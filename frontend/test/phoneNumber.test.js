@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isValidPhoneNumber, sanitizePhoneInput } from '../src/utils/phoneNumber.js';
+import { isValidPhoneNumber, normalizePhMobile, sanitizePhoneInput } from '../src/utils/phoneNumber.js';
 
 test('phone input keeps supported formatting and strips letters and unsupported pasted characters', () => {
   assert.equal(sanitizePhoneInput(' +63 (917) 000-1122'), '+63 (917) 000-1122');
@@ -8,6 +8,15 @@ test('phone input keeps supported formatting and strips letters and unsupported 
   assert.equal(sanitizePhoneInput('++63.917.000.1122'), '+63.917.000.1122');
   assert.equal(sanitizePhoneInput('abc+639171234567'), '639171234567');
   assert.equal(sanitizePhoneInput(null), '');
+});
+
+test('Philippine mobile inputs normalize to one canonical E.164 number', () => {
+  for (const input of ['09170001122', '639170001122', '+639170001122', '+63 (917) 000-1122']) {
+    assert.equal(normalizePhMobile(input), '+639170001122');
+  }
+  for (const input of ['+63917000112', '6391700011223', '+628170001122', '123456789012', '']) {
+    assert.equal(normalizePhMobile(input), null);
+  }
 });
 
 test('phone validation requires 7 to 15 digits and accepts only well-formed optional leading plus formatting', () => {

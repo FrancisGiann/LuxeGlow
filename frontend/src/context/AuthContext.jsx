@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api/endpoints';
 import { authRedirect, supabase } from '../lib/supabase';
 import { passwordSetupError } from '../utils/authRedirect';
+import { parseRecoveryLink } from '../utils/recoveryLink';
 import { createSessionRefreshCoordinator, isCurrentAuthenticatedIdentity } from '../utils/sessionRefresh';
 import {
   configuredIdleTimeout,
@@ -51,11 +52,13 @@ function initialPasswordSetup() {
 }
 
 export function AuthProvider({ children }) {
-  const initialSetup = initialPasswordSetup();
+  const customRecoveryLink = import.meta.env.VITE_RECOVERY_ENABLED === 'true' && typeof window !== 'undefined' ? parseRecoveryLink() : null;
+  const initialSetup = customRecoveryLink ? null : initialPasswordSetup();
   const [status, setStatus] = useState('loading'); // loading | authenticated | guest
   const [customer, setCustomer] = useState(null);
-  const [modalView, setModalView] = useState(initialSetup ? 'forgot-reset' : null); // null | login | admin | register | verify | forgot-reset | password-success
+  const [modalView, setModalView] = useState(customRecoveryLink ? 'forgot-request' : initialSetup ? 'forgot-reset' : null); // null | login | admin | register | verify | forgot-reset | password-success
   const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifyPhone, setVerifyPhone] = useState(null);
   const [sessionNotice, setSessionNotice] = useState('');
   const [passwordSetup, setPasswordSetup] = useState(initialSetup);
   const [passwordCompletion, setPasswordCompletion] = useState(null); // null | { type: invite | recovery }
@@ -340,7 +343,10 @@ export function AuthProvider({ children }) {
     invalidateSessionRefresh({ resetStatus: true });
     const data = await api.registerCustomer(fields);
     if (data.success) {
-      if (data.needs_verification) {
+      if (data.needs_phone_verification) {
+        setVerifyPhone({ phone: data.phone, email: fields.email });
+        setModalView('verify-phone');
+      } else if (data.needs_verification) {
         setVerifyEmail(fields.email);
         setModalView('verify');
       } else {
@@ -351,6 +357,24 @@ export function AuthProvider({ children }) {
     }
     return { ok: false, error: data.error || 'Registration failed.', emailUnavailable: data.email_unavailable === true };
   }, [refreshSession, closeAuth, invalidateSessionRefresh]);
+
+  const verifyPhoneCode = useCallback(async (code) => {
+    if (!verifyPhone) return { ok: false, error: 'Start signup again.' };
+    const result = await api.verifySignupPhone({ ...verifyPhone, code });
+    if (!result.success) return { ok: false, error: result.error };
+    invalidateSessionRefresh({ resetStatus: true });
+    await refreshSession();
+    setVerifyPhone(null);
+    setSessionNotice('Phone verified. Sign in with your email and password.');
+    setModalView('login');
+    return { ok: true };
+  }, [verifyPhone, invalidateSessionRefresh, refreshSession]);
+
+  const resendPhoneCode = useCallback(async () => {
+    if (!verifyPhone) return { ok: false, error: 'Start signup again.' };
+    const result = await api.resendSignupPhone(verifyPhone.phone);
+    return { ok: result.success, error: result.error, cooldownSeconds: result.cooldown_seconds || 60 };
+  }, [verifyPhone]);
 
   const resend = useCallback(async (email = verifyEmail) => {
     const data = await api.resendVerificationEmail(email);
@@ -454,11 +478,14 @@ export function AuthProvider({ children }) {
       isAuthenticated: status === 'authenticated',
       modalView,
       verifyEmail,
+      verifyPhone,
       openAuth,
       closeAuth,
       login,
       register,
       resend,
+      verifyPhoneCode,
+      resendPhoneCode,
       requestPasswordReset,
       completePasswordReset,
       passwordSetup,
@@ -467,7 +494,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       sessionNotice,
     }),
-    [status, customer, modalView, verifyEmail, openAuth, closeAuth, login, register, resend, requestPasswordReset, completePasswordReset, passwordSetup, passwordCompletion, logout, refreshSession, sessionNotice]
+    [status, customer, modalView, verifyEmail, verifyPhone, openAuth, closeAuth, login, register, resend, verifyPhoneCode, resendPhoneCode, requestPasswordReset, completePasswordReset, passwordSetup, passwordCompletion, logout, refreshSession, sessionNotice]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -15,6 +15,15 @@ verify_jwt = false
 [functions.login-rate-limit]
 verify_jwt = false
 
+[functions.claim-sms-signup]
+verify_jwt = false
+
+[functions.send-unisms-sms]
+verify_jwt = false
+
 # Public signup signal is protected by an atomic service-only database limiter.
 [functions.signup-email-availability]
+verify_jwt = false
+
+[functions.password-recovery]
 verify_jwt = false

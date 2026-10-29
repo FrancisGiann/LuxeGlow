@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { normalizePhMobile } from '../_shared/smsHook.js';
 import { classifyLoginAuthFailure } from '../_shared/loginAuthFailure.js';
+import { readBoundedBody } from '../_shared/readBoundedBody.js';
 
 const origin = Deno.env.get('ALLOWED_ORIGIN') || 'null';
 const headers = {
@@ -53,9 +55,9 @@ Deno.serve(async (request) => {
 
   let input: { email?: string; password?: string; mode?: string };
   try {
-    const body = await request.arrayBuffer();
-    if (body.byteLength > MAX_BODY_BYTES) return json({ error: 'Invalid request.' }, 413);
-    input = JSON.parse(new TextDecoder().decode(body));
+    const body = await readBoundedBody(request, MAX_BODY_BYTES);
+    if (body === null) return json({ error: 'Invalid request.' }, 413);
+    input = JSON.parse(body);
   } catch {
     return json({ error: 'Invalid request.' }, 400);
   }
@@ -68,7 +70,9 @@ Deno.serve(async (request) => {
 
   const ip = requestIp(request);
   if (!ip || ip === 'unknown') return json({ error: GENERIC_ERROR }, 503);
-  const identifierHash = await hashKey(hashSecret, 'identity', `${ip}\u0000${email}`);
+  // Do not let a caller vary a forwarding header to reset the per-account
+  // password budget. The separate IP bucket remains an additional limit.
+  const identifierHash = await hashKey(hashSecret, 'identity', email);
   const ipHash = await hashKey(hashSecret, 'ip', ip);
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: reservation, error: reservationError } = await admin.rpc('reserve_login_attempt', {
@@ -87,6 +91,18 @@ Deno.serve(async (request) => {
     await admin.rpc('release_login_attempt', { p_identifier_hash: identifierHash, p_ip_hash: ipHash });
   };
 
+  let alias: { user_id: string; phone_e164: string; email_verified_at: string | null } | null = null;
+  if (input.mode === 'customer' && Deno.env.get('SMS_ALIAS_LOGIN_ENABLED') === 'true') {
+    const { data, error } = await admin.from('customer_login_aliases')
+      .select('user_id,phone_e164,email_verified_at').eq('email_normalized', email).maybeSingle();
+    if (error) {
+      await releaseReservation();
+      return json({ error: GENERIC_ERROR }, 503);
+    }
+    alias = data;
+  }
+  const aliasPhone = alias && !alias.email_verified_at ? alias.phone_e164 : null;
+
   let authResponse: Response;
   try {
     authResponse = await fetch(`${url.replace(/\/$/, '')}/auth/v1/token?grant_type=password`, {
@@ -97,7 +113,7 @@ Deno.serve(async (request) => {
         'Content-Type': 'application/json',
         'x-supabase-api-version': '2024-01-01',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(aliasPhone ? { phone: aliasPhone, password } : { email, password }),
     });
   } catch {
     await releaseReservation();
@@ -117,11 +133,29 @@ Deno.serve(async (request) => {
     // Do not expose GoTrue's account or credential details. Failed credential
     // responses keep their reservation; provider/server failures release it.
     if (authResponse.status >= 400 && authResponse.status < 500) {
+      if (aliasPhone) return json({ error: INVALID_CREDENTIALS }, 401);
       const failure = classifyLoginAuthFailure(authResponse.status, authData);
       return json(failure.body, failure.status);
     }
     await releaseReservation();
     return json({ error: GENERIC_ERROR }, 503);
+  }
+
+  if (aliasPhone) {
+    const [{ data: latestAlias, error: aliasError }, { data: current, error: userError },
+      { data: profile, error: profileError }] = await Promise.all([
+      admin.from('customer_login_aliases').select('user_id,phone_e164,email_verified_at').eq('email_normalized', email).maybeSingle(),
+      admin.auth.admin.getUserById(alias!.user_id),
+      admin.from('profiles').select('role,is_active').eq('id', alias!.user_id).maybeSingle(),
+    ]);
+    if (aliasError || userError || profileError || authUser.id !== alias!.user_id ||
+        latestAlias?.user_id !== alias!.user_id || latestAlias?.phone_e164 !== aliasPhone ||
+        latestAlias?.email_verified_at || normalizePhMobile(current?.user?.phone) !== aliasPhone ||
+        !current?.user?.phone_confirmed_at || profile?.role !== 'customer' || !profile?.is_active) {
+      // The issued tokens never leave this server when the alias or phone gate
+      // changed during password verification.
+      return json({ error: INVALID_CREDENTIALS }, 401);
+    }
   }
 
   await releaseReservation();

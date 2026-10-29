@@ -6,7 +6,7 @@ import { passwordResetPath } from '../utils/authRedirect';
 import { isSupportedProfileRole } from '../utils/roles';
 import { isStaffPositionTitleWithinLimit, normalizeStaffPositionTitle } from '../utils/staffPositionTitle';
 import { isRatableVisit, normalizeReviewRating } from '../utils/reviewRatings';
-import { isValidPhoneNumber } from '../utils/phoneNumber';
+import { isValidPhoneNumber, normalizePhMobile } from '../utils/phoneNumber';
 import { normalizeSignupEmail, signupEmailError } from '../utils/signupEmail';
 import { EMAIL_CHECK_ERROR, EMAIL_UNAVAILABLE_MESSAGE } from '../utils/signupAvailability';
 
@@ -36,6 +36,7 @@ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const LOGIN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOGIN_EMAIL_MAX_LENGTH = 320;
 const LOGIN_PASSWORD_MAX_LENGTH = 1024;
+export const smsSignupEnabled = import.meta.env.VITE_SMS_SIGNUP_ENABLED === 'true';
 
 function retryAfterFromError(error) {
   const headers = error?.context?.headers;
@@ -186,6 +187,8 @@ export async function registerCustomer(fields) {
   if (emailError) return { success: false, error: emailError };
   if (!firstName || !lastName) return { success: false, error: 'Enter your first and last name.' };
   if (!isValidPhoneNumber(phone)) return { success: false, error: 'Enter a phone number with 7 to 15 digits.' };
+  const normalizedPhone = smsSignupEnabled ? normalizePhMobile(phone) : null;
+  if (smsSignupEnabled && !normalizedPhone) return { success: false, error: 'Enter a valid Philippine mobile number.' };
   const passwordError = getPasswordPolicyError(password);
   if (passwordError) return { success: false, error: passwordError };
   if (password !== confirmPassword) return { success: false, error: 'Passwords do not match.' };
@@ -194,6 +197,15 @@ export async function registerCustomer(fields) {
   if (!availability.ok) return { success: false, error: availability.error || EMAIL_CHECK_ERROR };
   if (!availability.available) return { success: false, email_unavailable: true, error: EMAIL_UNAVAILABLE_MESSAGE };
   const client = requireSupabase();
+  if (smsSignupEnabled) {
+    const { data, error } = await client.auth.signUp({
+      phone: normalizedPhone, password,
+      options: { channel: 'sms', data: { first_name: firstName, last_name: lastName,
+        phone: normalizedPhone, pending_login_email: email } },
+    });
+    if (error || !data.user) return { success: false, error: 'Could not send a code to this number. Check it and try again.' };
+    return { success: true, needs_phone_verification: true, phone: normalizedPhone };
+  }
   // Auth's unique constraint remains authoritative for bypasses and races.
   const { data, error } = await client.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, phone } } });
   if (error?.code === 'user_already_exists' || error?.code === 'email_exists') {
@@ -201,6 +213,35 @@ export async function registerCustomer(fields) {
   }
   if (error) return { success: false, error: error.message || 'Registration failed.' };
   return { success: true, needs_verification: !data.session, user: data.user };
+}
+
+export async function verifySignupPhone({ phone, code, email }) {
+  if (!smsSignupEnabled) return { success: false, error: 'SMS signup is unavailable.' };
+  const normalizedPhone = normalizePhMobile(phone);
+  if (!normalizedPhone || !/^\d{6,8}$/.test(String(code || ''))) return { success: false, error: 'Enter the code from your text message.' };
+  const client = requireSupabase();
+  const { data, error } = await client.auth.verifyOtp({ phone: normalizedPhone, token: String(code), type: 'sms' });
+  if (error || !data?.session) return { success: false, error: 'That code is invalid or expired.' };
+  const { data: claimed, error: claimError } = await client.functions.invoke('claim-sms-signup', { body: { email } });
+  if (claimError || claimed?.success !== true) {
+    await client.auth.signOut().catch(() => {});
+    return { success: false, error: 'The phone was verified, but signup could not be completed. Contact support.' };
+  }
+  // The phone OTP session only establishes signup proof. Routine access starts
+  // with a fresh email/password session after the alias has been claimed.
+  const { error: signOutError } = await client.auth.signOut({ scope: 'local' });
+  if (signOutError) return { success: false, error: 'Account created. Close this window, then sign in with your email and password.' };
+  return { success: true };
+}
+
+export async function resendSignupPhone(phone) {
+  if (!smsSignupEnabled) return { success: false, error: 'SMS signup is unavailable.' };
+  const normalizedPhone = normalizePhMobile(phone);
+  if (!normalizedPhone) return { success: false, error: 'Enter a valid Philippine mobile number.' };
+  const { error } = await requireSupabase().auth.resend({ type: 'sms', phone: normalizedPhone });
+  return error
+    ? { success: false, error: 'Could not send a code to this number. Try again later.', cooldown_seconds: 60 }
+    : { success: true, cooldown_seconds: 60 };
 }
 
 export async function resendVerificationEmail(email) {
@@ -220,6 +261,9 @@ export async function resendVerificationEmail(email) {
 }
 
 export async function requestPasswordReset(email) {
+  if (import.meta.env.VITE_RECOVERY_ENABLED === 'true') {
+    return { success: false, error: 'Use the account recovery options in this form.' };
+  }
   const normalizedEmail = normalizeEmail(email);
   if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) {
     return { success: false, error: 'Enter a valid email address.' };

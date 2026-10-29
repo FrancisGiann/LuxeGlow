@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../ui/Toast';
 import { BrandLogo } from '../branding/BrandLogo';
+import { RecoveryPanel } from './RecoveryPanel';
+import { parseRecoveryLink } from '../../utils/recoveryLink';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
@@ -13,7 +15,7 @@ import { normalizeSignupEmail, signupEmailError, suggestedSignupEmail } from '..
 import { createSignupAvailabilityChecker, EMAIL_UNAVAILABLE_MESSAGE } from '../../utils/signupAvailability';
 import { checkSignupEmailAvailability } from '../../api/endpoints';
 import { verificationCooldownSeconds, verificationRequestFeedback } from '../../utils/verificationFeedback';
-import { isValidPhoneNumber, sanitizePhoneInput } from '../../utils/phoneNumber';
+import { isValidPhoneNumber, normalizePhMobile, sanitizePhoneInput } from '../../utils/phoneNumber';
 import {
   changeLoginFailureEmail,
   emptyLoginFailureState,
@@ -28,10 +30,13 @@ const VIEWS = {
   admin: 'Log in',
   register: 'Create an Account',
   verify: 'Verify Your Email',
+  'verify-phone': 'Verify Your Phone',
   'forgot-request': 'Reset Your Password',
   'forgot-reset': 'Choose a New Password',
   'password-success': 'Password update complete',
 };
+const SMS_SIGNUP_ENABLED = import.meta.env.VITE_SMS_SIGNUP_ENABLED === 'true';
+const RECOVERY_ENABLED = import.meta.env.VITE_RECOVERY_ENABLED === 'true';
 
 function BrandMark() {
   return (
@@ -46,10 +51,13 @@ export function AuthModal() {
     modalView,
     closeAuth,
     verifyEmail,
+    verifyPhone,
     openAuth,
     login,
     register,
     resend,
+    verifyPhoneCode,
+    resendPhoneCode,
     requestPasswordReset,
     completePasswordReset,
     passwordSetup,
@@ -143,6 +151,7 @@ export function AuthModal() {
 
   const resendKey = String(verifyEmail || '').trim().toLowerCase();
   const resendRemaining = resendForEmail === resendKey ? resendIn : 0;
+  const phoneResendRemaining = resendForEmail === verifyPhone?.phone ? resendIn : 0;
   const passwordResetSuggested = shouldSuggestPasswordReset(loginFailureState, loginEmail);
   const emailSuggestion = suggestedSignupEmail(signupEmail);
   const signupEmailUnavailable = emailAvailability.status === 'unavailable' || emailError === EMAIL_UNAVAILABLE_MESSAGE;
@@ -234,8 +243,8 @@ export function AuthModal() {
       return;
     }
     setSignupEmail(f.email);
-    if (!isValidPhoneNumber(f.phone)) {
-      setPhoneError('Enter a phone number with 7 to 15 digits.');
+    if (SMS_SIGNUP_ENABLED ? !normalizePhMobile(f.phone) : !isValidPhoneNumber(f.phone)) {
+      setPhoneError(SMS_SIGNUP_ENABLED ? 'Enter a valid Philippine mobile number.' : 'Enter a phone number with 7 to 15 digits.');
       return;
     }
     setPhoneError('');
@@ -262,6 +271,35 @@ export function AuthModal() {
       registrationLockRef.current = false;
       setBusy(false);
     }
+  };
+
+  const handleVerifyPhone = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    setError('');
+    setBusy(true);
+    try {
+      const code = new FormData(event.currentTarget).get('code');
+      const result = await verifyPhoneCode(code);
+      if (!result.ok) setError(result.error || 'Could not verify that code.');
+    } catch {
+      setError('Could not verify that code.');
+    } finally { setBusy(false); }
+  };
+
+  const handleResendPhone = async () => {
+    if (phoneResendRemaining > 0 || resendBusy) return;
+    setResendBusy(true);
+    try {
+      const result = await resendPhoneCode();
+      setResendForEmail(verifyPhone.phone);
+      setResendIn(result.cooldownSeconds || 60);
+      toast(result.ok ? 'A new code has been requested.' : result.error, result.ok ? 'info' : 'error');
+    } catch {
+      setResendForEmail(verifyPhone.phone);
+      setResendIn(60);
+      toast('Could not request another code.', 'error');
+    } finally { setResendBusy(false); }
   };
 
   const handleResend = async () => {
@@ -352,7 +390,7 @@ export function AuthModal() {
             {modalView === 'login' && 'Sign in to your account.'}
             {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
             {modalView === 'verify' && 'Verify this email address to continue.'}
-            {modalView === 'forgot-request' && 'We will email a secure reset link if that address is registered.'}
+            {modalView === 'forgot-request' && (RECOVERY_ENABLED ? 'Choose how to recover your account.' : 'We will email a secure reset link if that address is registered.')}
             {modalView === 'forgot-reset' && (passwordSetupBlocked ? 'This page needs a valid invitation or password-reset link from your email.' : 'Choose a password to secure your account.')}
             {modalView === 'password-success' && (inviteCompletion ? 'Your staff account is ready for secure sign-in.' : 'Choose where to sign in next.')}
           </p>
@@ -380,7 +418,8 @@ export function AuthModal() {
           )}
 
           {/* ── PASSWORD RESET REQUEST ── */}
-          {modalView === 'forgot-request' && (
+          {modalView === 'forgot-request' && (RECOVERY_ENABLED ?
+            <RecoveryPanel initialEmail={resetEmail} link={parseRecoveryLink()} onBack={() => openAuth('login')} /> :
             <form onSubmit={handleRequestReset} className="mt-6 flex flex-col gap-4" noValidate>
               <Input id="reset-request-email" name="email" type="email" label="Registered email address" placeholder="you@example.com" autoComplete="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
@@ -476,22 +515,44 @@ export function AuthModal() {
                       void emailChecker.check(emailSuggestion);
                     }}>Use suggested address</button>
                     <span className="block">You can also keep the address you entered.</span>
-                  </> : 'Check the address carefully. You will need to verify it by email.')}
+                  </> : SMS_SIGNUP_ENABLED ? 'Use an address you can access for account recovery later.' : 'Check the address carefully. You will need to verify it by email.')}
                 </div>
               </div>
               <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required error={phoneError} aria-invalid={Boolean(phoneError)} onChange={(event) => {
                 const nextPhone = sanitizePhoneInput(event.currentTarget.value);
                 event.currentTarget.value = nextPhone;
-                if (phoneError && isValidPhoneNumber(nextPhone)) setPhoneError('');
+                if (phoneError && (SMS_SIGNUP_ENABLED ? normalizePhMobile(nextPhone) : isValidPhoneNumber(nextPhone))) setPhoneError('');
               }} />
               <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
               <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy} disabled={signupSubmissionBlocked} aria-describedby={signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>Create account</Button>
+              <Button type="submit" block size="lg" loading={busy} disabled={signupSubmissionBlocked} aria-describedby={signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>{SMS_SIGNUP_ENABLED ? 'Send verification code' : 'Create account'}</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
                 Already have an account?{' '}
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Log in instead</button>
               </p>
+            </form>
+          )}
+
+          {modalView === 'verify-phone' && (
+            <form onSubmit={handleVerifyPhone} className="mt-6 flex flex-col gap-5" noValidate>
+              <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Mobile number</p>
+                <p className="mt-0.5 text-sm font-semibold text-brand-800">{verifyPhone?.phone}</p>
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-bold text-ink-900">Enter the code from LuxeGlow</h3>
+                <p className="mt-2 text-sm text-ink-500">The code expires in 5 minutes. Do not share it with anyone.</p>
+              </div>
+              <Input id="signup-sms-code" name="code" label="Verification code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" maxLength={8} required />
+              {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
+              <Button type="submit" block size="lg" loading={busy}>Verify and create account</Button>
+              <div className="text-center text-sm text-ink-500">
+                Didn't receive it?{' '}
+                <button type="button" onClick={handleResendPhone} disabled={phoneResendRemaining > 0 || resendBusy} className="font-semibold text-brand-800 disabled:opacity-50 hover:enabled:text-brand-900">
+                  {resendBusy ? 'Sending…' : phoneResendRemaining > 0 ? `Try again in ${phoneResendRemaining}s` : 'Resend code'}
+                </button>
+              </div>
             </form>
           )}
 

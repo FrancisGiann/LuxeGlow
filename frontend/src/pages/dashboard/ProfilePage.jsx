@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { isValidPhoneNumber } from '../../utils/phoneNumber';
+import { RecoveryEmailCard } from '../../components/auth/RecoveryEmailCard';
 
 export function ProfilePage() {
   const { customer: dashCustomer, refresh: refreshDashboard } = useDashboard();
@@ -140,6 +141,7 @@ export function ProfilePage() {
           </form>
         )}
       </Card>
+      {import.meta.env.VITE_RECOVERY_ENABLED === 'true' && <div className="mt-6"><RecoveryEmailCard email={authCustomer?.email || ''} /></div>}
     </div>
   );
 }
