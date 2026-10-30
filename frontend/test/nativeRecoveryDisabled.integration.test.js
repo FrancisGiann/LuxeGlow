@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const original = {
   fetch: globalThis.fetch,
+  window: globalThis.window,
   url: process.env.VITE_SUPABASE_URL,
   anon: process.env.VITE_SUPABASE_ANON_KEY,
   flag: process.env.VITE_RECOVERY_ENABLED,
@@ -18,7 +19,8 @@ let fetches = 0;
 process.env.VITE_SUPABASE_URL = 'https://supabase.test';
 process.env.VITE_SUPABASE_ANON_KEY = 'synthetic-test-key';
 process.env.VITE_RECOVERY_ENABLED = 'true';
-globalThis.fetch = async () => { fetches += 1; throw new Error('Native recovery must not be called'); };
+globalThis.window = { location: { origin: 'https://test.example' } };
+globalThis.fetch = async () => { fetches += 1; return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }); };
 
 before(async () => {
   server = await createServer({ root, configFile: resolve(root, 'vite.config.js'), server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
@@ -27,6 +29,7 @@ before(async () => {
 after(async () => {
   await server?.close();
   globalThis.fetch = original.fetch;
+  globalThis.window = original.window;
   for (const [name, value] of [
     ['VITE_SUPABASE_URL', original.url], ['VITE_SUPABASE_ANON_KEY', original.anon], ['VITE_RECOVERY_ENABLED', original.flag],
   ]) {
@@ -35,9 +38,8 @@ after(async () => {
   }
 });
 
-test('custom recovery flag prevents the frontend from requesting a native reset link', async () => {
+test('SMS recovery flag preserves existing email reset links', async () => {
   const result = await requestPasswordReset('synthetic@example.com');
-  assert.equal(result.success, false);
-  assert.match(result.error, /account recovery options/);
-  assert.equal(fetches, 0);
+  assert.equal(result.success, true);
+  assert.equal(fetches, 1);
 });
