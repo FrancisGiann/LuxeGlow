@@ -31,7 +31,9 @@ create table public.password_recovery_grants (
 alter table public.password_recovery_grants enable row level security;
 revoke all on public.password_recovery_grants from public, anon, authenticated;
 
--- Count every request, including unknown accounts, before any identity lookup.
+-- Count every request for a normalized login identifier, including unknown
+-- accounts, before any identity lookup. The legacy ip_hash column/function
+-- names store a keyed rate identity; no caller-supplied IP is trusted.
 create table public.password_recovery_request_ips (
   id bigint generated always as identity primary key,
   ip_hash text not null check (ip_hash ~ '^[0-9a-f]{64}$'),
@@ -82,7 +84,7 @@ $$;
 revoke all on function public.reserve_password_recovery(uuid,uuid,text,text,text,text,timestamptz) from public, anon, authenticated;
 grant execute on function public.reserve_password_recovery(uuid,uuid,text,text,text,text,timestamptz) to service_role;
 
--- Verification is atomic and bounded to five attempts. A successful check
+-- Verification is atomic and bounded to five attempts per challenge. A successful check
 -- consumes the challenge and creates a separate, reset-only grant.
 create table public.password_recovery_verification_attempts (
   id bigint generated always as identity primary key,
