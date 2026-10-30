@@ -261,9 +261,6 @@ export async function resendVerificationEmail(email) {
 }
 
 export async function requestPasswordReset(email) {
-  if (import.meta.env.VITE_RECOVERY_ENABLED === 'true') {
-    return { success: false, error: 'Use the account recovery options in this form.' };
-  }
   const normalizedEmail = normalizeEmail(email);
   if (!LOGIN_EMAIL_PATTERN.test(normalizedEmail) || normalizedEmail.length > LOGIN_EMAIL_MAX_LENGTH) {
     return { success: false, error: 'Enter a valid email address.' };
