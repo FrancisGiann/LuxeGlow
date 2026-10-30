@@ -76,6 +76,7 @@ export function AuthModal() {
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [passwordChecks, setPasswordChecks] = useState(null);
+  const [signupStep, setSignupStep] = useState('details');
   const [signupEmail, setSignupEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [emailAvailability, setEmailAvailability] = useState({ status: 'idle' });
@@ -119,6 +120,7 @@ export function AuthModal() {
     setPasswordError('');
     setConfirmError('');
     setPasswordChecks(null);
+    if (modalView !== 'register' && modalView !== 'verify-phone') setSignupStep('details');
     setEmailError('');
     emailChecker.change();
     if (modalView !== 'register') setSignupEmail('');
@@ -237,7 +239,7 @@ export function AuthModal() {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (registrationLockRef.current) return;
-    if (signupSubmissionBlocked) {
+    if (signupStep === 'details' && signupSubmissionBlocked) {
       e.currentTarget.elements.namedItem('email')?.focus();
       return;
     }
@@ -260,12 +262,6 @@ export function AuthModal() {
       return;
     }
     setSignupEmail(f.email);
-    if (SMS_SIGNUP_ENABLED ? !normalizePhMobile(f.phone) : !isValidPhoneNumber(f.phone)) {
-      setPhoneError(SMS_SIGNUP_ENABLED ? 'Enter a valid Philippine mobile number.' : 'Enter a phone number with 7 to 15 digits.');
-      e.currentTarget.elements.namedItem('phone')?.focus();
-      return;
-    }
-    setPhoneError('');
     const passwordError = getPasswordPolicyError(f.password);
     if (passwordError) {
       setPasswordError(passwordError);
@@ -279,12 +275,25 @@ export function AuthModal() {
       return;
     }
     setConfirmError('');
+    if (SMS_SIGNUP_ENABLED && signupStep === 'details') {
+      setSignupStep('phone');
+      return;
+    }
+    if (SMS_SIGNUP_ENABLED ? !normalizePhMobile(f.phone) : !isValidPhoneNumber(f.phone)) {
+      setPhoneError(SMS_SIGNUP_ENABLED ? 'Enter a valid Philippine mobile number.' : 'Enter a phone number with 7 to 15 digits.');
+      e.currentTarget.elements.namedItem('phone')?.focus();
+      return;
+    }
+    setPhoneError('');
     registrationLockRef.current = true;
     setBusy(true);
     try {
       const res = await register(f);
       if (!res.ok) {
-        if (res.emailUnavailable) setEmailError(EMAIL_UNAVAILABLE_MESSAGE);
+        if (res.emailUnavailable) {
+          setEmailError(EMAIL_UNAVAILABLE_MESSAGE);
+          setSignupStep('details');
+        }
         else setError(res.error);
       }
     } catch {
@@ -419,7 +428,7 @@ export function AuthModal() {
           </p>
           {sessionNotice && <p className="mt-4 rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center text-sm font-semibold text-brand-800" role="status">{sessionNotice}</p>}
           {SMS_SIGNUP_ENABLED && (modalView === 'register' || modalView === 'verify-phone') &&
-            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-wider text-brand-800">Step {modalView === 'register' ? '1' : '2'} of 2 · {modalView === 'register' ? 'Account details' : 'Phone verification'}</p>}
+            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-wider text-brand-800">Step {modalView === 'register' && signupStep === 'details' ? '1' : '2'} of 2 · {modalView === 'register' && signupStep === 'details' ? 'Account details' : 'Phone verification'}</p>}
 
           {/* ── LOGIN ── */}
           {modalView === 'login' && (
@@ -499,8 +508,9 @@ export function AuthModal() {
           )}
 
           {/* ── REGISTER ── */}
-          {modalView === 'register' && (
-            <form onSubmit={handleRegister} className="mt-4 flex flex-col gap-3" noValidate>
+          {(modalView === 'register' || modalView === 'verify-phone') && (
+            <form onSubmit={handleRegister} className={`mt-4 flex flex-col gap-3 ${modalView === 'verify-phone' ? 'hidden' : ''}`} noValidate>
+              <div className={SMS_SIGNUP_ENABLED && signupStep === 'phone' ? 'hidden' : 'flex flex-col gap-3'}>
               <div className="grid grid-cols-2 gap-4">
                 <Input id="reg-first" name="first_name" label="First name" placeholder="Juan" autoComplete="given-name" required error={nameErrors.first_name} onBlur={(event) => setNameErrors((current) => ({ ...current, first_name: event.target.value.trim() ? '' : 'Enter your first name.' }))} onChange={(event) => { if (nameErrors.first_name && event.target.value.trim()) setNameErrors((current) => ({ ...current, first_name: '' })); }} />
                 <Input id="reg-last" name="last_name" label="Last name" placeholder="Dela Cruz" autoComplete="family-name" required error={nameErrors.last_name} onBlur={(event) => setNameErrors((current) => ({ ...current, last_name: event.target.value.trim() ? '' : 'Enter your last name.' }))} onChange={(event) => { if (nameErrors.last_name && event.target.value.trim()) setNameErrors((current) => ({ ...current, last_name: '' })); }} />
@@ -543,20 +553,27 @@ export function AuthModal() {
                   </> : SMS_SIGNUP_ENABLED ? 'Use an address you can access for account recovery later.' : 'Check the address carefully. You will need to verify it by email.')}
                 </div>
               </div>
+              <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={SMS_SIGNUP_ENABLED ? '8+ characters · upper & lowercase · number · symbol' : PASSWORD_POLICY_HINT} required error={passwordError} onChange={(event) => { setPasswordChecks(event.target.value ? validatePassword(event.target.value) : null); if (passwordError && validatePassword(event.target.value).valid) setPasswordError(''); }} onBlur={(event) => { if (event.target.value) setPasswordError(getPasswordPolicyError(event.target.value)); }} />
+              {SMS_SIGNUP_ENABLED && passwordChecks && <p className={`-mt-2 text-xs ${passwordChecks.valid ? 'text-success' : 'text-ink-500'}`} aria-live="polite">{passwordChecks.valid ? 'Password meets all requirements.' : 'Use 8+ characters with upper and lowercase letters, a number, and a symbol.'}</p>}
+              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required error={confirmError} onBlur={(event) => { const password = event.currentTarget.form?.elements.namedItem('password')?.value; if (event.target.value) setConfirmError(event.target.value === password ? '' : 'Passwords do not match.'); }} onChange={() => { if (confirmError) setConfirmError(''); }} />
+              </div>
+              <div className={SMS_SIGNUP_ENABLED && signupStep === 'phone' ? 'flex flex-col gap-4' : SMS_SIGNUP_ENABLED ? 'hidden' : 'flex flex-col gap-4'}>
+              {SMS_SIGNUP_ENABLED && <p className="text-sm text-ink-500">We’ll text a code to confirm this number. No code is sent until you choose Send verification code.</p>}
               <Input id="reg-phone" name="phone" type="tel" label="Phone number" placeholder="0917 000 1122" autoComplete="tel" required error={phoneError} aria-invalid={Boolean(phoneError)} onChange={(event) => {
                 const nextPhone = sanitizePhoneInput(event.currentTarget.value);
                 event.currentTarget.value = nextPhone;
                 if (phoneError && (SMS_SIGNUP_ENABLED ? normalizePhMobile(nextPhone) : isValidPhoneNumber(nextPhone))) setPhoneError('');
               }} onBlur={(event) => { if (event.target.value && (SMS_SIGNUP_ENABLED ? !normalizePhMobile(event.target.value) : !isValidPhoneNumber(event.target.value))) setPhoneError('Enter a valid Philippine mobile number.'); }} />
-              <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={SMS_SIGNUP_ENABLED ? '8+ characters · upper & lowercase · number · symbol' : PASSWORD_POLICY_HINT} required error={passwordError} onChange={(event) => { setPasswordChecks(event.target.value ? validatePassword(event.target.value) : null); if (passwordError && validatePassword(event.target.value).valid) setPasswordError(''); }} onBlur={(event) => { if (event.target.value) setPasswordError(getPasswordPolicyError(event.target.value)); }} />
-              {SMS_SIGNUP_ENABLED && passwordChecks && <p className={`-mt-2 text-xs ${passwordChecks.valid ? 'text-success' : 'text-ink-500'}`} aria-live="polite">{passwordChecks.valid ? 'Password meets all requirements.' : 'Use 8+ characters with upper and lowercase letters, a number, and a symbol.'}</p>}
-              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required error={confirmError} onBlur={(event) => { const password = event.currentTarget.form?.elements.namedItem('password')?.value; if (event.target.value) setConfirmError(event.target.value === password ? '' : 'Passwords do not match.'); }} onChange={() => { if (confirmError) setConfirmError(''); }} />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
-              <Button type="submit" block size="lg" loading={busy} disabled={signupSubmissionBlocked} aria-describedby={signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>{SMS_SIGNUP_ENABLED ? 'Send verification code' : 'Create account'}</Button>
+              </div>
+              <Button type="submit" block size="lg" loading={busy} disabled={signupStep === 'details' && signupSubmissionBlocked} aria-describedby={signupStep === 'details' && signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>{SMS_SIGNUP_ENABLED ? signupStep === 'details' ? 'Next: verify phone' : 'Send verification code' : 'Create account'}</Button>
+              {SMS_SIGNUP_ENABLED && signupStep === 'phone' && <button type="button" className="text-sm font-semibold text-brand-800 hover:text-brand-900" onClick={() => { setError(''); setSignupStep('details'); }}>Back to account details</button>}
+              {signupStep === 'details' && error && <p className="text-sm font-medium text-danger">{error}</p>}
+              {signupStep === 'details' &&
               <p className="pt-1 text-center text-sm text-ink-500">
                 Already have an account?{' '}
                 <button type="button" onClick={() => openAuth('login')} className="font-semibold text-brand-800 hover:text-brand-900">Log in instead</button>
-              </p>
+              </p>}
             </form>
           )}
 
