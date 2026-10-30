@@ -42,6 +42,16 @@ test('recovery hashes are domain separated from signup and each other', async ()
   assert.match(a, /^[0-9a-f]{64}$/);
   assert.notEqual(a, b);
 });
+
+test('rate identity is stable for one alias and isolated by purpose', async () => {
+  const key = 'x'.repeat(32);
+  const alias = normalizeRecoveryIdentifier(' Person@Example.com ');
+  const sameAlias = normalizeRecoveryIdentifier('person@example.com');
+  const request = await keyedHash(key, 'request-identifier', alias);
+  assert.equal(request, await keyedHash(key, 'request-identifier', sameAlias));
+  assert.notEqual(request, await keyedHash(key, 'request-identifier', 'other@example.com'));
+  assert.notEqual(request, await keyedHash(key, 'verify-challenge', alias));
+});
 test('tokens and codes derive from crypto bytes and email URL escapes parameters', () => {
   assert.match(randomDigits(), /^\d{8}$/);
   assert.match(randomToken(), /^[0-9a-f]{64}$/);
