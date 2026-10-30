@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { eligibleRecoveryDestination, EMAIL_EXPIRY_MINUTES, GENERIC_REQUEST, GENERIC_VERIFY, keyedHash, normalizeRecoveryIdentifier, randomDigits, randomToken, recoveryEmailLink, recoverySms, SMS_EXPIRY_MINUTES } from '../_shared/passwordRecovery.js';
 import { readBoundedBody } from '../_shared/readBoundedBody.js';
+import { recoveryTestFixture, RECOVERY_STAGING_URL } from '../_shared/recoveryTestFixture.js';
 
 const origin = Deno.env.get('ALLOWED_ORIGIN') || '';
 const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'apikey, authorization, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
@@ -40,6 +41,8 @@ Deno.serve(async (request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const hashKey = Deno.env.get('PASSWORD_RECOVERY_HASH_KEY');
   if (!url || !serviceKey || !hashKey || hashKey.length < 32) return reply({ error: 'Recovery unavailable' }, 503);
+  const testMode = Deno.env.get('RECOVERY_TEST_MODE') === 'true';
+  if (testMode && url !== RECOVERY_STAGING_URL) return reply({ error: 'Recovery unavailable' }, 503);
   const declaredLength = request.headers.get('content-length');
   if (declaredLength && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > 4096)) {
     return reply({ error: 'Invalid request' }, 413);
@@ -64,13 +67,15 @@ Deno.serve(async (request) => {
     const generic = { success: true, challenge_id: challengeId, message: GENERIC_REQUEST };
     if (!identifier || !['sms', 'email'].includes(String(channel))) return genericResponse(generic);
     if (Deno.env.get('RECOVERY_SENDING_ENABLED') !== 'true') return reply({ error: 'Recovery unavailable' }, 503);
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-    if (!ip || ip.length > 64) return reply({ error: 'Recovery unavailable' }, 503);
     try {
-      const requestIpHash = await keyedHash(hashKey, 'ip', ip);
-      const { data: allowedIp, error: ipError } = await admin.rpc('reserve_password_recovery_ip', { p_ip_hash: requestIpHash });
-      if (ipError) return reply({ error: 'Recovery unavailable' }, 503);
-      if (allowedIp !== true) return genericResponse(generic);
+      // Bound even unknown aliases before lookup. Caller-controlled forwarding
+      // headers cannot rotate this reservation for the same login identifier.
+      const requestRateHash = await keyedHash(hashKey, 'request-identifier', identifier);
+      const { data: allowedRate, error: rateError } = await admin.rpc('reserve_password_recovery_ip', { p_ip_hash: requestRateHash });
+      if (rateError) return reply({ error: 'Recovery unavailable' }, 503);
+      if (allowedRate !== true) return testMode
+        ? reply({ error: 'Staging recovery request limit reached. No test code was created.' }, 429)
+        : genericResponse(generic);
       const { data: aliases, error: aliasError } = await admin.from('customer_login_aliases')
         .select('user_id,email_normalized,phone_e164').eq('email_normalized', identifier).limit(2);
       if (aliasError) return reply({ error: 'Recovery unavailable' }, 503);
@@ -86,19 +91,28 @@ Deno.serve(async (request) => {
       if (userError || !authUser?.user) return genericResponse(generic);
       const destination = eligibleRecoveryDestination(authUser.user, alias, identifier, channel);
       if (!destination) return genericResponse(generic);
-      const secret = channel === 'sms' ? randomDigits() : randomToken();
+      const fixtureSecret = recoveryTestFixture({
+        projectUrl: url, enabled: testMode, channel, destination,
+        phone: Deno.env.get('RECOVERY_TEST_PHONE'), smsCode: Deno.env.get('RECOVERY_TEST_SMS_CODE'),
+        email: Deno.env.get('RECOVERY_TEST_EMAIL'), emailToken: Deno.env.get('RECOVERY_TEST_EMAIL_TOKEN'),
+      });
+      if (testMode && !fixtureSecret) return genericResponse(generic);
+      const secret = fixtureSecret || (channel === 'sms' ? randomDigits() : randomToken());
       const secretHash = await keyedHash(hashKey, `${channel}-challenge:${challengeId}`, secret);
       const destinationHash = channel === 'sms'
         ? await smsPhoneHash(Deno.env.get('SMS_RATE_SECRET') || '', destination)
         : await keyedHash(hashKey, 'email-destination', destination);
-      const ipHash = requestIpHash;
+      const ipHash = requestRateHash;
       const expires = new Date(Date.now() + (channel === 'sms' ? SMS_EXPIRY_MINUTES : EMAIL_EXPIRY_MINUTES) * 60000).toISOString();
       const { data: reserved, error: reserveError } = await admin.rpc('reserve_password_recovery', {
         p_id: challengeId, p_user_id: userId, p_channel: channel,
         p_secret_hash: secretHash, p_destination_hash: destinationHash, p_ip_hash: ipHash, p_expires_at: expires,
       });
       if (reserveError) return reply({ error: 'Recovery unavailable' }, 503);
-      if (reserved !== true) return genericResponse(generic);
+      if (reserved !== true) return testMode
+        ? reply({ error: 'Staging recovery send limit reached. No test code was created.' }, 429)
+        : genericResponse(generic);
+      if (testMode) return genericResponse(generic);
       if (channel === 'sms') await sendSms(destination, secret);
       else {
         const base = Deno.env.get('RECOVERY_REDIRECT_URL');
@@ -116,9 +130,9 @@ Deno.serve(async (request) => {
     const hash = await keyedHash(hashKey, `${purpose}-challenge:${id}`, secret);
     const grant = randomToken();
     const grantHash = await keyedHash(hashKey, 'reset-grant', grant);
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-    if (!ip || ip.length > 64) return reply({ error: 'Recovery unavailable' }, 503);
-    const ipHash = await keyedHash(hashKey, 'ip', ip);
+    // The challenge ID is server-generated. It gives a stable attempt budget
+    // even when a caller changes network addresses or forwarded headers.
+    const ipHash = await keyedHash(hashKey, 'verify-challenge', id);
     const { data, error } = await admin.rpc('verify_password_recovery', {
       p_id: id, p_secret_hash: hash, p_grant_hash: grantHash, p_ip_hash: ipHash,
     });
