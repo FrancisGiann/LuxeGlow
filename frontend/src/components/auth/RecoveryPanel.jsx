@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
 import { finishRecovery, requestRecovery, verifyRecovery } from '../../api/passwordRecovery';
+import { requestPasswordReset } from '../../api/endpoints';
 
 // Mount inside the existing AuthModal shell. `link` is parsed from the
 // recovery_id/recovery_token URL fragment before this panel is opened.
@@ -30,9 +31,12 @@ export function RecoveryPanel({ initialEmail = '', link = null, onBack }) {
 
   const request = async (event) => {
     event.preventDefault(); setError(''); setBusy(true);
-    const result = await requestRecovery({ email, channel });
+    const result = channel === 'email'
+      ? await requestPasswordReset(email)
+      : await requestRecovery({ email, channel });
     setBusy(false);
     if (!result.success) { setError(result.error || 'Recovery is unavailable right now.'); return; }
+    if (channel === 'email') { setStage('sent'); return; }
     setChallengeId(result.challenge_id);
     setStage(channel === 'sms' ? 'code' : 'sent');
   };
@@ -60,7 +64,7 @@ export function RecoveryPanel({ initialEmail = '', link = null, onBack }) {
         <legend className="px-1 text-sm font-semibold text-ink-900">Send recovery instructions by</legend>
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-5">
           <label className="flex min-h-11 items-center gap-2 text-sm text-ink-900"><input type="radio" name="channel" checked={channel === 'sms'} onChange={() => setChannel('sms')} className="accent-brand-800" /> SMS to verified phone</label>
-          <label className="flex min-h-11 items-center gap-2 text-sm text-ink-900"><input type="radio" name="channel" checked={channel === 'email'} onChange={() => setChannel('email')} className="accent-brand-800" /> Verified recovery email</label>
+          <label className="flex min-h-11 items-center gap-2 text-sm text-ink-900"><input type="radio" name="channel" checked={channel === 'email'} onChange={() => setChannel('email')} className="accent-brand-800" /> Email reset link</label>
         </div>
       </fieldset>
       <p className="text-sm text-ink-500">Email recovery becomes available after you verify it in account settings. SMS uses your already verified phone.</p>
@@ -73,7 +77,7 @@ export function RecoveryPanel({ initialEmail = '', link = null, onBack }) {
       {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
       <Button type="submit" block size="lg" loading={busy}>Verify code</Button>
     </form>}
-    {stage === 'sent' && <p role="status" className="rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-sm text-ink-900">If this account has a verified recovery email, a LuxeGlow link has been sent. The link expires in 15 minutes.</p>}
+    {stage === 'sent' && <p role="status" className="rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-sm text-ink-900">If this account has a verified email address, check it for a password reset link.</p>}
     {stage === 'verifying' && <p role="status" className="text-sm text-ink-500">Checking your reset link…</p>}
     {stage === 'reset' && <form onSubmit={reset} className="flex flex-col gap-4" noValidate>
       <p className="text-sm text-ink-500">Choose a new password. You will sign in again afterward.</p>
