@@ -26,4 +26,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.password-recovery]
-verify_jwt = false
+verify_jwt = true
