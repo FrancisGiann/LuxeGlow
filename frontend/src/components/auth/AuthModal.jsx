@@ -8,7 +8,7 @@ import { parseRecoveryLink } from '../../utils/recoveryLink';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { IconCheckCircle, IconX } from '../icons';
-import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy';
+import { getPasswordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT, validatePassword } from '../../utils/passwordPolicy';
 import { isStaffRole } from '../../utils/roles';
 import { containAuthDialogFocus, focusAuthDialog } from '../../utils/authDialogFocus';
 import { normalizeSignupEmail, signupEmailError, suggestedSignupEmail } from '../../utils/signupEmail';
@@ -41,7 +41,7 @@ const RECOVERY_ENABLED = import.meta.env.VITE_RECOVERY_ENABLED === 'true';
 function BrandMark() {
   return (
     <div className="flex justify-center">
-      <BrandLogo className="h-24 w-24" />
+      <BrandLogo className="h-16 w-16" />
     </div>
   );
 }
@@ -72,6 +72,10 @@ export function AuthModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [nameErrors, setNameErrors] = useState({});
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
+  const [passwordChecks, setPasswordChecks] = useState(null);
   const [signupEmail, setSignupEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [emailAvailability, setEmailAvailability] = useState({ status: 'idle' });
@@ -111,6 +115,10 @@ export function AuthModal() {
   useEffect(() => {
     setError(passwordSetup?.error || '');
     setPhoneError('');
+    setNameErrors({});
+    setPasswordError('');
+    setConfirmError('');
+    setPasswordChecks(null);
     setEmailError('');
     emailChecker.change();
     if (modalView !== 'register') setSignupEmail('');
@@ -235,6 +243,15 @@ export function AuthModal() {
     }
     setError('');
     const f = Object.fromEntries(new FormData(e.currentTarget));
+    const missingNames = {
+      first_name: String(f.first_name || '').trim() ? '' : 'Enter your first name.',
+      last_name: String(f.last_name || '').trim() ? '' : 'Enter your last name.',
+    };
+    setNameErrors(missingNames);
+    if (missingNames.first_name || missingNames.last_name) {
+      e.currentTarget.elements.namedItem(missingNames.first_name ? 'first_name' : 'last_name')?.focus();
+      return;
+    }
     f.email = normalizeSignupEmail(f.email);
     const nextEmailError = signupEmailError(f.email);
     setEmailError(nextEmailError);
@@ -245,18 +262,23 @@ export function AuthModal() {
     setSignupEmail(f.email);
     if (SMS_SIGNUP_ENABLED ? !normalizePhMobile(f.phone) : !isValidPhoneNumber(f.phone)) {
       setPhoneError(SMS_SIGNUP_ENABLED ? 'Enter a valid Philippine mobile number.' : 'Enter a phone number with 7 to 15 digits.');
+      e.currentTarget.elements.namedItem('phone')?.focus();
       return;
     }
     setPhoneError('');
     const passwordError = getPasswordPolicyError(f.password);
     if (passwordError) {
-      setError(passwordError);
+      setPasswordError(passwordError);
+      e.currentTarget.elements.namedItem('password')?.focus();
       return;
     }
+    setPasswordError('');
     if (f.password !== f.confirm_password) {
-      setError('Passwords do not match.');
+      setConfirmError('Passwords do not match.');
+      e.currentTarget.elements.namedItem('confirm_password')?.focus();
       return;
     }
+    setConfirmError('');
     registrationLockRef.current = true;
     setBusy(true);
     try {
@@ -383,18 +405,21 @@ export function AuthModal() {
           <IconX size={17} />
         </button>
 
-        <div className="rounded-3xl border border-line bg-surface p-8 shadow-float">
+        <div className="rounded-3xl border border-line bg-surface p-5 shadow-float sm:p-7">
           <BrandMark />
-          <h2 id="auth-modal-title" className="mt-4 text-center font-display text-2xl font-bold">{VIEWS[modalView]}</h2>
+          <h2 id="auth-modal-title" className="mt-2 text-center font-display text-2xl font-bold">{VIEWS[modalView]}</h2>
           <p className="mt-1 text-center text-sm text-ink-500">
             {modalView === 'login' && 'Sign in to your account.'}
-            {modalView === 'register' && 'Join Astrid Nails & Beauty Bar in under a minute.'}
+            {modalView === 'register' && 'Enter your details, then verify your phone.'}
+            {modalView === 'verify-phone' && 'One last step to create your account.'}
             {modalView === 'verify' && 'Verify this email address to continue.'}
             {modalView === 'forgot-request' && (RECOVERY_ENABLED ? 'Choose how to recover your account.' : 'We will email a secure reset link if that address is registered.')}
             {modalView === 'forgot-reset' && (passwordSetupBlocked ? 'This page needs a valid invitation or password-reset link from your email.' : 'Choose a password to secure your account.')}
             {modalView === 'password-success' && (inviteCompletion ? 'Your staff account is ready for secure sign-in.' : 'Choose where to sign in next.')}
           </p>
           {sessionNotice && <p className="mt-4 rounded-xl border border-brand-300 bg-brand-50 px-4 py-3 text-center text-sm font-semibold text-brand-800" role="status">{sessionNotice}</p>}
+          {SMS_SIGNUP_ENABLED && (modalView === 'register' || modalView === 'verify-phone') &&
+            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-wider text-brand-800">Step {modalView === 'register' ? '1' : '2'} of 2 · {modalView === 'register' ? 'Account details' : 'Phone verification'}</p>}
 
           {/* ── LOGIN ── */}
           {modalView === 'login' && (
@@ -475,10 +500,10 @@ export function AuthModal() {
 
           {/* ── REGISTER ── */}
           {modalView === 'register' && (
-            <form onSubmit={handleRegister} className="mt-6 flex flex-col gap-4" noValidate>
+            <form onSubmit={handleRegister} className="mt-4 flex flex-col gap-3" noValidate>
               <div className="grid grid-cols-2 gap-4">
-                <Input id="reg-first" name="first_name" label="First name" placeholder="Juan" autoComplete="given-name" required />
-                <Input id="reg-last" name="last_name" label="Last name" placeholder="Dela Cruz" autoComplete="family-name" required />
+                <Input id="reg-first" name="first_name" label="First name" placeholder="Juan" autoComplete="given-name" required error={nameErrors.first_name} onBlur={(event) => setNameErrors((current) => ({ ...current, first_name: event.target.value.trim() ? '' : 'Enter your first name.' }))} onChange={(event) => { if (nameErrors.first_name && event.target.value.trim()) setNameErrors((current) => ({ ...current, first_name: '' })); }} />
+                <Input id="reg-last" name="last_name" label="Last name" placeholder="Dela Cruz" autoComplete="family-name" required error={nameErrors.last_name} onBlur={(event) => setNameErrors((current) => ({ ...current, last_name: event.target.value.trim() ? '' : 'Enter your last name.' }))} onChange={(event) => { if (nameErrors.last_name && event.target.value.trim()) setNameErrors((current) => ({ ...current, last_name: '' })); }} />
               </div>
               <div>
                 <Input id="reg-email" name="email" type="email" label="Email address" placeholder="you@example.com" autoComplete="email" required
@@ -522,9 +547,10 @@ export function AuthModal() {
                 const nextPhone = sanitizePhoneInput(event.currentTarget.value);
                 event.currentTarget.value = nextPhone;
                 if (phoneError && (SMS_SIGNUP_ENABLED ? normalizePhMobile(nextPhone) : isValidPhoneNumber(nextPhone))) setPhoneError('');
-              }} />
-              <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={PASSWORD_POLICY_HINT} required />
-              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
+              }} onBlur={(event) => { if (event.target.value && (SMS_SIGNUP_ENABLED ? !normalizePhMobile(event.target.value) : !isValidPhoneNumber(event.target.value))) setPhoneError('Enter a valid Philippine mobile number.'); }} />
+              <Input id="reg-pass" name="password" type="password" label="Password" placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} hint={SMS_SIGNUP_ENABLED ? '8+ characters · upper & lowercase · number · symbol' : PASSWORD_POLICY_HINT} required error={passwordError} onChange={(event) => { setPasswordChecks(event.target.value ? validatePassword(event.target.value) : null); if (passwordError && validatePassword(event.target.value).valid) setPasswordError(''); }} onBlur={(event) => { if (event.target.value) setPasswordError(getPasswordPolicyError(event.target.value)); }} />
+              {SMS_SIGNUP_ENABLED && passwordChecks && <p className={`-mt-2 text-xs ${passwordChecks.valid ? 'text-success' : 'text-ink-500'}`} aria-live="polite">{passwordChecks.valid ? 'Password meets all requirements.' : 'Use 8+ characters with upper and lowercase letters, a number, and a symbol.'}</p>}
+              <Input id="reg-confirm" name="confirm_password" type="password" label="Confirm password" placeholder="Repeat password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required error={confirmError} onBlur={(event) => { const password = event.currentTarget.form?.elements.namedItem('password')?.value; if (event.target.value) setConfirmError(event.target.value === password ? '' : 'Passwords do not match.'); }} onChange={() => { if (confirmError) setConfirmError(''); }} />
               {error && <p className="text-sm font-medium text-danger">{error}</p>}
               <Button type="submit" block size="lg" loading={busy} disabled={signupSubmissionBlocked} aria-describedby={signupSubmissionBlocked ? 'reg-email-feedback' : undefined}>{SMS_SIGNUP_ENABLED ? 'Send verification code' : 'Create account'}</Button>
               <p className="pt-1 text-center text-sm text-ink-500">
@@ -535,7 +561,7 @@ export function AuthModal() {
           )}
 
           {modalView === 'verify-phone' && (
-            <form onSubmit={handleVerifyPhone} className="mt-6 flex flex-col gap-5" noValidate>
+            <form onSubmit={handleVerifyPhone} className="mt-4 flex flex-col gap-4" noValidate>
               <div className="rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-center">
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-400">Mobile number</p>
                 <p className="mt-0.5 text-sm font-semibold text-brand-800">{verifyPhone?.phone}</p>
