@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { AuthClient, createClient } from '@supabase/supabase-js';
 import { inspectAuthRedirect } from '../utils/authRedirect';
 
 const url = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
@@ -22,6 +22,22 @@ export function requireSupabase() {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
   return supabase;
+}
+
+let signupProofSequence = 0;
+
+/** Signup proof must never replace or broadcast the application's login session. */
+export function createSignupProofAuth() {
+  requireSupabase();
+  // Auth-only avoids creating unused Realtime sockets/listeners per attempt.
+  return new AuthClient({
+    url: `${url.replace(/\/$/, '')}/auth/v1`,
+    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: `luxeglow-signup-proof-${++signupProofSequence}`,
+  });
 }
 
 export function publicServiceImage(path) {

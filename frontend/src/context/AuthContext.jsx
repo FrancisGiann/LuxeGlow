@@ -4,6 +4,7 @@ import { authRedirect, supabase } from '../lib/supabase';
 import { passwordSetupError } from '../utils/authRedirect';
 import { parseRecoveryLink } from '../utils/recoveryLink';
 import { createSessionRefreshCoordinator, isCurrentAuthenticatedIdentity } from '../utils/sessionRefresh';
+import { createSignupAttemptTracker } from '../utils/signupAttempt';
 import {
   configuredIdleTimeout,
   clearPersistedSessionActivity,
@@ -72,6 +73,9 @@ export function AuthProvider({ children }) {
   const authCallbackHandledRef = useRef(false);
   const passwordRecoveryObservedRef = useRef(false);
   const authenticatedUserIdRef = useRef(null);
+  const [phoneVerificationAttempts] = useState(createSignupAttemptTracker);
+
+  useEffect(() => () => phoneVerificationAttempts.cancel(), [phoneVerificationAttempts]);
 
   const setAuthStatus = useCallback((nextStatus) => {
     setStatus(nextStatus);
@@ -139,6 +143,7 @@ export function AuthProvider({ children }) {
     if (!supabase) return undefined;
     const acceptPasswordSetup = (callbackType, session) => {
       if (!['invite', 'recovery'].includes(callbackType) || !session?.user?.id || authCallbackHandledRef.current) return false;
+      phoneVerificationAttempts.cancel();
       authCallbackHandledRef.current = true;
       setPasswordSetup({ type: callbackType, userId: session.user.id, email: session.user.email || '', ready: true, callbackObserved: true, error: authRedirect.hasError ? passwordSetupError() : '' });
       setModalView('forgot-reset');
@@ -148,6 +153,10 @@ export function AuthProvider({ children }) {
       const currentUserId = authenticatedUserIdRef.current;
       const sessionUserId = session?.user?.id || null;
       const sameAuthenticatedIdentity = isCurrentAuthenticatedIdentity(currentUserId, sessionUserId);
+      if (event === 'SIGNED_OUT' || event === 'PASSWORD_RECOVERY' ||
+          (['SIGNED_IN', 'INITIAL_SESSION'].includes(event) && sessionUserId && !sameAuthenticatedIdentity)) {
+        phoneVerificationAttempts.cancel();
+      }
       if (['INITIAL_SESSION', 'SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) {
         invalidateSessionRefresh({ resetStatus: !sameAuthenticatedIdentity });
         if (sameAuthenticatedIdentity) sessionRefreshCoordinator.markStatus('authenticated');
@@ -197,21 +206,24 @@ export function AuthProvider({ children }) {
       setTimeout(refreshSession, 0);
     });
     return () => data.subscription.unsubscribe();
-  }, [refreshSession, invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus]);
+  }, [refreshSession, invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus, phoneVerificationAttempts]);
 
   const openAuth = useCallback((view = 'login') => {
+    phoneVerificationAttempts.cancel();
     if (view !== 'forgot-reset') {
       setPasswordSetup(null);
       setPasswordCompletion(null);
     }
     setModalView(view);
-  }, []);
+  }, [phoneVerificationAttempts]);
   const closeAuth = useCallback(() => {
+    phoneVerificationAttempts.cancel();
     setModalView(null);
     setVerifyEmail('');
+    setVerifyPhone(null);
     setSessionNotice('');
     setPasswordCompletion(null);
-  }, []);
+  }, [phoneVerificationAttempts]);
 
   const broadcast = useCallback((payload) => {
     const message = { ...payload, source: sourceRef.current, at: Date.now() };
@@ -224,6 +236,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const applySignedOut = useCallback(({ expired = false, userId = null } = {}) => {
+    phoneVerificationAttempts.cancel();
     invalidateSessionRefresh();
     sessionRefreshCoordinator.markStatus('guest');
     clearTimeout(idleTimerRef.current);
@@ -239,7 +252,7 @@ export function AuthProvider({ children }) {
       setSessionNotice('');
       setModalView(null);
     }
-  }, [invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus]);
+  }, [invalidateSessionRefresh, sessionRefreshCoordinator, setAuthStatus, phoneVerificationAttempts]);
 
   useEffect(() => {
     const onMessage = (message) => {
@@ -285,6 +298,7 @@ export function AuthProvider({ children }) {
   }, [applySignedOut]);
 
   const performSignOut = useCallback(async ({ expired = false } = {}) => {
+    phoneVerificationAttempts.cancel();
     if (signOutPromiseRef.current) return signOutPromiseRef.current;
     invalidateSessionRefresh({ resetStatus: true });
     const role = customer?.role;
@@ -304,10 +318,11 @@ export function AuthProvider({ children }) {
     } finally {
       signOutPromiseRef.current = null;
     }
-  }, [customer?.id, customer?.role, broadcast, applySignedOut, invalidateSessionRefresh]);
+  }, [customer?.id, customer?.role, broadcast, applySignedOut, invalidateSessionRefresh, phoneVerificationAttempts]);
 
   /** Returns { ok, role, needsVerification } without throwing on bad credentials. */
   const login = useCallback(async (email, password) => {
+    phoneVerificationAttempts.cancel();
     invalidateSessionRefresh();
     const currentUserId = authenticatedUserIdRef.current;
     const data = await api.loginCustomer(email, password);
@@ -336,10 +351,11 @@ export function AuthProvider({ children }) {
       invalidCredentials: data.invalid_credentials === true,
       rateLimited: data.rate_limited === true,
     };
-  }, [refreshSession, closeAuth, invalidateSessionRefresh, setAuthStatus]);
+  }, [refreshSession, closeAuth, invalidateSessionRefresh, setAuthStatus, phoneVerificationAttempts]);
 
   /** Returns { ok, error }. On success the session enters "pending email verification". */
   const register = useCallback(async (fields) => {
+    phoneVerificationAttempts.cancel();
     invalidateSessionRefresh({ resetStatus: true });
     const data = await api.registerCustomer(fields);
     if (data.success) {
@@ -356,19 +372,25 @@ export function AuthProvider({ children }) {
       return { ok: true };
     }
     return { ok: false, error: data.error || 'Registration failed.', emailUnavailable: data.email_unavailable === true };
-  }, [refreshSession, closeAuth, invalidateSessionRefresh]);
+  }, [refreshSession, closeAuth, invalidateSessionRefresh, phoneVerificationAttempts]);
 
-  const verifyPhoneCode = useCallback(async (code) => {
+  const verifyPhoneCode = useCallback((code) => {
     if (!verifyPhone) return { ok: false, error: 'Start signup again.' };
-    const result = await api.verifySignupPhone({ ...verifyPhone, code });
-    if (!result.success) return { ok: false, error: result.error };
-    invalidateSessionRefresh({ resetStatus: true });
-    await refreshSession();
-    setVerifyPhone(null);
-    setSessionNotice('Phone verified. Sign in with your email and password.');
-    setModalView('login');
-    return { ok: true };
-  }, [verifyPhone, invalidateSessionRefresh, refreshSession]);
+    return phoneVerificationAttempts.run(async (isCurrent) => {
+      try {
+        const result = await api.verifySignupPhone({ ...verifyPhone, code, isCurrent });
+        if (!isCurrent() || result.cancelled) return { ok: false, cancelled: true };
+        if (!result.success) return { ok: false, error: result.error };
+        setVerifyPhone(null);
+        setSessionNotice('Phone verified. Sign in with your email and password.');
+        setModalView('login');
+        return { ok: true };
+      } catch (error) {
+        if (!isCurrent()) return { ok: false, cancelled: true };
+        throw error;
+      }
+    });
+  }, [verifyPhone, phoneVerificationAttempts]);
 
   const resendPhoneCode = useCallback(async () => {
     if (!verifyPhone) return { ok: false, error: 'Start signup again.' };

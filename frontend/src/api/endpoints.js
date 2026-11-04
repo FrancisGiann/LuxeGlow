@@ -1,5 +1,5 @@
 import { VERIFICATION_REQUEST_FAILED_MESSAGE, VERIFICATION_RETRY_DELAY_SECONDS } from '../utils/verificationFeedback';
-import { publicServiceImage, requireSupabase } from '../lib/supabase';
+import { createSignupProofAuth, publicServiceImage, requireSupabase } from '../lib/supabase';
 import { serviceImageUrl } from '../utils/serviceImages';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import { passwordResetPath } from '../utils/authRedirect';
@@ -215,23 +215,46 @@ export async function registerCustomer(fields) {
   return { success: true, needs_verification: !data.session, user: data.user };
 }
 
-export async function verifySignupPhone({ phone, code, email }) {
+export async function verifySignupPhone({ phone, code, email, isCurrent = () => true }) {
   if (!smsSignupEnabled) return { success: false, error: 'SMS signup is unavailable.' };
   const normalizedPhone = normalizePhMobile(phone);
   if (!normalizedPhone || !/^\d{6,8}$/.test(String(code || ''))) return { success: false, error: 'Enter the code from your text message.' };
-  const client = requireSupabase();
-  const { data, error } = await client.auth.verifyOtp({ phone: normalizedPhone, token: String(code), type: 'sms' });
-  if (error || !data?.session) return { success: false, error: 'That code is invalid or expired.' };
-  const { data: claimed, error: claimError } = await client.functions.invoke('claim-sms-signup', { body: { email } });
-  if (claimError || claimed?.success !== true) {
-    await client.auth.signOut().catch(() => {});
-    return { success: false, error: 'The phone was verified, but signup could not be completed. Contact support.' };
+  if (!isCurrent()) return { success: false, cancelled: true };
+  const proofAuth = createSignupProofAuth();
+  let proofIssued = false;
+  let result;
+  try {
+    // A shared-client SIGNED_IN event would start a profile check, which must
+    // reject this temporary OTP session under RLS. Keep proof entirely isolated.
+    const { data, error } = await proofAuth.verifyOtp({ phone: normalizedPhone, token: String(code), type: 'sms' });
+    proofIssued = Boolean(data?.session?.access_token);
+    if (error || !proofIssued) {
+      result = { success: false, error: 'That code is invalid or expired.' };
+    } else if (!isCurrent()) {
+      result = { success: false, cancelled: true };
+    } else {
+      // Do not abort a dispatched claim: it may already have created the alias.
+      // Await its outcome and revoke only this attempt's proof in finally.
+      const { data: claimed, error: claimError } = await requireSupabase().functions.invoke('claim-sms-signup', {
+        body: { email },
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+      });
+      result = claimError || claimed?.success !== true
+        ? { success: false, error: 'The phone was verified, but signup could not be completed. Contact support.' }
+        : { success: true };
+    }
+  } catch {
+    result = { success: false, error: 'Could not complete phone verification. Please try again.' };
+  } finally {
+    if (proofIssued) {
+      const cleanup = await proofAuth.signOut({ scope: 'local' }).catch(() => ({ error: true }));
+      if (cleanup.error && result?.success) {
+        result = { success: false, error: 'Account created. Close this window, then sign in with your email and password.' };
+      }
+    }
+    await proofAuth.dispose();
   }
-  // The phone OTP session only establishes signup proof. Routine access starts
-  // with a fresh email/password session after the alias has been claimed.
-  const { error: signOutError } = await client.auth.signOut({ scope: 'local' });
-  if (signOutError) return { success: false, error: 'Account created. Close this window, then sign in with your email and password.' };
-  return { success: true };
+  return isCurrent() ? result : { success: false, cancelled: true };
 }
 
 export async function resendSignupPhone(phone) {

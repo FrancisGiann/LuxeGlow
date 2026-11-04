@@ -95,6 +95,7 @@ export function AuthModal() {
   const loginIdentityGenerationRef = useRef(0);
   const currentModalViewRef = useRef(modalView);
   const previousModalViewRef = useRef(modalView);
+  const phoneVerificationUiGenerationRef = useRef(0);
 
   const updateLoginEmail = (email) => {
     const normalizedEmail = normalizeLoginEmail(email);
@@ -108,8 +109,10 @@ export function AuthModal() {
 
   useLayoutEffect(() => {
     if (currentModalViewRef.current !== modalView) {
+      if (currentModalViewRef.current === 'verify-phone') setBusy(false);
       currentModalViewRef.current = modalView;
       loginIdentityGenerationRef.current += 1;
+      phoneVerificationUiGenerationRef.current += 1;
     }
   }, [modalView]);
 
@@ -309,13 +312,15 @@ export function AuthModal() {
     if (busy) return;
     setError('');
     setBusy(true);
+    const generation = phoneVerificationUiGenerationRef.current;
+    const isCurrent = () => generation === phoneVerificationUiGenerationRef.current && currentModalViewRef.current === 'verify-phone';
     try {
       const code = new FormData(event.currentTarget).get('code');
       const result = await verifyPhoneCode(code);
-      if (!result.ok) setError(result.error || 'Could not verify that code.');
+      if (isCurrent() && !result.ok && !result.cancelled) setError(result.error || 'Could not verify that code.');
     } catch {
-      setError('Could not verify that code.');
-    } finally { setBusy(false); }
+      if (isCurrent()) setError('Could not verify that code.');
+    } finally { if (isCurrent()) setBusy(false); }
   };
 
   const handleResendPhone = async () => {
