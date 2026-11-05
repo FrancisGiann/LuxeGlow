@@ -66,6 +66,7 @@ export const Input = forwardRef(function Input({ label, error, hint, id, classNa
           type={isPassword && passwordVisible ? 'text' : type}
           className={`${controlBase} ${error ? 'border-danger' : 'border-line'} ${isPassword ? 'pr-14' : ''} ${className}`}
           {...props}
+          data-password-field={isPassword ? '' : undefined}
         />
         {isPassword && (
           <button
